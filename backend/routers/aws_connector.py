@@ -93,7 +93,7 @@ class AWSConnectRequest(BaseModel):
     secret_access_key: str = Field(..., min_length=20)
     default_region: str = Field(default="us-east-1")
     name: str = Field(default="AWS Account")
-    scan_regions: list[str] = Field(default_factory=lambda: ["us-east-1", "uaenorth", "eu-west-1"])
+    scan_regions: list[str] = Field(default_factory=lambda: ["us-east-1", "us-west-2", "eu-west-1"])
 
 
 class AWSConnectionResponse(BaseModel):

@@ -34,7 +34,7 @@ import boto3
 logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-AWS_REGION          = os.getenv("AWS_DEFAULT_REGION", "uaenorth")
+AWS_REGION          = os.getenv("AWS_DEFAULT_REGION", "us-west-2")
 SANDBOX_CLUSTER     = os.getenv("SANDBOX_ECS_CLUSTER", "himaya")   # Use main cluster
 SANDBOX_TASK_DEF    = os.getenv("SANDBOX_TASK_DEF", "helios-sandbox")      # ECS task definition family
 SANDBOX_SG_ID       = os.getenv("SANDBOX_SG_ID", "")

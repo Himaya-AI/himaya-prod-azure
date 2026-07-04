@@ -26,8 +26,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-S3_CLIENT = boto3.client("s3", region_name=os.getenv("AWS_REGION", "uaenorth"))
-SAGEMAKER_CLIENT = boto3.client("sagemaker", region_name=os.getenv("AWS_REGION", "uaenorth"))
+S3_CLIENT = boto3.client("s3", region_name=os.getenv("AWS_REGION", "us-west-2"))
+SAGEMAKER_CLIENT = boto3.client("sagemaker", region_name=os.getenv("AWS_REGION", "us-west-2"))
 
 EVIDENCE_BUCKET = os.getenv("S3_EVIDENCE_BUCKET", "himaya-evidence")
 MODELS_BUCKET = os.getenv("S3_MODELS_BUCKET", "himaya-models-prod")
@@ -200,7 +200,7 @@ async def _trigger_sagemaker_retraining(org_id: str, sample_count: int) -> bool:
         SAGEMAKER_CLIENT.create_training_job(
             TrainingJobName=job_name,
             AlgorithmSpecification={
-                "TrainingImage": f"__AZURE_ACCT__.dkr.ecr.uaenorth.amazonaws.com/himaya-backend:latest",
+                "TrainingImage": f"__AZURE_ACCT__.dkr.ecr.us-west-2.amazonaws.com/himaya-backend:latest",
                 "TrainingInputMode": "File",
             },
             RoleArn=f"arn:aws:iam::__AZURE_ACCT__:role/himaya-ecs-task-role",

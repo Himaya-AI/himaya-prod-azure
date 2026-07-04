@@ -1,6 +1,6 @@
 """
 Himaya Helios - Sender Reputation SageMaker Deployment
-Deploys trained XGBoost model to AWS SageMaker (uaenorth).
+Deploys trained XGBoost model to AWS SageMaker (us-west-2).
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ def output_fn(prediction: dict, accept: str = "application/json") -> str:
 class ReputationModelDeployer:
     """
     Deploys the Himaya Helios Sender Reputation model to AWS SageMaker.
-    Region: uaenorth
+    Region: us-west-2
     """
 
     def __init__(

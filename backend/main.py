@@ -1094,7 +1094,7 @@ async def lifespan(app: FastAPI):
         from datetime import timezone as _tz
         _timeout_min = int(_os.getenv("SANDBOX_SESSION_TIMEOUT_MINUTES", "30"))
         _cluster = _os.getenv("SANDBOX_ECS_CLUSTER", "himaya")
-        _region  = _os.getenv("AWS_REGION", "uaenorth")
+        _region  = _os.getenv("AWS_REGION", "us-west-2")
         while True:
             try:
                 _ecs = _boto3.client("ecs", region_name=_region)

@@ -1,10 +1,10 @@
 """
 Himaya Helios - Shared Configuration
-AWS Region: uaenorth
+AWS Region: us-west-2
 """
 
 # AWS Configuration
-AWS_REGION = "uaenorth"
+AWS_REGION = "us-west-2"
 SAGEMAKER_GRAPH_ENDPOINT = "sentinel-graph-analyzer"
 SAGEMAKER_REPUTATION_ENDPOINT = "sentinel-sender-reputation"
 S3_MODELS_BUCKET = "sentinel-models-prod"

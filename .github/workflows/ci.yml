@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  AWS_REGION: uaenorth
+  AWS_REGION: us-west-2
   ECR_ACCOUNT: __AZURE_ACCT__
   CLUSTER: himaya
   CF_DIST: __AZURE_FD_PROFILE__
@@ -62,7 +62,7 @@ jobs:
           JWT_SECRET: test-secret-for-ci
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          AWS_DEFAULT_REGION: uaenorth
+          AWS_DEFAULT_REGION: us-west-2
           FRONTEND_URL: http://localhost:3000
         run: pytest tests/ -v --tb=short -x --ignore=tests/production_readiness
 

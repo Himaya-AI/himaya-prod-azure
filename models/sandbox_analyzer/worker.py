@@ -12,7 +12,7 @@ from models.sandbox_analyzer.orchestrator import SandboxOrchestrator, SandboxJob
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-SQS = boto3.client("sqs", region_name="uaenorth")
+SQS = boto3.client("sqs", region_name="us-west-2")
 JOBS_QUEUE_URL = SQS.get_queue_url(QueueName="himaya-sandbox-jobs")["QueueUrl"]
 RESULTS_QUEUE_URL = SQS.get_queue_url(QueueName="himaya-sandbox-results")["QueueUrl"]
 

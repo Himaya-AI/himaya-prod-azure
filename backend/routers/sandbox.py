@@ -486,7 +486,7 @@ async def create_interactive_session(
 
                     logger.info(f"Sandbox attachment fetch: provider={_provider} headers_set={bool(_gmail_headers)} msg_id={t.email_message_id[:30] if t.email_message_id else None}")
                     if _gmail_headers:
-                        _s3 = _boto3.client("s3", region_name="uaenorth")
+                        _s3 = _boto3.client("s3", region_name="us-west-2")
                         _bucket = _os_s.getenv("SANDBOX_S3_BUCKET", "himaya-evidence")
                         import httpx as _hx_att
                         async with _hx_att.AsyncClient(timeout=30) as _hc:

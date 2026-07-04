@@ -72,7 +72,7 @@ REGION_TO_COUNTRIES: dict[str, set[str]] = {
     "us-east-1":     {"US"},
     "us-east-2":     {"US"},
     "us-west-1":     {"US"},
-    "uaenorth":     {"US"},
+    "us-west-2":    {"US"},
     "ca-central-1":  {"CA"},
     "ca-west-1":     {"CA"},
     "eu-west-1":     EU_COUNTRIES,                   # Ireland

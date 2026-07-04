@@ -17,14 +17,14 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 # AWS clients
-EC2 = boto3.client("ec2", region_name="uaenorth")
-SQS = boto3.client("sqs", region_name="uaenorth")
-SSM = boto3.client("ssm", region_name="uaenorth")
+EC2 = boto3.client("ec2", region_name="us-west-2")
+SQS = boto3.client("sqs", region_name="us-west-2")
+SSM = boto3.client("ssm", region_name="us-west-2")
 
 # Config — populated at startup from aws-resources.json
 SANDBOX_SUBNET = "subnet-0132e933e2bb6b657"
 SANDBOX_SG = "sg-0a1bf773021a2d2c1"
-SANDBOX_AMI = "ami-0cf2b4e024cdb73ee"  # Ubuntu 22.04 uaenorth
+SANDBOX_AMI = "ami-0cf2b4e024cdb73ee"  # Ubuntu 22.04 us-west-2
 SANDBOX_INSTANCE_TYPE = "t3.small"
 SANDBOX_KEY_NAME = "himaya-sandbox-key"
 MAX_ANALYSIS_SECONDS = 300  # 5 minutes max per job

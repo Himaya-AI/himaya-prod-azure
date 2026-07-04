@@ -19,10 +19,10 @@
 # =============================================================================
 set -euo pipefail
 
-REGION="uaenorth"
+REGION="us-west-2"
 INSTANCE_TYPE="t3.medium"
-# Amazon Linux 2023 AMI for uaenorth (lightweight, no GPU needed)
-AMI_ID="${DLP_GATEWAY_AMI_ID:-ami-0b20a6f09484773af}"  # AL2023 uaenorth (update periodically)
+# Amazon Linux 2023 AMI for us-west-2 (lightweight, no GPU needed)
+AMI_ID="${DLP_GATEWAY_AMI_ID:-ami-0b20a6f09484773af}"  # AL2023 us-west-2 (update periodically)
 KEY_NAME="${EC2_KEY_NAME:-helios-dlp-key}"
 HELIOS_API="${HELIOS_API:-https://app.himaya.ai}"
 HELIOS_ORG_ID="${HELIOS_ORG_ID:-}"

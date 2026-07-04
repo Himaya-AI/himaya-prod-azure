@@ -4,7 +4,7 @@
 # Default: both
 set -e
 
-REGION=uaenorth
+REGION=us-west-2
 ACCOUNT=__AZURE_ACCT__
 ECR=$ACCOUNT.dkr.ecr.$REGION.amazonaws.com
 CLUSTER=himaya

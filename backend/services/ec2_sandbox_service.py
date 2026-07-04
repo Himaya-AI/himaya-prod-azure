@@ -15,7 +15,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
-REGION = "uaenorth"
+REGION = "us-west-2"
 S3_BUCKET = "himaya-evidence"
 SG_NAME = "helios-sandbox-sg"
 INSTANCE_TYPE = "t3.micro"
@@ -128,7 +128,7 @@ def _get_latest_al2023_ami(ec2_client) -> str:
         return ami_id
     except Exception as e:
         logger.warning(f"ec2_sandbox: AMI lookup failed, using fallback: {e}")
-        return "ami-0250adf05ecc45684"  # uaenorth AL2023 fallback (2023.11.20260413)
+        return "ami-0250adf05ecc45684"  # us-west-2 AL2023 fallback (2023.11.20260413)
 
 
 def _build_userdata(urls: list, attachment_filenames: list, threat_id: str) -> str:

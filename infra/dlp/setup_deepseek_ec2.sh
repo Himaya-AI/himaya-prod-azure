@@ -6,9 +6,9 @@
 # =============================================================================
 set -euo pipefail
 
-REGION="uaenorth"
+REGION="us-west-2"
 INSTANCE_TYPE="g4dn.xlarge"
-# Deep Learning AMI GPU PyTorch (Amazon Linux 2) — uaenorth
+# Deep Learning AMI GPU PyTorch (Amazon Linux 2) — us-west-2
 # Update this AMI ID from AWS console if needed: ami-xxxxxxxxxxxxxxxxx
 AMI_ID="${DEEPSEEK_AMI_ID:-ami-0d081196e3df05f4d}"  # DL AMI GPU PyTorch AL2 (override via env)
 ECS_SG_ID="${ECS_SG_ID:-}"                           # ECS security group ID (required)

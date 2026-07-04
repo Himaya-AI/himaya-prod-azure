@@ -1219,7 +1219,7 @@ function DataResidencySummary() {
   const totalSignIns = data?.user_activity_regions?.reduce((sum, r) => sum + r.sign_in_count, 0) || 0
 
   const awsRegionToGeo: Record<string, string> = {
-    'us-east-1': 'North America', 'us-east-2': 'North America', 'us-west-1': 'North America', 'uaenorth': 'North America',
+    'us-east-1': 'North America', 'us-east-2': 'North America', 'us-west-1': 'North America', 'us-west-2': 'North America',
     'eu-west-1': 'Europe', 'eu-west-2': 'Europe', 'eu-west-3': 'Europe', 'eu-central-1': 'Europe', 'eu-north-1': 'Europe',
     'ap-northeast-1': 'Asia Pacific', 'ap-northeast-2': 'Asia Pacific', 'ap-southeast-1': 'Asia Pacific', 'ap-southeast-2': 'Asia Pacific', 'ap-south-1': 'Asia Pacific',
     'sa-east-1': 'South America', 'me-south-1': 'Middle East', 'af-south-1': 'Africa', 'ca-central-1': 'North America',
@@ -2002,7 +2002,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
     access_key_id: '',
     secret_access_key: '',
     default_region: 'us-east-1',
-    scan_regions: ['us-east-1', 'uaenorth', 'eu-west-1'],
+    scan_regions: ['us-east-1', 'us-west-2', 'eu-west-1'],
   })
 
   // GCP Form state
@@ -2045,7 +2045,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
       setError(null)
       await api.post('/api/aws/connect', awsFormData)
       setShowAWSModal(false)
-      setAwsFormData({ name: 'AWS Account', access_key_id: '', secret_access_key: '', default_region: 'us-east-1', scan_regions: ['us-east-1', 'uaenorth', 'eu-west-1'] })
+      setAwsFormData({ name: 'AWS Account', access_key_id: '', secret_access_key: '', default_region: 'us-east-1', scan_regions: ['us-east-1', 'us-west-2', 'eu-west-1'] })
       loadConnections()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
@@ -2098,7 +2098,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
     }
   }
 
-  const awsRegions = ['us-east-1', 'us-east-2', 'us-west-1', 'uaenorth', 'eu-west-1', 'eu-west-2', 'eu-central-1', 'ap-southeast-1', 'ap-northeast-1', 'me-south-1', 'me-central-1']
+  const awsRegions = ['us-east-1', 'us-east-2', 'us-west-1', 'us-west-2', 'eu-west-1', 'eu-west-2', 'eu-central-1', 'ap-southeast-1', 'ap-northeast-1', 'me-south-1', 'me-central-1']
 
   // Hide the entire panel on Overview if no AWS/GCP connection exists
   // yet (so the page declutters for orgs with no connections). The
@@ -5003,7 +5003,7 @@ const EU_COUNTRIES = [
 ];
 const REGION_TO_COUNTRIES: Record<string, string[]> = {
   // AWS
-  'us-east-1': ['US'], 'us-east-2': ['US'], 'us-west-1': ['US'], 'uaenorth': ['US'],
+  'us-east-1': ['US'], 'us-east-2': ['US'], 'us-west-1': ['US'], 'us-west-2': ['US'],
   'ca-central-1': ['CA'], 'ca-west-1': ['CA'],
   'eu-west-1': EU_COUNTRIES, 'eu-west-2': ['GB'], 'eu-west-3': EU_COUNTRIES,
   'eu-central-1': EU_COUNTRIES, 'eu-central-2': [...EU_COUNTRIES, 'CH'],
@@ -9999,7 +9999,7 @@ function DataResidencyTab() {
   
   // Map AWS/GCP region codes to geographic regions
   const awsRegionToGeo: Record<string, string> = {
-    'us-east-1': 'North America', 'us-east-2': 'North America', 'us-west-1': 'North America', 'uaenorth': 'North America',
+    'us-east-1': 'North America', 'us-east-2': 'North America', 'us-west-1': 'North America', 'us-west-2': 'North America',
     'eu-west-1': 'Europe', 'eu-west-2': 'Europe', 'eu-west-3': 'Europe', 'eu-central-1': 'Europe', 'eu-north-1': 'Europe', 'eu-south-1': 'Europe',
     'ap-northeast-1': 'Asia Pacific', 'ap-northeast-2': 'Asia Pacific', 'ap-northeast-3': 'Asia Pacific',
     'ap-southeast-1': 'Asia Pacific', 'ap-southeast-2': 'Asia Pacific', 'ap-southeast-3': 'Asia Pacific',

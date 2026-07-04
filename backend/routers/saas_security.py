@@ -6589,7 +6589,7 @@ async def _detect_data_sovereignty_violations(org_id: str, db: AsyncSession) -> 
             WHERE r.org_id = :org_id
               AND f.category = 'dlp_classification'
               AND f.status = 'open'
-              AND r.region NOT IN ('us-east-1', 'uaenorth', 'eu-west-1', 'eu-central-1')
+              AND r.region NOT IN ('us-east-1', 'us-west-2', 'eu-west-1', 'eu-central-1')
             LIMIT 20
         """), {"org_id": org_id})
         for row in aws_violations.mappings():
@@ -13238,7 +13238,7 @@ AWS_REGION_COORDS = {
     "us-east-2": (40.4173, -82.9071),  # Ohio
     # US West
     "us-west-1": (37.7749, -122.4194),  # N. California
-    "uaenorth": (45.5231, -122.6765),  # Oregon
+    "us-west-2": (45.5231, -122.6765),  # Oregon
     # Europe
     "eu-west-1": (53.3498, -6.2603),   # Ireland
     "eu-west-2": (51.5074, -0.1278),   # London
@@ -13589,7 +13589,7 @@ async def get_data_residency(
             "us-east-1": ("US", "United States", "North America", 37.0902, -95.7129),
             "us-east-2": ("US", "United States", "North America", 39.9612, -82.9988),
             "us-west-1": ("US", "United States", "North America", 37.7749, -122.4194),
-            "uaenorth": ("US", "United States", "North America", 45.5152, -122.6784),
+            "us-west-2": ("US", "United States", "North America", 45.5152, -122.6784),
             "eu-west-1": ("IE", "Ireland", "Europe", 53.3498, -6.2603),
             "eu-west-2": ("GB", "United Kingdom", "Europe", 51.5074, -0.1278),
             "eu-west-3": ("FR", "France", "Europe", 48.8566, 2.3522),
@@ -13902,7 +13902,7 @@ async def get_data_residency(
             "us-east-1": [("SOC 2", "North America"), ("HIPAA", "North America")],
             "us-east-2": [("SOC 2", "North America"), ("HIPAA", "North America")],
             "us-west-1": [("SOC 2", "North America"), ("HIPAA", "North America")],
-            "uaenorth": [("SOC 2", "North America"), ("HIPAA", "North America")],
+            "us-west-2": [("SOC 2", "North America"), ("HIPAA", "North America")],
             "ca-central-1": [("SOC 2", "North America"), ("PIPEDA", "Canada")],
             # EU regions -> GDPR
             "eu-west-1": [("GDPR", "Europe")],

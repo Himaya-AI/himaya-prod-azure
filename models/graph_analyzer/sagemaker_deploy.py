@@ -1,6 +1,6 @@
 """
 Himaya Helios - Graph Analyzer SageMaker Deployment
-Deploys trained model to AWS SageMaker inference endpoint (uaenorth).
+Deploys trained model to AWS SageMaker inference endpoint (us-west-2).
 """
 
 from __future__ import annotations
@@ -172,7 +172,7 @@ if __name__ == "__main__":
 
 class GraphAnalyzerDeployer:
     """
-    Deploys the Himaya Helios Graph Analyzer to AWS SageMaker (uaenorth).
+    Deploys the Himaya Helios Graph Analyzer to AWS SageMaker (us-west-2).
     """
 
     def __init__(
