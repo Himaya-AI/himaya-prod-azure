@@ -4,8 +4,34 @@ import { Toaster } from "@/components/ui/Toast";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 
 export const metadata: Metadata = {
-  title: "Himaya Helios — AI Email Security",
-  description: "AI-native email security for Gulf enterprises. Powered by Himaya.",
+  title: "Himaya - AI-Driven Workspace Security",
+  description:
+    "AI-driven workspace security for the modern enterprise. Email threat protection, DLP, SaaS security posture, and data governance — powered by Himaya.",
+  keywords: [
+    "workspace security",
+    "AI security",
+    "email security",
+    "DLP",
+    "SaaS security",
+    "data governance",
+    "threat protection",
+    "Himaya",
+  ],
+  metadataBase: new URL("https://app.himaya.ai"),
+  openGraph: {
+    title: "Himaya - AI-Driven Workspace Security",
+    description:
+      "AI-driven workspace security for the modern enterprise. Email threat protection, DLP, SaaS security posture, and data governance.",
+    url: "https://app.himaya.ai",
+    siteName: "Himaya",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Himaya - AI-Driven Workspace Security",
+    description:
+      "AI-driven workspace security for the modern enterprise. Email threat protection, DLP, SaaS security posture, and data governance.",
+  },
   icons: {
     icon: "/favicon.ico",
     apple: "/favicon.png",
