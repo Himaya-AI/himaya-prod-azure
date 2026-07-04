@@ -2,10 +2,10 @@
 Core email processing pipeline.
 SQS → content analysis → graph analysis → reputation check → risk scoring → DB storage
 """
+import asyncio
 import hashlib
 import logging
 import os
-import random
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -14,7 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.db_models import Threat, ComplianceEvidence
-from backend.services.graph_service import graph_service
+from backend.services.reputation_client import analyze_email_reputation
+from backend.services.graph_client import graph_client
 from backend.services.websocket_manager import manager as ws_manager
 
 logger = logging.getLogger(__name__)
@@ -242,322 +243,6 @@ async def _classify_content(email_data: dict) -> dict:
     }
 
 
-async def _analyze_links_and_attachments(email_data: dict) -> dict:
-    """
-    Extract and analyze URLs and attachments from email.
-    Uses VirusTotal if VIRUSTOTAL_API_KEY is set, otherwise heuristic analysis.
-    """
-    import re, hashlib
-    body = email_data.get("body", "") + " " + email_data.get("html_body", "")
-    attachments = email_data.get("attachments", [])
-
-    # Extract URLs from body
-    urls = re.findall(r'https?://[^\s<>"\']+', body)
-    urls = list(set(urls))[:20]  # cap at 20 unique URLs
-
-    suspicious_urls = []
-    malicious_urls = []
-    vt_key = os.getenv("VIRUSTOTAL_API_KEY")
-
-    for url in urls:
-        domain = url.split("/")[2] if "/" in url else url
-        # Heuristic checks
-        is_suspicious = any([
-            len(domain) > 50,
-            domain.count(".") > 4,
-            any(c.isdigit() for c in domain.replace(".", "").replace("-", "")[:5]),
-            any(tld in domain for tld in [".tk", ".ml", ".ga", ".cf", ".xyz", ".top", ".click"]),
-            "login" in url.lower() and "google" not in url.lower() and "microsoft" not in url.lower(),
-            "verify" in url.lower() and "account" in url.lower(),
-            "-" in domain and any(brand in domain for brand in ["paypal", "amazon", "microsoft", "google", "zatca", "sama"]),
-        ])
-        if is_suspicious:
-            suspicious_urls.append(url)
-
-        # VirusTotal check if key available
-        if vt_key and (is_suspicious or len(urls) <= 5):
-            try:
-                import httpx, base64
-                url_id = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
-                async with httpx.AsyncClient(timeout=5) as client:
-                    resp = await client.get(
-                        f"https://www.virustotal.com/api/v3/urls/{url_id}",
-                        headers={"x-apikey": vt_key},
-                    )
-                    if resp.status_code == 200:
-                        stats = resp.json().get("data", {}).get("attributes", {}).get("last_analysis_stats", {})
-                        if stats.get("malicious", 0) > 2:
-                            malicious_urls.append(url)
-            except Exception:
-                pass
-
-    # Analyze attachment filenames
-    # attachments may come as list of strings or dicts — normalise to filenames
-    _raw_atts = email_data.get("attachments", [])
-    att_filenames = [
-        a if isinstance(a, str) else a.get("filename", "")
-        for a in _raw_atts
-        if (isinstance(a, str) and a) or (isinstance(a, dict) and a.get("filename"))
-    ]
-    dangerous_extensions = [".exe", ".vbs", ".js", ".ps1", ".bat", ".cmd", ".msi",
-                             ".docm", ".xlsm", ".pptm", ".dotm", ".xltm", ".jar"]
-    suspicious_attachments = []
-    for fname in att_filenames:
-        ext = "." + fname.rsplit(".", 1)[-1].lower() if "." in fname else ""
-        if ext in dangerous_extensions:
-            suspicious_attachments.append(fname)
-
-    # ── Threat feed IOC checks (URLhaus / OpenPhish / IPsum / Feodo / CINS / Spamhaus) ──
-    feed_url_hits: list[str] = []
-    feed_ip_hits: list[str] = []
-    try:
-        from backend.services.threat_feeds_service import check_url_in_feeds, check_ip_in_feeds
-        import redis.asyncio as _aioredis_tfi
-        _redis_url_tfi = os.getenv("REDIS_URL", "redis://localhost:6379")
-        _rtfi = _aioredis_tfi.from_url(_redis_url_tfi, decode_responses=True)
-        try:
-            for _url_tfi in urls:
-                _hit, _feeds = await check_url_in_feeds(_url_tfi, redis=_rtfi)
-                if _hit:
-                    feed_url_hits.extend(_feeds)
-                    if _url_tfi not in malicious_urls:
-                        malicious_urls.append(_url_tfi)
-
-            # Check sender IP from auth_results
-            _auth_tfi = email_data.get("auth_results") or {}
-            _sender_ip_tfi = _auth_tfi.get("sender_ip", "")
-            if _sender_ip_tfi:
-                _ip_hit, _ip_feeds = await check_ip_in_feeds(_sender_ip_tfi, redis=_rtfi)
-                if _ip_hit:
-                    feed_ip_hits.extend(_ip_feeds)
-        finally:
-            await _rtfi.aclose()
-    except Exception as _tfe:
-        pass  # non-fatal — feed service may not be seeded yet
-
-    link_score = 0
-    indicators = []
-    if malicious_urls:
-        link_score += 60
-        indicators.append(f"malicious_urls_detected:{len(malicious_urls)}")
-    if feed_url_hits:
-        unique_feeds = list(dict.fromkeys(feed_url_hits))
-        indicators.append(f"ioc_feed_url_match:{','.join(unique_feeds)}")
-        link_score = min(100, link_score + 20)  # bump for confirmed feed match
-    if feed_ip_hits:
-        unique_ip_feeds = list(dict.fromkeys(feed_ip_hits))
-        indicators.append(f"ioc_feed_ip_match:{','.join(unique_ip_feeds)}")
-        link_score = min(100, link_score + 30)  # sender IP on threat feed is high signal
-    if suspicious_urls:
-        link_score += min(30, len(suspicious_urls) * 10)
-        indicators.append(f"suspicious_urls:{len(suspicious_urls)}")
-    if suspicious_attachments:
-        link_score += min(40, len(suspicious_attachments) * 20)
-        indicators.append(f"dangerous_attachment:{','.join(suspicious_attachments)}")
-
-    return {
-        "link_score": min(link_score, 100),
-        "indicators": indicators,
-        "urls_found": len(urls),
-        "suspicious_urls": suspicious_urls[:5],
-        "malicious_urls": malicious_urls[:5],
-        "suspicious_attachments": suspicious_attachments,
-        # All attachment filenames (regardless of danger) — for sandbox display
-        "all_attachments": att_filenames[:10],
-    }
-
-
-async def _check_sender_reputation(sender: str, sender_domain: str, auth_results: dict | None = None) -> dict:
-    """
-    Real sender reputation check — three signal sources:
-      1. Auth headers (SPF/DKIM/DMARC) from parsed email — always available, zero cost
-      2. DNS checks — MX existence, SPF record presence, DMARC record presence
-      3. VirusTotal domain report — if VIRUSTOTAL_API_KEY is set (4 req/min free tier)
-
-    Score: 0 = fully trusted, 100 = highly suspicious.
-    """
-    import asyncio
-    import httpx
-
-    score = 0
-    indicators: list[str] = []
-    auth = auth_results or {}
-
-    # ── 1. Auth header signals (real parsed values from the email) ────────────
-    spf   = str(auth.get("spf",   "")).lower()
-    dkim  = str(auth.get("dkim",  "")).lower()
-    dmarc = str(auth.get("dmarc", "")).lower()
-
-    if spf in ("fail", "softfail"):
-        score += 15
-        indicators.append(f"spf_{spf}")
-    elif spf == "none":
-        score += 5
-        indicators.append("spf_none")
-
-    if dkim in ("fail",):
-        score += 15
-        indicators.append("dkim_fail")
-    elif dkim == "none":
-        score += 5
-        indicators.append("dkim_none")
-
-    if dmarc in ("fail",):
-        score += 20
-        indicators.append("dmarc_fail")
-    elif dmarc == "none":
-        score += 10
-        indicators.append("dmarc_none")
-
-    # ── 2. DNS checks (MX + SPF TXT + DMARC TXT record existence) ────────────
-    try:
-        import dns.asyncresolver as _dns
-        resolver = _dns.Resolver()
-        resolver.timeout = 3
-        resolver.lifetime = 3
-
-        # MX record — no MX = not a real mail-sending domain
-        try:
-            await resolver.resolve(sender_domain, "MX")
-            has_mx = True
-        except Exception:
-            has_mx = False
-
-        # SPF TXT record
-        try:
-            txt_answers = await resolver.resolve(sender_domain, "TXT")
-            has_spf_record = any(
-                b"v=spf1" in b"".join(r.strings)
-                for r in txt_answers
-            )
-        except Exception:
-            has_spf_record = False
-
-        # DMARC TXT record
-        try:
-            dmarc_answers = await resolver.resolve(f"_dmarc.{sender_domain}", "TXT")
-            has_dmarc_record = any(
-                b"v=DMARC1" in b"".join(r.strings)
-                for r in dmarc_answers
-            )
-        except Exception:
-            has_dmarc_record = False
-
-        if not has_mx:
-            score += 20
-            indicators.append("no_mx_record")
-        if not has_spf_record:
-            score += 10
-            indicators.append("no_spf_record")
-        if not has_dmarc_record:
-            score += 10
-            indicators.append("no_dmarc_record")
-
-    except Exception as _dns_err:
-        logger.debug(f"DNS reputation check failed (non-fatal): {_dns_err}")
-
-    # ── 3. VirusTotal domain report ───────────────────────────────────────────
-    vt_key = os.getenv("VIRUSTOTAL_API_KEY")
-    vt_useful = False  # set True if VT returns actionable signal
-    if vt_key:
-        try:
-            async with httpx.AsyncClient(timeout=6) as client:
-                resp = await client.get(
-                    f"https://www.virustotal.com/api/v3/domains/{sender_domain}",
-                    headers={"x-apikey": vt_key},
-                )
-                if resp.status_code == 200:
-                    attrs = resp.json().get("data", {}).get("attributes", {})
-                    stats = attrs.get("last_analysis_stats", {})
-                    malicious  = stats.get("malicious", 0)
-                    suspicious_vt = stats.get("suspicious", 0)
-                    harmless   = stats.get("harmless", 0)
-                    total      = malicious + suspicious_vt + harmless + stats.get("undetected", 0)
-
-                    if malicious >= 3:
-                        score += 50
-                        indicators.append(f"vt_malicious:{malicious}/{total}")
-                    elif malicious >= 1:
-                        score += 25
-                        indicators.append(f"vt_malicious:{malicious}/{total}")
-                    elif suspicious_vt >= 2:
-                        score += 15
-                        indicators.append(f"vt_suspicious:{suspicious_vt}/{total}")
-
-                    # Harmless consensus → positive trust signal (reduce score)
-                    if harmless >= 10 and malicious == 0:
-                        score = max(0, score - 10)
-                        indicators.append(f"vt_trusted:{harmless}_harmless")
-
-                    # Reputation score from VT (negative = bad).
-                    # Skip VT rep penalty when harmless >> malicious — large infra providers
-                    # (AWS, Google, etc.) have negative VT rep because they host bad actors,
-                    # not because they are bad actors. Only penalise when mal:harmless ratio is high.
-                    vt_rep = attrs.get("reputation", None)
-                    if vt_rep is not None and vt_rep < -10:
-                        if harmless == 0 or (malicious / max(harmless, 1)) > 0.1:
-                            score = min(100, score + 20)
-                            indicators.append(f"vt_reputation:{vt_rep}")
-
-                    vt_useful = True
-
-        except Exception as _vt_err:
-            logger.debug(f"VirusTotal domain check failed (non-fatal): {_vt_err}")
-            vt_useful = False
-    else:
-        vt_useful = False  # no key configured
-
-    # ── 4. WHOIS domain age fallback (runs when VT unavailable or returned no signal) ──
-    # Newly registered domains are a strong phishing indicator.
-    if not vt_useful:
-        try:
-            import whois as _whois
-            import asyncio as _asyncio
-            from datetime import timezone as _tz
-
-            # whois is blocking — run via asyncio.to_thread to avoid blocking event loop
-            # NOTE: avoid get_event_loop() here — it fails inside nested thread contexts
-            w = await _asyncio.to_thread(_whois.whois, sender_domain)
-
-            creation = w.creation_date
-            if isinstance(creation, list):
-                creation = creation[0]
-
-            if creation:
-                if creation.tzinfo is None:
-                    creation = creation.replace(tzinfo=_tz.utc)
-                age_days = (datetime.now(_tz.utc) - creation).days
-
-                if age_days < 30:
-                    score = min(100, score + 40)
-                    indicators.append(f"whois_new_domain:{age_days}d")
-                elif age_days < 90:
-                    score = min(100, score + 20)
-                    indicators.append(f"whois_young_domain:{age_days}d")
-                elif age_days < 365:
-                    score = min(100, score + 5)
-                    indicators.append(f"whois_recent_domain:{age_days}d")
-                else:
-                    # Established domain — mild trust signal
-                    score = max(0, score - 5)
-                    indicators.append(f"whois_established:{age_days}d")
-            else:
-                # No creation date in WHOIS — treat as suspicious
-                score = min(100, score + 15)
-                indicators.append("whois_no_creation_date")
-
-        except Exception as _whois_err:
-            logger.debug(f"WHOIS domain age check failed (non-fatal): {_whois_err}")
-
-    return {
-        "reputation_score": min(score, 100),
-        "indicators": indicators,
-        "spf_pass":   spf == "pass",
-        "dkim_pass":  dkim == "pass",
-        "dmarc_pass": dmarc == "pass",
-    }
-
-
 def _calculate_risk_score(content_score: int, graph_score: int, reputation_score: int) -> dict:
     """Weighted risk orchestrator."""
     # Weights: content 40%, graph 30%, reputation 30%
@@ -739,11 +424,11 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
         # If previous FP reports exist for this sender+org, apply a BENIGN bias
         fp_bias = 0
         try:
-            import os as _os, redis as _fp_redis, json as _fp_json
-            _fp_r = _fp_redis.from_url(_os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+            import redis.asyncio as _fp_redis, json as _fp_json
+            _fp_r = _fp_redis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
             _fp_key = f"fp_feedback:{org_id}:{sender_domain}"
-            _fp_raw = _fp_r.get(_fp_key)
-            _fp_r.close()
+            _fp_raw = await _fp_r.get(_fp_key)
+            await _fp_r.aclose()
             if _fp_raw:
                 _fp_entries = _fp_json.loads(_fp_raw)
                 # Each confirmed FP from this domain reduces risk score by 8 points (max -40)
@@ -752,11 +437,42 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
         except Exception:
             pass
 
-        # Step 2: Content classification (LLM ensemble: Claude → GPT-4o → heuristic)
-        content_result = await _classify_content(email_data)
+        # Step 2: Reputation analysis first
+        link_result, reputation_result = await analyze_email_reputation(email_data, auth_results)
+        logger.info(
+            "reputation | sender=%s score=%s verdict=%s spf=%s dkim=%s dmarc=%s indicators=%s link_score=%d urls=%d attachments=%s",
+            sender,
+            reputation_result.get("reputation_score") if reputation_result else "N/A",
+            reputation_result.get("verdict") if reputation_result else "N/A",
+            reputation_result.get("spf_pass") if reputation_result else "N/A",
+            reputation_result.get("dkim_pass") if reputation_result else "N/A",
+            reputation_result.get("dmarc_pass") if reputation_result else "N/A",
+            reputation_result.get("indicators", []) if reputation_result else [],
+            link_result.get("link_score", 0),
+            link_result.get("urls_found", 0),
+            link_result.get("suspicious_attachments", []),
+        )
 
-        # Step 2b: Link + attachment analysis
-        link_result = await _analyze_links_and_attachments(email_data)
+        # Step 2b: Content classification + graph evaluate — run in parallel
+        graph_result, content_result = await asyncio.gather(
+            graph_client.evaluate(
+                sender=sender,
+                recipient=recipient_email,
+                org_id=org_id,
+                reputation_hint=reputation_result,
+            ),
+            _classify_content(email_data),
+        )
+        logger.info(
+            "graph | sender=%s trust_score=%s trust_method=%s reasoning=%s domain_spread=%s indicators=%s llm_adjustment=%s",
+            sender,
+            graph_result.get("trust", {}).get("trust_score"),
+            graph_result.get("trust", {}).get("trust_method"),
+            graph_result.get("trust", {}).get("reasoning"),
+            graph_result.get("trust", {}).get("domain_spread"),
+            graph_result.get("trust", {}).get("indicators"),
+            graph_result.get("trust", {}).get("llm_adjustment"),
+        )
         if link_result["link_score"] > 0:
             content_result["content_score"] = min(100, content_result["content_score"] + link_result["link_score"] // 2)
             content_result.setdefault("indicators", []).extend(link_result["indicators"])
@@ -822,20 +538,16 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                     f"threat_type={content_result['threat_type']}"
                 )
 
-        # Step 3: Graph analysis
-        graph_result = await graph_service.analyze_sender_relationship(
-            org_id=org_id,
-            sender=sender,
-            recipient=recipient_email,
-        )
-
-        # Step 4: Reputation check (pass real auth_results so SPF/DKIM/DMARC are real signals)
-        reputation_result = await _check_sender_reputation(sender, sender_domain, auth_results=auth_results)
-
         # Step 5: Risk orchestration
+        _trust = graph_result["trust"]
+        if _trust["trust_method"] == "block":
+            graph_score = 100
+        else:
+            graph_score = 100 - _trust["trust_score"]
+
         risk_result = _calculate_risk_score(
             content_score=content_result["content_score"],
-            graph_score=graph_result["graph_score"],
+            graph_score=graph_score,
             reputation_score=reputation_result["reputation_score"],
         )
         # Embed link/attachment findings into score_breakdown for UI display
@@ -899,8 +611,6 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
             except Exception as _sp_err:
                 logger.warning(f"Auto-spam mark error (non-fatal): {_sp_err}")
 
-        auto_quarantine_success = auto_action_success  # keep legacy reference
-
         # Map compliance controls
         sama_controls, nca_controls = _map_compliance_controls(threat_type)
 
@@ -936,17 +646,17 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
 
         all_indicators = {
             "content": _strip_auth_conflicts(content_result.get("indicators", [])),
-            "graph": _strip_auth_conflicts(graph_result.get("indicators", [])),
+            "graph": _strip_auth_conflicts(graph_result["trust"].get("indicators", [])),
             "reputation": reputation_result.get("indicators", []),
             "suspicious_urls": link_result.get("suspicious_urls", []),
             "malicious_urls": link_result.get("malicious_urls", []),
             "suspicious_attachments": link_result.get("suspicious_attachments", []),
             "attachment_types": link_result.get("attachment_types", []),
             # Graph metadata — stored for UI display and audit
-            "graph_mode": graph_result.get("mode", "unknown"),
-            "prior_emails": graph_result.get("communication_frequency", graph_result.get("prior_emails", 0)),
-            "first_time_sender": graph_result.get("first_time_sender", False),
-            "domain_spread": graph_result.get("domain_spread", 0),
+            "graph_mode": _trust["trust_method"],
+            "prior_emails": graph_result["relationship"]["prior_emails_to_recipient"],
+            "first_time_sender": graph_result["sender"]["email_count"] == 0,
+            "domain_spread": _trust["domain_spread"],
         }
 
         # Subject hash (privacy — but also store plain text for search/display)
@@ -971,7 +681,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
             _existing_threat.risk_score        = risk_result["risk_score"]
             _existing_threat.score_breakdown   = risk_result["score_breakdown"]
             _existing_threat.content_score     = content_result["content_score"]
-            _existing_threat.graph_score       = graph_result["graph_score"]
+            _existing_threat.graph_score       = graph_score
             _existing_threat.reputation_score  = reputation_result["reputation_score"]
             _existing_threat.action_taken      = action
             _existing_threat.status            = "open" if action in ("QUARANTINED", "FLAGGED_HIGH") else "resolved"
@@ -999,7 +709,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
             threat_type=threat_type,
             risk_score=risk_result["risk_score"],
             score_breakdown=risk_result["score_breakdown"],
-            graph_score=graph_result["graph_score"],
+            graph_score=graph_score,
             content_score=content_result["content_score"],
             reputation_score=reputation_result["reputation_score"],
             status=(
@@ -1063,7 +773,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
 
         # Step 7b2: Update recipient user's risk score based on threat history
         try:
-            from sqlalchemy import text as _text2, func as _func
+            from sqlalchemy import text as _text2
             from backend.models.db_models import User as _User
             # Find recipient user in this org
             _user_result = await db.execute(
@@ -1086,8 +796,8 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                 )
                 _scores = [r[0] for r in _recent.fetchall() if r[0] is not None]
                 if _scores:
-                    # Weighted: latest emails count more; high-severity threats add extra weight
-                    _weights = [1.0 + (i * 0.1) for i in range(len(_scores))]
+                    # Weighted: index 0 is newest (DESC order) — highest weight goes to index 0
+                    _weights = [1.0 + ((len(_scores) - 1 - i) * 0.1) for i in range(len(_scores))]
                     _weighted_avg = sum(s * w for s, w in zip(_scores, _weights)) / sum(_weights)
                     # Clamp and round
                     _new_risk = min(100, max(0, round(_weighted_avg)))
@@ -1257,18 +967,23 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
         except Exception as _geo_e:
             logger.debug(f"Geo lookup failed (non-fatal): {_geo_e}")
 
-        # Step 7e: Record communication edge in Neo4j (non-blocking)
+        # Step 7e: Record communication edge in graph-service (non-blocking)
         try:
             email_date_str = email_data.get("date") or datetime.utcnow().isoformat()
-            await graph_service.record_communication(
-                org_id=str(threat.org_id),
-                sender=sender,
-                recipient=recipient_email,
-                timestamp=email_date_str,
-                threat_type=threat_type if threat_type not in ("CLEAN", "BENIGN") else None,
-            )
+            await graph_client.write({
+                "sender":       sender,
+                "recipient":    recipient_email,
+                "org_id":       str(threat.org_id),
+                "message_id":   message_id,
+                "subject_hash": subject_hash,
+                "received_at":  email_date_str,
+                "llm_verdict":  content_result.get("llm_classification"),
+                "risk_score":   risk_result["risk_score"],
+                "threat_type":  threat_type if threat_type not in ("CLEAN", "BENIGN") else None,
+                "urls":         link_result.get("suspicious_urls", []) + link_result.get("malicious_urls", []),
+            })
         except Exception as _ge:
-            logger.debug(f"Graph record failed (non-fatal): {_ge}")
+            logger.debug(f"Graph write failed (non-fatal): {_ge}")
 
         # Step 8: Broadcast via WebSocket
         try:

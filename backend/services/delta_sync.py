@@ -14,6 +14,10 @@ from sqlalchemy import select, text
 from backend.database import AsyncSessionLocal
 from backend.models.db_models import OrgIntegration, Organization
 from backend.services.email_processor import process_email
+from backend.services.attachment_hashing import (
+    enrich_gmail_attachments_with_sha256,
+    fetch_m365_inbound_attachments,
+)
 from backend.services.baseline_ingestion import (
     _google_list_users, _google_list_group_members, _decrypt, _store_comm_edge, _parse_email_addr,
     _upsert_directory_users, _refresh_google_token, _get_service_account_headers,
@@ -513,14 +517,24 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         def _collect_attachments(part):
                             fname = part.get('filename', '')
                             if fname:
+                                body_obj = part.get("body", {}) or {}
                                 email_attachments.append({
                                     "filename": fname,
                                     "mimeType": part.get("mimeType", ""),
-                                    "size": part.get("body", {}).get("size", 0),
+                                    "size": body_obj.get("size", 0),
+                                    "attachment_id": body_obj.get("attachmentId"),
+                                    "inline_data": body_obj.get("data"),
                                 })
                             for sub in part.get("parts", []):
                                 _collect_attachments(sub)
                         _collect_attachments(payload)
+                        email_attachments = await enrich_gmail_attachments_with_sha256(
+                            client,
+                            user_email,
+                            msg_id,
+                            email_attachments,
+                            user_headers,
+                        )
                         has_attachment = len(email_attachments) > 0
                         sender_domain_val = sender.split("@")[-1] if "@" in sender else sender
 
@@ -1015,23 +1029,14 @@ async def _delta_sync_integration_snap(db, redis, integration):
 
                         sender_domain_val = sender.split("@")[-1] if "@" in sender else sender
 
-                        # Fetch attachment filenames if present
-                        attachment_names: list[str] = []
+                        email_attachments: list[dict] = []
                         if msg.get("hasAttachments"):
-                            try:
-                                _att_resp = await client.get(
-                                    f"https://graph.microsoft.com/v1.0/users/{_m365_user_email}/messages/{m365_msg_id}/attachments",
-                                    headers={"Authorization": f"Bearer {access_token}"},
-                                    params={"$select": "name,contentType,size"},
-                                )
-                                if _att_resp.status_code == 200:
-                                    attachment_names = [
-                                        a.get("name", "")
-                                        for a in _att_resp.json().get("value", [])
-                                        if a.get("name")
-                                    ]
-                            except Exception:
-                                pass  # non-fatal
+                            email_attachments = await fetch_m365_inbound_attachments(
+                                client,
+                                _m365_user_email,
+                                m365_msg_id,
+                                access_token,
+                            )
 
                         # The inbox owner is _m365_user_email; use that as primary recipient
                         # but still loop others in case email was to a group
@@ -1050,7 +1055,7 @@ async def _delta_sync_integration_snap(db, redis, integration):
                                 "provider":      "m365",
                                 "auth_results":  auth_results,
                                 "has_attachment": msg.get("hasAttachments", False),
-                                "attachments":   attachment_names,
+                                "attachments":   email_attachments,
                                 "reply_to":      reply_to_m365,
                             }
 

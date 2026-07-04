@@ -34,8 +34,20 @@ class Settings(BaseSettings):
     VENDOR_ADMIN_EMAIL: str = "adnan@himaya.ai"
     VENDOR_ADMIN_PASSWORD: str = ""  # Required: set via env var
 
+    # Microservices (graph trust scoring + reputation threat intel)
+    GRAPH_SERVICE_URL: str = "http://localhost:8001"
+    REPUTATION_SERVICE_URL: str = "http://localhost:8080"
+    REPUTATION_SERVICE_TIMEOUT_SECONDS: int = 10
+    CLASSIFIER_SERVICE_URL: str = ""
+    VIRUSTOTAL_API_KEY: str = ""
+    SANDBOX_ECS_CLUSTER: str = ""
+    SANDBOX_TASK_DEF: str = ""
+    SANDBOX_SUBNET_ID: str = ""
+    SANDBOX_SG_ID: str = ""
+
     class Config:
         env_file = str(_root / ".env")
+        extra = "ignore"
 
 
 settings = Settings()

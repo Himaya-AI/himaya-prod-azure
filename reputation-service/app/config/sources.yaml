@@ -1,0 +1,86 @@
+sources:
+  virustotal:
+    enabled: true
+    priority: 2
+    timeout_ms: 3000
+    supported_entities:
+      - domain
+      - url
+      - file
+
+  alienvault:
+    enabled: true
+    priority: 2
+    timeout_ms: 3000
+    supported_entities:
+      - domain
+      - url
+      - file
+
+  urlscan:
+    enabled: true
+    priority: 2
+    timeout_ms: 4000
+    supported_entities:
+      - domain
+      - url
+      - ip
+
+  malwarebazaar:
+    enabled: true
+    priority: 2
+    timeout_ms: 4000
+    supported_entities:
+      - file
+
+  whois:
+    enabled: true
+    priority: 3
+    timeout_ms: 5000
+    supported_entities:
+      - domain
+
+  ioc_feeds:
+    enabled: true
+    priority: 1
+    timeout_ms: 2000
+    supported_entities:
+      - domain
+      - url
+      - ip
+
+  dns:
+    enabled: true
+    priority: 3
+    timeout_ms: 3000
+    supported_entities:
+      - domain
+
+  # Future adapters. Kept disabled for v1 so the service can grow without
+  # changing the orchestrator, API contract, or scoring engine.
+  openedl:
+    enabled: false
+    priority: 3
+    timeout_ms: 3000
+    supported_entities:
+      - domain
+      - url
+      - ip
+
+  crowdstrike:
+    enabled: false
+    priority: 1
+    timeout_ms: 5000
+    supported_entities:
+      - domain
+      - url
+      - file
+
+  recorded_future:
+    enabled: false
+    priority: 1
+    timeout_ms: 5000
+    supported_entities:
+      - domain
+      - url
+      - file

@@ -42,3 +42,4 @@ python-pptx>=0.6.23
 striprtf>=0.0.26
 oci>=2.130.0
 snowflake-connector-python>=3.7.0
+sentry-sdk[fastapi]>=2.30.0

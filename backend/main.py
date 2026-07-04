@@ -7,15 +7,30 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional
 
+import sentry_sdk
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 
 from backend.config import settings
+
+# ── Sentry ── error tracking, tracing, profiling, logs ──────────────────────
+sentry_sdk.init(
+    dsn=os.getenv(
+        "SENTRY_DSN",
+        "https://04c8a189e838c04b7f53c294cf38cfe3@o4511675369193472.ingest.us.sentry.io/4511675703033856",
+    ),
+    environment=os.getenv("SENTRY_ENVIRONMENT", "azure-prod"),
+    send_default_pii=True,
+    enable_logs=True,
+    traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "1.0")),
+    profile_session_sample_rate=float(os.getenv("SENTRY_PROFILE_SAMPLE_RATE", "1.0")),
+    profile_lifecycle="trace",
+)
 from backend.database import engine, AsyncSessionLocal
 from backend.services.websocket_manager import manager as ws_manager
-from backend.services.graph_service import graph_service
+from backend.services.graph_client import graph_client
 from backend.services.alert_service import alert_service
 
 # Routers
@@ -64,15 +79,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
     logger.info("Starting Himaya Helios API...")
 
-    # Connect to Neo4j (non-fatal if unavailable)
-    try:
-        await graph_service.init(
-            url=settings.NEO4J_URL,
-            user=settings.NEO4J_USER,
-            password=settings.NEO4J_PASSWORD,
-        )
-    except Exception as e:
-        logger.warning(f"Neo4j init failed (mock mode active): {e}")
+    # graph-service handles Neo4j directly — no local init needed
 
     # Test Redis
     try:
@@ -1985,7 +1992,6 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    await graph_service.close()
     await engine.dispose()
     logger.info("Himaya Helios API shutdown complete")
 
@@ -2012,7 +2018,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "*",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "https://app.himaya.ai",
         "https://appsforoffice.microsoft.com",
         "https://script.google.com",
     ],
@@ -2064,9 +2072,7 @@ app.include_router(dspm_access_router)
 
 @app.get("/health")
 async def health_check():
-    from backend.services.graph_service import graph_service as _gs
-    neo4j_connected = _gs._driver is not None
-    return {"status": "ok", "version": "1.0.0", "neo4j": "connected" if neo4j_connected else "fallback"}
+    return {"status": "ok", "version": "1.0.0"}
 
 
 @app.get("/")
@@ -2129,25 +2135,12 @@ async def websocket_threats(
 
 @app.get("/health/neo4j")
 async def neo4j_health():
-    """Live Neo4j connectivity check with error detail."""
-    from backend.services.graph_service import graph_service as _gs
-    import os
-    url = os.environ.get("NEO4J_URL", "not set")
-    user = os.environ.get("NEO4J_USER", "not set")
-    pw_set = bool(os.environ.get("NEO4J_PASSWORD", ""))
-    if _gs._driver is not None:
-        try:
-            await _gs._driver.verify_connectivity()
-            return {"status": "connected", "url": url}
-        except Exception as e:
-            return {"status": "error", "url": url, "error": str(e)}
-    # Try fresh connect
+    """Proxy to graph-service health — Neo4j is managed by the graph microservice."""
+    import httpx
+    graph_url = os.getenv("GRAPH_SERVICE_URL", "http://graph-service:8000")
     try:
-        from neo4j import AsyncGraphDatabase
-        pw = os.environ.get("NEO4J_PASSWORD", "")
-        d = AsyncGraphDatabase.driver(url, auth=(user, pw))
-        await d.verify_connectivity()
-        await d.close()
-        return {"status": "reachable_but_not_init", "url": url}
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{graph_url}/health")
+            return resp.json()
     except Exception as e:
-        return {"status": "unreachable", "url": url, "user": user, "pw_set": pw_set, "error": str(type(e).__name__ + ': ' + str(e))}
+        return {"status": "unreachable", "error": str(e)}

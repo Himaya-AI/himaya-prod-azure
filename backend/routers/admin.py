@@ -907,6 +907,13 @@ async def force_reset_password(
     return {"message": f"Password reset for {req.email}", "is_active": True}
 
 
+@router.get("/graph/health", dependencies=[Depends(verify_admin_key)])
+async def graph_health():
+    """Proxy GET /health to the graph-service microservice."""
+    from backend.services.graph_client import graph_client as _gc
+    return await _gc.health()
+
+
 @router.post("/orgs/{org_id}/inject-test-threats", dependencies=[Depends(verify_admin_key)])
 async def inject_test_threats(
     org_id: str,
@@ -945,7 +952,7 @@ async def inject_test_threats(
                 "message_id": f"test-malware-{_uuid.uuid4().hex[:8]}@gulf-capital-investments.co",
                 "sender": "ahmed.alrashidi@gulf-capital-investments.co",
                 "recipient": _pick(0),
-                "subject": "Q1 2026 Financial Report — Please Review Before 9 AM",
+                "subject": "1 Q1 2026 Financial Report — Please Review Before 9 AM",
                 "body": (
                     "Dear Colleague, Please find attached the Q1 2026 Financial Report. "
                     "The document requires macros to be enabled for the interactive charts. "
@@ -967,7 +974,7 @@ async def inject_test_threats(
                 "message_id": f"test-ato-{_uuid.uuid4().hex[:8]}@microsoftonline-alerts.net",
                 "sender": "security-noreply@microsoftonline-alerts.net",
                 "recipient": _pick(1),
-                "subject": "URGENT: Unusual sign-in to your Microsoft 365 account from Nigeria",
+                "subject": "1 URGENT: Unusual sign-in to your Microsoft 365 account from Nigeria",
                 "body": (
                     "We detected a sign-in attempt to your Microsoft 365 account from an unrecognized device. "
                     "Location: Lagos, Nigeria. IP Address: 197.210.54.121. "
@@ -988,7 +995,7 @@ async def inject_test_threats(
                 "message_id": f"test-cred-{_uuid.uuid4().hex[:8]}@accounts-google-portal.xyz",
                 "sender": "no-reply@workspace-google-notification.com",
                 "recipient": _pick(2),
-                "subject": "Action Required: Your Google Workspace account storage is 95% full",
+                "subject": "1 Action Required: Your Google Workspace account storage is 95% full",
                 "body": (
                     "Your Google Workspace account storage has reached 95% capacity. "
                     "To avoid email delivery failures and data loss, you must verify your account and expand your storage. "
@@ -1004,12 +1011,39 @@ async def inject_test_threats(
             },
         },
         {
+            "label": "MALWARE — known-hash ransomware dropper",
+            "data": {
+                "message_id": f"test-ransomware-{_uuid.uuid4().hex[:8]}@invoice-delivery-portal.net",
+                "sender": "billing@invoice-delivery-portal.net",
+                "recipient": _pick(3),
+                "subject": "1 Invoice #INV-20260628 — Action Required",
+                "body": (
+                    "Please find attached your invoice INV-20260628 for services rendered in June 2026. "
+                    "Kindly review and process the payment at your earliest convenience. "
+                    "The document is password protected for security — password: INV2026. "
+                    "For queries contact billing@invoice-delivery-portal.net. "
+                    "This is an automated message from our invoicing system."
+                ),
+                "html_body": "",
+                "date": "Mon, 28 Jun 2026 09:15:00 +0000",
+                "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "91.108.56.179"},
+                "attachments": [
+                    {
+                        "filename": "Invoice_INV-20260628.pdf.exe",
+                        "mimeType": "application/octet-stream",
+                        "size": 412680,
+                        "sha256": "ad7b9eaa692cbfe6e256b632603baf378c58c06d5f742e55bc9b751b8c022e2f",
+                    }
+                ],
+            },
+        },
+        {
             "label": "PHISHING / BEC — CEO impersonation wire fraud",
             "data": {
                 "message_id": f"test-bec-{_uuid.uuid4().hex[:8]}@himaya-tech-group.com",
                 "sender": "adnan.ahmed.ceo@himaya-tech-group.com",
                 "recipient": _pick(3),
-                "subject": "Urgent — Confidential Wire Transfer Request",
+                "subject": "1 Urgent — Confidential Wire Transfer Request",
                 "body": (
                     "Hi, I'm currently in an urgent board meeting and I need your help with something sensitive. "
                     "We are finalizing an acquisition deal and I need you to process a wire transfer "
@@ -1027,6 +1061,44 @@ async def inject_test_threats(
             },
         },
     ]
+
+    # Seed prior email history for the trusted sender so the trust gate fires
+    from backend.services.graph_client import graph_client as _gc
+    _trusted_sender = "alice@trusted-corp.com"
+    _trusted_recipient = _pick(0)
+    for _i in range(6):
+        await _gc.write({
+            "message_id": f"seed-trust-gate-{_i}@trusted-corp.com",
+            "sender": _trusted_sender,
+            "sender_domain": "trusted-corp.com",
+            "recipient": _trusted_recipient,
+            "org_id": org_id,
+            "subject_hash": "trusted-seed",
+            "received_at": "2025-01-01T00:00:00Z",
+            "llm_verdict": "CLEAN",
+            "risk_score": 0,
+            "threat_type": None,
+        })
+
+    test_payloads.append({
+        "label": "TRUSTED SENDER — LLM skip gate (trust score ≥ 65)",
+        "data": {
+            "message_id": f"test-trusted-{_uuid.uuid4().hex[:8]}@trusted-corp.com",
+            "sender": _trusted_sender,
+            "recipient": _trusted_recipient,
+            "subject": "1 Q2 Budget Review — Agenda for Tomorrow",
+            "body": (
+                "Hi team, please find the agenda for tomorrow's Q2 budget review attached. "
+                "We will be covering departmental spend, headcount planning, and the updated "
+                "capex forecast. Looking forward to seeing everyone at 10 AM. "
+                "Alice Thornton | Finance Director, Trusted Corp"
+            ),
+            "html_body": "",
+            "date": "Mon, 27 Jun 2026 08:00:00 +0000",
+            "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "52.84.10.1"},
+            "attachments": [],
+        },
+    })
 
     results = []
     for tp in test_payloads:

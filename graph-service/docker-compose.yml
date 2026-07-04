@@ -1,0 +1,14 @@
+version: '3.8'
+services:
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: neo4j/graph_dev_password
+    ports:
+      - "7474:7474"   # Browser UI  → http://localhost:7474
+      - "7687:7687"   # Bolt driver → bolt://localhost:7687
+    volumes:
+      - neo4j_data:/data
+
+volumes:
+  neo4j_data:

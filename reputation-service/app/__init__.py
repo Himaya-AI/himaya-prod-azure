@@ -1,0 +1,1 @@
+"""Standalone reputation microservice package."""

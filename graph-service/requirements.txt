@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+neo4j==5.14.0
+python-dotenv
+httpx
+pydantic
+boto3
