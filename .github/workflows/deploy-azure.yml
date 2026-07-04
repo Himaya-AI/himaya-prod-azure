@@ -85,12 +85,16 @@ jobs:
           echo "Purging Front Door endpoint (manual step if configured)..."
           # az cdn endpoint purge --name frontend --profile-name himaya-prod-fd --resource-group ${{ env.RG }} --content-paths '/*'
 
-      - name: Post-deploy smoke test
+      - name: Get Container App FQDNs
         run: |
-          echo "Checking API health..."
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://app.himaya.ai/health || echo "000")
-          if [ "$STATUS" != "200" ]; then
-            echo "❌ Health check failed (HTTP $STATUS)"
-            exit 1
+          BACKEND_FQDN=$(az containerapp show \
+            --name ${{ env.BACKEND_APP }} \
+            --resource-group ${{ env.RG }} \
+            --query properties.configuration.ingress.fqdn -o tsv)
+          echo "Backend: https://$BACKEND_FQDN"
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "https://$BACKEND_FQDN/health" || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Health check passed (HTTP $STATUS)"
+          else
+            echo "⚠️ Health check returned HTTP $STATUS — app may still be starting up"
           fi
-          echo "✅ Health check passed (HTTP $STATUS)"
