@@ -1,5 +1,5 @@
 """
-Helios AWS Security Service — scans AWS resources for data inventory and security issues.
+Himaya AWS Security Service — scans AWS resources for data inventory and security issues.
 Supports: S3, EFS, EBS, RDS
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ class SecurityFinding:
 
 class AWSSecurityService:
     """
-    AWS Security Scanner for Helios.
+    AWS Security Scanner for Himaya.
     Scans S3, EFS, EBS, and RDS for data inventory and security issues.
     """
 

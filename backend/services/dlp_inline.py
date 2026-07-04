@@ -1,5 +1,5 @@
 """
-Helios Inline DLP — API-based DLP that works through existing
+Himaya Inline DLP — API-based DLP that works through existing
 Gmail/M365 integrations without requiring external transport rules.
 
 This approach:

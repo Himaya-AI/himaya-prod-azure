@@ -34,7 +34,7 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 const PLAN_BADGE: Record<string, string> = {
-  enterprise:   'bg-purple-500/15 text-purple-300 border-purple-500/40',
+  enterprise:   'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/40',
   professional: 'bg-blue-500/15   text-blue-300   border-blue-500/40',
   starter:      'bg-slate-500/15  text-slate-300  border-slate-500/40',
 }
@@ -191,7 +191,7 @@ export default function AdminOrgs() {
         </div>
         <Link
           href="/admin/orgs/new"
-          className="flex items-center gap-2 bg-purple-600 hover:bg-purple-500 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" />
           New Organization
@@ -213,13 +213,13 @@ export default function AdminOrgs() {
             placeholder="Search by name or domain…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="bg-[#1a1a28] border border-[#2a2a3a] rounded-lg pl-9 pr-4 py-2 text-[#e0e0ff] text-sm placeholder-[#6060a0] focus:outline-none focus:ring-purple-500/50 focus:border-purple-500 w-64"
+            className="bg-[#1a1a28] border border-[#2a2a3a] rounded-lg pl-9 pr-4 py-2 text-[#e0e0ff] text-sm placeholder-[#6060a0] focus:outline-none focus:ring-[var(--accent)]/50 focus:border-[var(--accent)] w-64"
           />
         </div>
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
-          className="bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[#d0d0f0] text-sm focus:outline-none focus:border-purple-500"
+          className="bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[#d0d0f0] text-sm focus:outline-none focus:border-[var(--accent)]"
         >
           <option value="">All Status</option>
           <option value="active">Active</option>
@@ -230,7 +230,7 @@ export default function AdminOrgs() {
         <select
           value={planFilter}
           onChange={e => setPlanFilter(e.target.value)}
-          className="bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[#d0d0f0] text-sm focus:outline-none focus:border-purple-500"
+          className="bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[#d0d0f0] text-sm focus:outline-none focus:border-[var(--accent)]"
         >
           <option value="">All Plans</option>
           <option value="starter">Starter</option>
@@ -243,7 +243,7 @@ export default function AdminOrgs() {
       <div className="bg-[#111118] border border-[#2a2a3a] rounded-xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-48">
-            <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -266,7 +266,7 @@ export default function AdminOrgs() {
                     <td className="px-4 py-3">
                       <button
                         onClick={() => router.push(`/admin/orgs/${org.org_id}`)}
-                        className="text-white text-sm font-medium hover:text-purple-400 transition-colors text-left"
+                        className="text-white text-sm font-medium hover:text-[var(--accent)] transition-colors text-left"
                       >
                         {org.name}
                       </button>

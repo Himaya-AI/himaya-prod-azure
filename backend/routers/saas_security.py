@@ -1,6 +1,6 @@
 """
 SaaS Security — Teams & SharePoint connector, alert scanning, data lifecycle, posture checks.
-Enterprise-tier feature for Helios.
+Enterprise-tier feature for Himaya.
 """
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ _TEAMS_SCOPES = "Team.ReadBasic.All ChannelMessage.Read.All Files.Read.All offli
 _SHAREPOINT_SCOPES = "Sites.Read.All Files.Read.All offline_access"
 
 # ── Required Microsoft Graph application permissions ────────────────────────
-# Full list of Graph application permissions the Helios SaaS Security scanner
+# Full list of Graph application permissions the Himaya SaaS Security scanner
 # needs. Used to build the admin-consent URL so Azure shows exactly what's
 # being granted, and as the source of truth for the Azure AD app manifest's
 # requiredResourceAccess block.
@@ -97,7 +97,7 @@ _SHAREPOINT_SCOPES = "Sites.Read.All Files.Read.All offline_access"
 # must list every permission below under requiredResourceAccess[Microsoft Graph]
 # with type="Role" (application permissions, not delegated).
 #
-# Manifest-update steps (Azure Portal → App registrations → Helios → API permissions):
+# Manifest-update steps (Azure Portal → App registrations → Himaya → API permissions):
 #   1. Add the permissions below under "Microsoft Graph" → "Application permissions".
 #   2. Click "Grant admin consent for <tenant>".
 #   3. Customers re-consent by opening /consent-url with prompt=consent.
@@ -317,7 +317,7 @@ async def _get_valid_token(integ: SaasIntegration, db: AsyncSession) -> str:
     M365_MAIN_CLIENT_ID = os.getenv("M365_CLIENT_ID", "")
     M365_MAIN_CLIENT_SECRET = os.getenv("M365_CLIENT_SECRET", "")
 
-    # ── Strategy 1: main Himaya Helios app (preferred — has Sites.Read.All, ChannelMessage.Read.All) ──
+    # ── Strategy 1: main Himaya app (preferred — has Sites.Read.All, ChannelMessage.Read.All) ──
     # Use the same app the customer consented to for email security. It already has all the
     # Graph permissions we need for SaaS scanning (Sites.ReadWrite.All, Files.ReadWrite.All,
     # ChannelMessage.Read.All etc.) granted via the original M365 onboarding consent.
@@ -647,7 +647,7 @@ async def auto_connect_from_m365(
         err = resp.json().get("error_description", resp.text[:200])
         raise HTTPException(
             status_code=400,
-            detail=f"Could not obtain SaaS token for tenant {tenant_id}. Ensure admin consent was granted for Helios SaaS Security app. Error: {err[:200]}"
+            detail=f"Could not obtain SaaS token for tenant {tenant_id}. Ensure admin consent was granted for Himaya SaaS Security app. Error: {err[:200]}"
         )
 
     access_token = resp.json().get("access_token", "")
@@ -850,7 +850,7 @@ async def connect_provider(
     """
     Connect Teams or SharePoint using client_credentials (app-only token).
     Customer provides their Azure AD tenant ID. No OAuth redirect needed —
-    the Helios app must already have admin consent granted in the customer tenant
+    the Himaya app must already have admin consent granted in the customer tenant
     (via the /adminconsent URL shown in the UI).
     """
     await _require_enterprise(current_user, db)
@@ -863,7 +863,7 @@ async def connect_provider(
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id is required")
 
-    # Use main Helios app credentials (preferred — already trusted by customers)
+    # Use main Himaya app credentials (preferred — already trusted by customers)
     _client_id = os.getenv("M365_CLIENT_ID") or SAAS_M365_CLIENT_ID
     _client_secret = os.getenv("M365_CLIENT_SECRET") or SAAS_M365_CLIENT_SECRET
     if not _client_id or not _client_secret:
@@ -967,7 +967,7 @@ async def connect_sharepoint_legacy():
 async def get_required_scopes(current_user=Depends(get_current_user)):
     """
     Return the canonical list of Microsoft Graph application permissions the
-    Helios SaaS Security scanner requires. Use this for:
+    Himaya SaaS Security scanner requires. Use this for:
       - Building the Azure AD app registration manifest (requiredResourceAccess)
       - Surface in the UI so admins know exactly what's being requested at consent time
       - Ops verification after a consent flow
@@ -988,7 +988,7 @@ async def get_consent_url(
 ):
     """
     Return the admin consent URL for SaaS Security using the org's existing M365 integration.
-    Uses the main Himaya Helios app (M365_CLIENT_ID) so no separate app consent is needed.
+    Uses the main Himaya app (M365_CLIENT_ID) so no separate app consent is needed.
     Tenant ID is pulled server-side from the org's stored M365 integration — never exposed to frontend.
     """
     from backend.models.db_models import OrgIntegration
@@ -9135,7 +9135,7 @@ async def _notify_admins_of_alert(
       <table width="600" cellpadding="0" cellspacing="0" border="0" style="background:#0d1b2e;border:1px solid #1a2744;border-radius:12px;overflow:hidden;">
         <!-- Header -->
         <tr><td style="background:linear-gradient(135deg,#0f3460 0%,#1a237e 100%);padding:24px 32px;text-align:center;">
-          <img src="cid:himaya-logo" alt="Himaya Helios" width="160"
+          <img src="cid:himaya-logo" alt="Himaya" width="160"
                style="display:block;max-width:160px;height:auto;border:0;outline:none;text-decoration:none;margin:0 auto 8px auto;" />
           <div style="color:#71717a;font-size:11px;margin-top:4px;letter-spacing:0.08em;text-transform:uppercase;">DSPM Alert Notification</div>
         </td></tr>
@@ -9162,13 +9162,13 @@ async def _notify_admins_of_alert(
           </table>
           {resource_link_html}
           <div style="margin-top:12px;">
-            <a href="https://app.himaya.ai/saas-security" style="display:inline-block;background:#0f3460;color:#a1a1aa;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:12px;">Manage Alerts in Helios →</a>
+            <a href="https://app.himaya.ai/saas-security" style="display:inline-block;background:#0f3460;color:#a1a1aa;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:12px;">Manage Alerts in Himaya →</a>
           </div>
         </td></tr>
         <!-- Footer -->
         <tr><td style="background:#0a0f1e;border-top:1px solid #1a2744;padding:16px 32px;">
           <p style="color:#52525b;font-size:11px;margin:0;text-align:center;">
-            Helios DSPM · Himaya Technologies ·
+            Himaya DSPM · Himaya Technologies ·
             <a href="https://app.himaya.ai" style="color:#3b6ef6;text-decoration:none;">app.himaya.ai</a>
           </p>
         </td></tr>
@@ -9178,7 +9178,7 @@ async def _notify_admins_of_alert(
 </body>
 </html>"""
 
-        subject = f"[Helios DSPM] {severity.upper()}: {alert_title[:70]}"
+        subject = f"[Himaya DSPM] {severity.upper()}: {alert_title[:70]}"
         for email_addr in admin_emails:
             try:
                 ses_send(to=email_addr, subject=subject, html_body=html_body)

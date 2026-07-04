@@ -523,7 +523,7 @@ function ConnectorsTab({
             <p className="text-[11px] text-[var(--muted)] mt-1">
               {consentGranted
                 ? 'Permissions granted. Now click Auto-Connect below to enable Teams & SharePoint scanning.'
-                : 'Required once so Helios can scan Teams messages and SharePoint files. Uses your existing M365 integration.'}
+                : 'Required once so Himaya can scan Teams messages and SharePoint files. Uses your existing M365 integration.'}
             </p>
           </div>
           <button
@@ -2294,7 +2294,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                 ⚙️ IAM Setup Guide (Required Permissions)
               </summary>
               <div className="px-3 pb-3 text-[11px] text-[#a1a1aa] space-y-2">
-                <p className="pt-2">Create an IAM user with the following policy for Helios to scan your AWS resources:</p>
+                <p className="pt-2">Create an IAM user with the following policy for Himaya to scan your AWS resources:</p>
                 <div className="bg-[var(--background)] rounded-lg p-3 font-mono text-[10px] overflow-x-auto">
                   <pre className="text-emerald-400">{`{
   "Version": "2012-10-17",
@@ -2482,7 +2482,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
               </button>
             </div>
             <div className="space-y-4 text-[12px] text-[var(--muted)]">
-              <p className="text-[var(--foreground)]">Helios requires read-only access to scan your AWS resources.</p>
+              <p className="text-[var(--foreground)]">Himaya requires read-only access to scan your AWS resources.</p>
               <div className="space-y-3">
                 <h4 className="font-semibold text-[var(--foreground)]">Required IAM Policies:</h4>
                 <ul className="list-disc list-inside space-y-1 pl-2">
@@ -2495,7 +2495,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
                 <p className="text-amber-400 font-medium">Security Best Practices:</p>
                 <ul className="list-disc list-inside mt-2 space-y-1">
-                  <li>Use dedicated IAM user for Helios only</li>
+                  <li>Use dedicated IAM user for Himaya only</li>
                   <li>Never use root account credentials</li>
                   <li>Rotate access keys periodically</li>
                 </ul>
@@ -2518,7 +2518,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
               </button>
             </div>
             <div className="space-y-4 text-[12px] text-[var(--muted)]">
-              <p className="text-[var(--foreground)]">Helios requires a service account with viewer access.</p>
+              <p className="text-[var(--foreground)]">Himaya requires a service account with viewer access.</p>
               <div className="space-y-3">
                 <h4 className="font-semibold text-[var(--foreground)]">Steps:</h4>
                 <ol className="list-decimal list-inside space-y-2 pl-2">
@@ -4725,7 +4725,7 @@ function DataTab({
                                   <div className="relative flex items-start gap-2">
                                     <div className="absolute -left-[22px] w-3 h-3 rounded-full bg-emerald-400 border-2 border-[#0a0a0f] mt-0.5" />
                                     <div>
-                                      <div className="text-[10px] text-[#52525b] uppercase tracking-wide">Last Scanned by Helios</div>
+                                      <div className="text-[10px] text-[#52525b] uppercase tracking-wide">Last Scanned by Himaya</div>
                                       <div className="text-[12px] text-[#a1a1aa]">{fmtDate(item.last_scanned_at) || 'Unknown'}</div>
                                     </div>
                                   </div>
@@ -7195,7 +7195,7 @@ export default function SaasSecurityPage() {
       loadIntegrations()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg || 'Failed to auto-connect. Ensure admin consent has been granted for Helios SaaS Security.')
+      setError(msg || 'Failed to auto-connect. Ensure admin consent has been granted for Himaya SaaS Security.')
     }
   }
 

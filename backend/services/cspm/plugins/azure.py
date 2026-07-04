@@ -1,6 +1,6 @@
 """
 Azure CSPM plugins. Ported from cloudsploit's plugins/azure/* with adaptations
-for Helios' Python plugin engine.
+for Himaya' Python plugin engine.
 
 Each plugin returns a PluginResult. Run signatures are sync (engine awaits if needed).
 """

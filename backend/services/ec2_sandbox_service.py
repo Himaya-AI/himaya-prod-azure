@@ -1,5 +1,5 @@
 """
-EC2 Sandbox Detonation Service — Helios
+EC2 Sandbox Detonation Service — Himaya
 
 Spins an ephemeral EC2 instance, detonates URLs/attachments inside it,
 captures findings, uploads to S3, then terminates the instance.
@@ -77,7 +77,7 @@ def _get_or_create_sandbox_sg(ec2_client, vpc_id: str = "") -> str:
     try:
         create_resp = ec2_client.create_security_group(
             GroupName=SG_NAME,
-            Description="Helios sandbox - outbound only",
+            Description="Himaya sandbox - outbound only",
         )
         sg_id = create_resp["GroupId"]
 

@@ -53,7 +53,7 @@ export default function AdminBilling() {
   const totalMRR = records.reduce((s, r) => s + (r.amount_due_usd || r.base_amount_usd || 0), 0)
   const pendingCount = records.filter(r => r.billing_status === 'pending').length
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" /></div>
+  if (loading) return <div className="flex items-center justify-center h-64"><div className="w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" /></div>
 
   return (
     <div className="space-y-7">
@@ -68,7 +68,7 @@ export default function AdminBilling() {
             Export CSV
           </button>
           <button onClick={generateAll} disabled={generating || pendingCount === 0}
-            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
+            className="flex items-center gap-2 bg-[var(--accent)] hover:bg-[var(--accent)] disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
             <FileText className="w-4 h-4" />
             {generating ? 'Generating...' : `Generate All Invoices (${pendingCount})`}
           </button>
@@ -113,7 +113,7 @@ export default function AdminBilling() {
                   <td className="px-4 py-3 text-white text-sm font-medium">{r.org_name}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded border text-xs font-medium ${
-                      r.plan === 'enterprise' ? 'bg-purple-500/20 text-purple-300 border-purple-700' :
+                      r.plan === 'enterprise' ? 'bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]' :
                       r.plan === 'professional' ? 'bg-blue-500/20 text-blue-300 border-blue-700' :
                       'bg-gray-500/20 text-gray-300 border-gray-600'
                     }`}>{r.plan}</span>

@@ -37,7 +37,7 @@ interface ApiTemplate {
 
 const ACTIONS = [
   { value: 'BLOCK',      label: 'Block',      desc: 'Send to trash, alert admin + recipient + sender' },
-  { value: 'QUARANTINE', label: 'Quarantine', desc: 'Move to Helios-Quarantine, alert admin + recipient' },
+  { value: 'QUARANTINE', label: 'Quarantine', desc: 'Move to Himaya-Quarantine, alert admin + recipient' },
   { value: 'ALERT',      label: 'Alert',      desc: 'Deliver but flag and alert admin' },
   { value: 'TAG',        label: 'Tag',        desc: 'Add warning banner, deliver normally' },
   { value: 'ALLOW',      label: 'Allow',      desc: 'Always allow — bypass AI detection' },
@@ -868,7 +868,7 @@ export default function PoliciesPage() {
         <div>
           <span className="font-semibold">Execution order:</span> Policies run <span className="font-medium">before</span> AI analysis.
           ALLOW policies bypass detection entirely. BLOCK moves email to trash, notifies admin, recipient, and sender.
-          QUARANTINE moves to Helios-Quarantine, notifies admin and recipient.
+          QUARANTINE moves to Himaya-Quarantine, notifies admin and recipient.
           ALERT/TAG still pass through AI for a full explanation.
           Lower priority number = runs first. <span className="font-medium">Click "Apply Now"</span> to retroactively apply active policies to emails already in your inbox.
         </div>

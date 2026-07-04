@@ -1,5 +1,5 @@
 """
-Helios GCP Connector Router — manages Google Cloud Platform integrations and security scanning.
+Himaya GCP Connector Router — manages Google Cloud Platform integrations and security scanning.
 """
 from __future__ import annotations
 

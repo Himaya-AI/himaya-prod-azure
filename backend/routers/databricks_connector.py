@@ -1,5 +1,5 @@
 """
-Helios Databricks Connector Router — manages Databricks workspace integrations and security scanning.
+Himaya Databricks Connector Router — manages Databricks workspace integrations and security scanning.
 """
 from __future__ import annotations
 

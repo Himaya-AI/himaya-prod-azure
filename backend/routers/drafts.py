@@ -1,5 +1,5 @@
 """
-Helios Draft Analysis Router — enterprise tier only.
+Himaya Draft Analysis Router — enterprise tier only.
 Fetches drafts from M365/Gmail, runs DLP analysis, and stores results.
 
 DB tables created at startup via ensure_draft_tables().
@@ -177,14 +177,14 @@ async def _send_draft_alert_email(
                                 <tr>
                                     <td align="center">
                                         <a href="https://app.himaya.ai/drafts" style="display: inline-block; background: linear-gradient(135deg, #3b6ef6 0%, #2563eb 100%); color: #ffffff; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 600;">
-                                            Review in Helios Dashboard →
+                                            Review in Himaya Dashboard →
                                         </a>
                                     </td>
                                 </tr>
                             </table>
                             
                             <p style="margin: 30px 0 0 0; color: #9ca3af; font-size: 12px; text-align: center;">
-                                This alert was generated automatically by Helios Draft Analysis.<br>
+                                This alert was generated automatically by Himaya Draft Analysis.<br>
                                 The draft has not been sent yet and remains in the user's mailbox.
                             </p>
                         </td>
@@ -202,7 +202,7 @@ async def _send_draft_alert_email(
                                     </td>
                                     <td align="right">
                                         <p style="margin: 0; color: #64748b; font-size: 11px;">
-                                            Powered by Helios
+                                            Powered by Himaya
                                         </p>
                                     </td>
                                 </tr>
@@ -233,7 +233,7 @@ async def _send_draft_alert_email(
                             "Content-Type": "application/json",
                         },
                         json={
-                            "from": "Helios Security <alerts@app.himaya.ai>",
+                            "from": "Himaya Security <alerts@app.himaya.ai>",
                             "to": admin_email,
                             "subject": f"🚨 [{severity_label}] Sensitive Draft Alert - {user_email}",
                             "html": html_body,

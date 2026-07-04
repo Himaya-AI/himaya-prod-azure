@@ -1,5 +1,5 @@
 """
-Helios DSPM (Data Security Posture Management).
+Himaya DSPM (Data Security Posture Management).
 
 Inspired by clay-good/mantissa-stance. Discovers sensitive data in cloud
 storage (S3, GCS, Azure Blob) using a curated catalogue of detection patterns

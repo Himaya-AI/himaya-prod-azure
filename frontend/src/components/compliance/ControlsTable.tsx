@@ -50,7 +50,7 @@ function fallbackExplanation(control: ControlWithExtras): string {
   const controlName =
     (control as { control_name_en?: string }).control_name_en ?? control.name_en ?? control.control_id
   if (control.status === 'compliant') {
-    return `Control "${controlName}" is met by current Helios monitoring.`
+    return `Control "${controlName}" is met by current Himaya monitoring.`
   }
   if (control.status === 'partial') {
     return `Control "${controlName}" is partially implemented. Run "Assess Now" to refresh evidence.`
@@ -106,7 +106,7 @@ function generateRemediation(control: ControlWithExtras): string[] {
   }
   if (ev === 'incident_response') {
     return [
-      'Create a quarantine policy in Helios → Policies',
+      'Create a quarantine policy in Himaya → Policies',
       'Define an escalation path in Settings → Notifications',
       'Run a tabletop exercise quarterly and log it in the evidence pack',
     ]

@@ -321,7 +321,7 @@ async def _assess_org(db, org_id: str):
             if has_integration and policy_count > 0:
                 return "partial", f"Operational security governance active: {policy_count} policies, {mailbox_count} mailboxes monitored, continuous audit trail. Formalise with documented ISMS for full compliance.", policy_count
             elif has_integration:
-                return "partial", "Helios provides operational governance framework. Define security policies to strengthen governance posture.", 0
+                return "partial", "Himaya provides operational governance framework. Define security policies to strengthen governance posture.", 0
             return "not_started", "System not connected.", 0
 
         elif evidence_type == "training":

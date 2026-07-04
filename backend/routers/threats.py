@@ -422,7 +422,7 @@ async def auto_triage(
 ):
     """
     One-shot auto-triage: runs full investigation pipeline on up to `limit` pending threats (default 5, max 50).
-    Delegates to the auto_triage_service investigation pipeline (VT + feeds + Helios Analysis verdict).
+    Delegates to the auto_triage_service investigation pipeline (VT + feeds + Himaya Analysis verdict).
     """
     import asyncio as _asyncio
     import logging as _logging

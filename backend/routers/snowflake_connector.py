@@ -1,5 +1,5 @@
 """
-Helios Snowflake Connector Router — manages Snowflake account integrations and
+Himaya Snowflake Connector Router — manages Snowflake account integrations and
 SSPM scanning against the CIS Snowflake Foundations Benchmark v1.0.0.
 
 Auth options:

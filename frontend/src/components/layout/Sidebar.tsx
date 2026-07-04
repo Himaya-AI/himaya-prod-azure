@@ -65,7 +65,7 @@ export default function Sidebar() {
       {/* Logo + org name */}
       <div className="flex flex-col px-4 pt-4 pb-4 border-b border-[var(--border)] flex-shrink-0">
         <div className="flex items-center justify-center bg-gradient-to-br from-[#1a1f3c] to-[#0d1224] rounded-xl px-3 py-2.5 border border-[#3b6ef6]/15">
-          <Image src="/himaya-logo.png" alt="Himaya Helios" width={100} height={32} className="object-contain" />
+          <Image src="/himaya-logo.png" alt="Himaya" width={100} height={32} className="object-contain" />
         </div>
         {orgName && (
           <span className="text-[11px] text-[var(--muted)] truncate mt-2 text-center" title={orgName}>{orgName}</span>

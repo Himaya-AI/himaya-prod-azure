@@ -1,5 +1,5 @@
 """
-Interactive Sandbox Session Service — Himaya Helios  (ECS Fargate Edition)
+Interactive Sandbox Session Service — Himaya  (ECS Fargate Edition)
 
 Instead of launching raw EC2 instances, we now launch pre-baked ECS Fargate tasks.
 The sandbox container (helios-sandbox image) has TigerVNC + noVNC + Firefox
@@ -357,7 +357,7 @@ async def _terminate_task(ecs_client, task_arn: str, session_id: str):
             lambda: ecs_client.stop_task(
                 cluster=SANDBOX_CLUSTER,
                 task=task_arn,
-                reason=f"Helios sandbox session {session_id} ended",
+                reason=f"Himaya sandbox session {session_id} ended",
             )
         )
         logger.info(f"Sandbox {session_id}: ECS task {task_arn} stopped")

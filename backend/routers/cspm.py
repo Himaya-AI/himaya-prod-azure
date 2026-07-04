@@ -1,5 +1,5 @@
 """
-Helios CSPM unified router — cross-cloud overview, findings list, scan history.
+Himaya CSPM unified router — cross-cloud overview, findings list, scan history.
 """
 from __future__ import annotations
 

@@ -1,5 +1,5 @@
 """
-Helios Spam Center Router — enterprise tier only.
+Himaya Spam Center Router — enterprise tier only.
 Manages spam inbox (sync/release/delete) and anti-spam rules.
 
 DB tables created at startup via ensure_spam_tables().

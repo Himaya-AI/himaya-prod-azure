@@ -731,7 +731,7 @@ Threat Detection Summary (last 90 days):
 Active Security Policies ({len(active_policies)} policies):
 {json.dumps(active_policies[:10], indent=2)}
 
-Helios Platform Capabilities:
+Himaya Platform Capabilities:
 - AI-powered email threat detection (Claude/GPT-4o ensemble)
 - Real-time delta sync every 2 minutes
 - Automatic quarantine for risk score >= 80
@@ -878,7 +878,7 @@ genuine gaps. Return ONLY the JSON object, no explanation."""
             return f"Compliant: live monitoring evidence collected for '{name}'."
         if status_val == "partial":
             if ev == "data_protection":
-                return "Partial: email in-transit encryption enforced (TLS), but data-at-rest controls live in tenant (Purview / IRM) and are outside Helios scope."
+                return "Partial: email in-transit encryption enforced (TLS), but data-at-rest controls live in tenant (Purview / IRM) and are outside Himaya scope."
             if ev == "governance":
                 return "Partial: operational governance is in place (this platform), but a formal documented ISMS/governance framework is not detected."
             if ev == "risk_management":
@@ -888,7 +888,7 @@ genuine gaps. Return ONLY the JSON object, no explanation."""
             return f"Partial: some evidence collected for '{name}', but additional controls required."
         if status_val == "non_compliant":
             if ev == "training":
-                return "Non-compliant: security-awareness training module not yet provided by Helios."
+                return "Non-compliant: security-awareness training module not yet provided by Himaya."
             if not integrations:
                 return "Non-compliant: no email-provider integration is connected, so no telemetry can be evaluated."
             return f"Non-compliant: '{name}' requires controls not currently implemented."

@@ -1,5 +1,5 @@
 """
-HTTP client for the Helios reputation microservice.
+HTTP client for the Himaya reputation microservice.
 
 Builds entity batches from parsed email_data, calls POST /api/v1/reputation/lookup,
 and maps per-entity results into the shapes expected by email_processor.py.

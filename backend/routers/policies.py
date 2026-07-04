@@ -127,7 +127,7 @@ GULF_TEMPLATES = [
         "action_config": {
             "notify_recipient": True,
             "notify_sender": True,
-            "replacement_message": "An attachment was removed from this email by Helios security policy because it contained a potentially dangerous file type."
+            "replacement_message": "An attachment was removed from this email by Himaya security policy because it contained a potentially dangerous file type."
         },
         "priority": 5,
         "tags": ["attachment", "malware-prevention", "gulf"],
@@ -483,8 +483,8 @@ async def validate_gmail_tag(
     Body:
       user_email        (str)  – the Gmail address to test against
       gmail_message_id  (str)  – a real Gmail message ID to apply the test label to
-      label_type        (str)  – "tag" (Himaya-Flagged) | "alert" (Helios-Alert)
-                                  | "review" (Helios-Review).  Defaults to "tag".
+      label_type        (str)  – "tag" (Himaya-Flagged) | "alert" (Himaya-Alert)
+                                  | "review" (Himaya-Review).  Defaults to "tag".
 
     Returns success/failure with diagnostic details from the Gmail API so you can
     confirm the label was actually applied in the mailbox.
@@ -525,7 +525,7 @@ async def validate_gmail_tag(
                 gmail_message_id=gmail_message_id,
                 fallback_access_token=fallback_token,
             )
-            label_name = "Helios-Alert"
+            label_name = "Himaya-Alert"
         elif label_type == "review":
             from backend.services.quarantine_service import apply_review_label_gmail
             ok = await apply_review_label_gmail(
@@ -533,7 +533,7 @@ async def validate_gmail_tag(
                 gmail_message_id=gmail_message_id,
                 fallback_access_token=fallback_token,
             )
-            label_name = "Helios-Review"
+            label_name = "Himaya-Review"
         else:
             from backend.services.quarantine_service import apply_flagged_label_gmail
             ok = await apply_flagged_label_gmail(

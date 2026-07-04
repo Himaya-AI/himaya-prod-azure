@@ -1,5 +1,5 @@
 """
-Helios CSPM (Cloud Security Posture Management) Engine.
+Himaya CSPM (Cloud Security Posture Management) Engine.
 
 Inspired by aquasecurity/cloudsploit. Provides a plugin-based architecture for
 scanning cloud accounts (AWS, Azure, GCP, Oracle, GitHub) for misconfigurations

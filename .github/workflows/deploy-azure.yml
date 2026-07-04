@@ -80,6 +80,13 @@ jobs:
             --resource-group ${{ env.RG }} \
             --image ${{ env.ACR_NAME }}.azurecr.io/himaya-frontend:${{ github.sha }}
 
+      - name: Deploy Celery worker to Container Apps
+        run: |
+          az containerapp update \
+            --name himaya-prod-worker \
+            --resource-group ${{ env.RG }} \
+            --image ${{ env.ACR_NAME }}.azurecr.io/himaya-backend:${{ github.sha }}
+
       - name: Purge Azure Front Door cache
         run: |
           echo "Purging Front Door endpoint (manual step if configured)..."

@@ -28,7 +28,7 @@ export default function PrivacyPolicyPage() {
 
           <div>
             <h2 className="text-base font-semibold text-[#e4e4e7] mb-2">1. What We Collect</h2>
-            <p>When you create an account or sign in to the Helios platform, we collect:</p>
+            <p>When you create an account or sign in to the Himaya platform, we collect:</p>
             <ul className="list-disc list-inside mt-2 space-y-1">
               <li>Your <strong className="text-[#e4e4e7]">email address</strong> — used solely to identify your account and send essential service communications</li>
               <li>Basic usage metadata — such as login timestamps and feature access logs</li>
@@ -49,7 +49,7 @@ export default function PrivacyPolicyPage() {
 
           <div>
             <h2 className="text-base font-semibold text-[#e4e4e7] mb-2">3. Email Security Analysis</h2>
-            <p>The Helios platform processes email metadata (sender addresses, domains, IP addresses, and attachment hashes) to perform threat detection and policy enforcement. This data is processed within your organization's tenant and is not used to train models or shared externally except where required to perform the service (e.g., threat intelligence lookups).</p>
+            <p>The Himaya platform processes email metadata (sender addresses, domains, IP addresses, and attachment hashes) to perform threat detection and policy enforcement. This data is processed within your organization's tenant and is not used to train models or shared externally except where required to perform the service (e.g., threat intelligence lookups).</p>
           </div>
 
           <div>

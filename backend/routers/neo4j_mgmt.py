@@ -127,7 +127,7 @@ async def _run_install_bg():
             "sudo sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/' /etc/neo4j/neo4j.conf 2>/dev/null; "
             "sudo sed -i 's/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/' /etc/neo4j/neo4j.conf 2>/dev/null; "
             "sudo sed -i 's/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/' /etc/neo4j/neo4j.conf 2>/dev/null; "
-            "sudo neo4j-admin dbms set-initial-password 'HeliosGraph2026!' 2>/dev/null || true; "
+            "sudo neo4j-admin dbms set-initial-password 'HimayaGraph2026!' 2>/dev/null || true; "
             "echo 'server.memory.heap.initial_size=1g' | sudo tee -a /etc/neo4j/neo4j.conf > /dev/null; "
             "echo 'server.memory.heap.max_size=2g' | sudo tee -a /etc/neo4j/neo4j.conf > /dev/null; "
             "echo 'server.memory.pagecache.size=512m' | sudo tee -a /etc/neo4j/neo4j.conf > /dev/null; "
@@ -177,7 +177,7 @@ async def neo4j_install_step(step: str):
             "sudo sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/' /etc/neo4j/neo4j.conf 2>/dev/null; "
             "sudo sed -i 's/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/' /etc/neo4j/neo4j.conf 2>/dev/null; "
             "sudo sed -i 's/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/' /etc/neo4j/neo4j.conf 2>/dev/null; "
-            "sudo neo4j-admin dbms set-initial-password 'HeliosGraph2026!' 2>/dev/null || true; "
+            "sudo neo4j-admin dbms set-initial-password 'HimayaGraph2026!' 2>/dev/null || true; "
             "sudo grep -q 'heap.initial' /etc/neo4j/neo4j.conf || echo 'server.memory.heap.initial_size=1g' | sudo tee -a /etc/neo4j/neo4j.conf > /dev/null; "
             "sudo grep -q 'heap.max' /etc/neo4j/neo4j.conf || echo 'server.memory.heap.max_size=2g' | sudo tee -a /etc/neo4j/neo4j.conf > /dev/null; "
             "sudo grep -q 'pagecache' /etc/neo4j/neo4j.conf || echo 'server.memory.pagecache.size=512m' | sudo tee -a /etc/neo4j/neo4j.conf > /dev/null; "
@@ -187,7 +187,7 @@ async def neo4j_install_step(step: str):
         "check": "ss -tlnp | grep 7687 && echo 'BOLT OK' || echo 'BOLT NOT LISTENING'; sudo journalctl -u neo4j -n 10 --no-pager 2>/dev/null",
         "backfill-sender-props": (
             # Backfill email_count, threat_count, reputation_score from existing relationships
-            "cypher-shell -u neo4j -p 'HeliosGraph2026!' --format plain "
+            "cypher-shell -u neo4j -p 'HimayaGraph2026!' --format plain "
             "'MATCH (s:Sender) "
             "OPTIONAL MATCH (s)-[:SENT_TO]->() "
             "WITH s, count(*) AS email_count "
@@ -203,13 +203,13 @@ async def neo4j_install_step(step: str):
             "ORDER BY threats DESC;' 2>&1"
         ),
         "graph-stats": (
-            "cypher-shell -u neo4j -p 'HeliosGraph2026!' --format plain "
+            "cypher-shell -u neo4j -p 'HimayaGraph2026!' --format plain "
             "'MATCH (n) RETURN labels(n)[0] AS label, count(n) AS cnt ORDER BY cnt DESC;' 2>&1; "
             "echo '---'; "
-            "cypher-shell -u neo4j -p 'HeliosGraph2026!' --format plain "
+            "cypher-shell -u neo4j -p 'HimayaGraph2026!' --format plain "
             "'MATCH ()-[r]->() RETURN type(r) AS rel, count(r) AS cnt ORDER BY cnt DESC;' 2>&1; "
             "echo '---'; "
-            "cypher-shell -u neo4j -p 'HeliosGraph2026!' --format plain "
+            "cypher-shell -u neo4j -p 'HimayaGraph2026!' --format plain "
             "'MATCH (s:Sender) RETURN s.email, s.reputation_score, s.threat_count ORDER BY s.threat_count DESC LIMIT 15;' 2>&1"
         ),
         "nohup-install": (
@@ -221,7 +221,7 @@ async def neo4j_install_step(step: str):
             "sudo sed -i 's/#server.default_listen_address=0.0.0.0/server.default_listen_address=0.0.0.0/' /etc/neo4j/neo4j.conf; "
             "sudo sed -i 's/#server.bolt.listen_address=:7687/server.bolt.listen_address=0.0.0.0:7687/' /etc/neo4j/neo4j.conf; "
             "sudo sed -i 's/#server.http.listen_address=:7474/server.http.listen_address=0.0.0.0:7474/' /etc/neo4j/neo4j.conf; "
-            "sudo neo4j-admin dbms set-initial-password HeliosGraph2026! >> /tmp/neo4j-install.log 2>&1 || true; "
+            "sudo neo4j-admin dbms set-initial-password HimayaGraph2026! >> /tmp/neo4j-install.log 2>&1 || true; "
             "echo server.memory.heap.initial_size=1g | sudo tee -a /etc/neo4j/neo4j.conf; "
             "echo server.memory.heap.max_size=2g | sudo tee -a /etc/neo4j/neo4j.conf; "
             "echo server.memory.pagecache.size=512m | sudo tee -a /etc/neo4j/neo4j.conf; "

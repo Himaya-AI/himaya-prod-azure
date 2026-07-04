@@ -376,7 +376,7 @@ export default function SettingsPage() {
           {/* Info note */}
           <div className="flex items-start gap-3 px-4 py-3 bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl text-[12px] text-[#93b4fd]">
             <Info size={13} className="mt-0.5 flex-shrink-0" />
-            <span>This tab shows <strong>portal admin accounts</strong> only — people who can log into Helios. Monitored employee mailboxes are managed in the <strong>People</strong> tab.</span>
+            <span>This tab shows <strong>portal admin accounts</strong> only — people who can log into Himaya. Monitored employee mailboxes are managed in the <strong>People</strong> tab.</span>
           </div>
 
           <div className={`flex ${isRtl ? 'justify-start' : 'justify-end'}`}>

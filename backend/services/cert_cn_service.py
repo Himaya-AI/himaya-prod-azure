@@ -41,7 +41,7 @@ URL_RE = re.compile(r'https?://[^\s<>"\']+')
 DOMAIN_RE = re.compile(r'(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}')
 
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (compatible; Himaya-Helios/1.0 threat-intel-collector)",
+    "User-Agent": "Mozilla/5.0 (compatible; Himaya-Himaya/1.0 threat-intel-collector)",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
     "Referer": CERT_SECTION_URL,

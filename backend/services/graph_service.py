@@ -1,5 +1,5 @@
 """
-Neo4j communication graph service — Himaya Helios.
+Neo4j communication graph service — Himaya.
 
 Analyzes sender-recipient relationships to detect anomalies:
   - First-time sender to this org

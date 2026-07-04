@@ -1,5 +1,5 @@
 """
-Celery worker definitions for Himaya Helios.
+Celery worker definitions for Himaya.
 Broker: Redis
 """
 import asyncio
@@ -9,10 +9,18 @@ from backend.config import settings
 
 logger = logging.getLogger(__name__)
 
+def _celery_redis_url(url: str) -> str:
+    """Celery requires ssl_cert_reqs on rediss:// URLs (Azure Cache for Redis)."""
+    if url.startswith("rediss://") and "ssl_cert_reqs" not in url:
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}ssl_cert_reqs=CERT_REQUIRED"
+    return url
+
+
 celery_app = Celery(
     "sentinel_mail",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=_celery_redis_url(settings.REDIS_URL),
+    backend=_celery_redis_url(settings.REDIS_URL),
     include=["backend.workers.celery_app"],
 )
 

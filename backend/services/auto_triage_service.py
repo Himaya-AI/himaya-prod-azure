@@ -1,9 +1,9 @@
 """
-Auto-Triage Agent — Helios autonomous email security investigator.
+Auto-Triage Agent — Himaya autonomous email security investigator.
 
 When enabled (per-org toggle), a background loop runs every 2 minutes
 examining new/open threats, performs deep investigation (VT, threat feeds,
-Neo4j graph, attachment heuristics), synthesises evidence via Helios Analysis,
+Neo4j graph, attachment heuristics), synthesises evidence via Himaya Analysis,
 and applies a definitive verdict.
 
 Redis key for enabled state: auto_triage:enabled:{org_id}
@@ -39,7 +39,7 @@ def _build_helios_system_prompt() -> str:
     today = _dt.utcnow().strftime("%B %d, %Y")
     year = _dt.utcnow().year
     return (
-        f"You are Helios Analysis, an autonomous email security engine for enterprise organizations "
+        f"You are Himaya Analysis, an autonomous email security engine for enterprise organizations "
         f"in the Gulf region.\n\n"
         f"CURRENT DATE: {today}. This is the real current date - use it when reasoning about dates "
         f"in email content, filenames, or deadlines. Do not treat dates in {year} as future or unusual.\n\n"
@@ -208,7 +208,7 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
     3. Threat feed checks: sender IP + URLs
     4. Neo4j graph query: prior sender history
     5. Attachment heuristic analysis
-    6. Helios Analysis verdict synthesis
+    6. Himaya Analysis verdict synthesis
     7. Apply verdict action
     """
     result = {
@@ -359,9 +359,9 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
         ec2_sandbox_result = None
         if all_urls or all_attachments:
             try:
-                from backend.services.ec2_sandbox_service import detonate_in_ec2
-                logger.info(f"auto_triage: launching EC2 sandbox for {threat_id} (urls={len(all_urls)}, attachments={len(all_attachments)})")
-                ec2_sandbox_result = await detonate_in_ec2(
+                from backend.services.aci_sandbox_service import detonate_in_aci
+                logger.info(f"auto_triage: launching ACI sandbox for {threat_id} (urls={len(all_urls)}, attachments={len(all_attachments)})")
+                ec2_sandbox_result = await detonate_in_aci(
                     threat_id=threat_id,
                     urls=all_urls,
                     attachment_names=all_attachments,
@@ -392,7 +392,7 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
             except Exception as _ec2_err:
                 logger.warning(f"auto_triage: EC2 sandbox step non-fatal error: {_ec2_err}")
 
-        # ── 6. Build Helios Analysis dossier and get verdict ─────────────────────
+        # ── 6. Build Himaya Analysis dossier and get verdict ─────────────────────
         ti_data = threat_data["threat_indicators"]
         is_user_reported = isinstance(ti_data, dict) and ti_data.get("source") == "user_reported"
 
@@ -516,7 +516,7 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
 
 
 # ── Verdict configuration ─────────────────────────────────────────────────────
-# Primary: Helios classifier-service /verdict (Bedrock Kimi K2.5)
+# Primary: Himaya classifier-service /verdict (Bedrock Kimi K2.5)
 # Fallback (TIMEOUT ONLY): Anthropic Claude Haiku
 # Catastrophic: risk-score heuristic
 _USE_REMOTE_VERDICT = os.getenv("USE_REMOTE_VERDICT", "true").lower() in ("true", "1", "yes")
@@ -542,7 +542,7 @@ def _heuristic_verdict(dossier: dict, reason: str = "") -> dict:
         "threat_type": "UNKNOWN",
         "confidence": 0.5,
         "reasoning": (
-            f"Helios Analysis heuristic fallback ({reason}). "
+            f"Himaya Analysis heuristic fallback ({reason}). "
             f"Verdict based on risk score ({risk})."
         ).strip(),
         "key_evidence": [f"risk_score:{risk}"],
@@ -555,7 +555,7 @@ def _heuristic_verdict(dossier: dict, reason: str = "") -> dict:
 
 async def _haiku_verdict_fallback(dossier: dict, anthropic_key: str) -> dict:
     """
-    Claude Haiku Helios-Analysis verdict — invoked ONLY when the remote
+    Claude Haiku Himaya-Analysis verdict — invoked ONLY when the remote
     /verdict service times out. Uses the same prompt + JSON contract.
     """
     user_message = (
@@ -636,7 +636,7 @@ async def _haiku_verdict_fallback(dossier: dict, anthropic_key: str) -> dict:
 
 async def _get_helios_verdict(dossier: dict) -> dict:
     """
-    Get verdict from the Helios classifier-service /verdict endpoint (Bedrock Kimi K2.5).
+    Get verdict from the Himaya classifier-service /verdict endpoint (Bedrock Kimi K2.5).
 
     Fallback chain (matches Stage-1 design):
       Kimi (primary, 60s timeout)
@@ -691,11 +691,11 @@ async def _get_helios_verdict(dossier: dict) -> dict:
 
     # ── Legacy path (USE_REMOTE_VERDICT=false): direct Anthropic Opus ─────
     if not anthropic_key:
-        logger.warning("auto_triage: Helios Analysis engine not configured — defaulting to ESCALATE")
+        logger.warning("auto_triage: Himaya Analysis engine not configured — defaulting to ESCALATE")
         return {
             "verdict": "ESCALATE",
             "confidence": 0.5,
-            "reasoning": "Helios Analysis engine unavailable. Manual review required.",
+            "reasoning": "Himaya Analysis engine unavailable. Manual review required.",
             "key_evidence": [f"risk_score:{dossier.get('risk_score', 0)}"],
             "notify_recipient": False,
             "notify_admin": True,
@@ -725,14 +725,14 @@ async def _get_helios_verdict(dossier: dict) -> dict:
                 },
             )
             if resp.status_code != 200:
-                logger.warning(f"auto_triage: Helios Analysis engine returned {resp.status_code}")
-                raise ValueError(f"Helios Analysis engine error: {resp.status_code}")
+                logger.warning(f"auto_triage: Himaya Analysis engine returned {resp.status_code}")
+                raise ValueError(f"Himaya Analysis engine error: {resp.status_code}")
 
             content = resp.json().get("content", [])
             raw_text = content[0].get("text", "") if content else ""
             json_match = re.search(r"\{.*\}", raw_text, re.DOTALL)
             if not json_match:
-                raise ValueError("No JSON found in Helios Analysis response")
+                raise ValueError("No JSON found in Himaya Analysis response")
 
             verdict_json = json.loads(json_match.group())
             verdict = verdict_json.get("verdict", "ESCALATE")
@@ -920,7 +920,7 @@ async def _apply_verdict(
                 # Escalated = needs human review, stays open
                 threat.status = "open"
                 threat.action_taken = "FLAGGED_HIGH"
-                # Apply Helios-Suspicious label/category so recipient sees it
+                # Apply Himaya-Suspicious label/category so recipient sees it
                 try:
                     from backend.services.quarantine_service import (
                         _get_or_create_named_label,
@@ -934,11 +934,11 @@ async def _apply_verdict(
                             asyncio.create_task(apply_category_m365(
                                 user_email=threat.recipient_email,
                                 m365_message_id=threat.email_message_id,
-                                category_name="Helios-Suspicious",
+                                category_name="Himaya-Suspicious",
                                 org_id=org_id,
                             ))
                         else:
-                            # Gmail: apply orange Helios-Suspicious label
+                            # Gmail: apply orange Himaya-Suspicious label
                             async def _apply_escalated_label(email, msg_id):
                                 try:
                                     hdrs = await _get_sa_headers_async(email)
@@ -947,7 +947,7 @@ async def _apply_verdict(
                                     async with _hx.AsyncClient(timeout=15) as _cl:
                                         label_id = await _get_or_create_named_label(
                                             _cl, hdrs, email,
-                                            name="Helios-Suspicious",
+                                            name="Himaya-Suspicious",
                                             bg_color="#fb4c2f",  # bright-red — valid Gmail palette
                                             text_color="#ffffff",
                                         )
@@ -958,12 +958,12 @@ async def _apply_verdict(
                                                 json={"addLabelIds": [label_id]},
                                             )
                                 except Exception as _le:
-                                    logger.debug(f"Helios-Suspicious label failed: {_le}")
+                                    logger.debug(f"Himaya-Suspicious label failed: {_le}")
                             asyncio.create_task(_apply_escalated_label(
                                 threat.recipient_email, threat.email_message_id
                             ))
                 except Exception as _ee:
-                    logger.warning(f"auto_triage: Helios-Suspicious label failed (non-fatal): {_ee}")
+                    logger.warning(f"auto_triage: Himaya-Suspicious label failed (non-fatal): {_ee}")
 
                 # Send recipient notification via SES
                 if threat.recipient_email and threat.sender:
@@ -984,9 +984,9 @@ async def _apply_verdict(
                             explanation=threat.ai_explanation_en or "",
                             key_factors=_sus_factors[:8],
                         ))
-                        logger.info(f"Helios-Suspicious recipient notification queued for {threat.recipient_email}")
+                        logger.info(f"Himaya-Suspicious recipient notification queued for {threat.recipient_email}")
                     except Exception as _sue:
-                        logger.warning(f"auto_triage: Helios-Suspicious SES notification failed (non-fatal): {_sue}")
+                        logger.warning(f"auto_triage: Himaya-Suspicious SES notification failed (non-fatal): {_sue}")
 
             elif verdict == "DISMISS":
                 # Dismissed = clean / false positive, mark resolved
@@ -1031,7 +1031,7 @@ async def _apply_verdict(
                                     threat.recipient_email, threat.email_message_id, org_id
                                 ))
                             else:
-                                # Gmail: remove Helios-Review label and restore INBOX
+                                # Gmail: remove Himaya-Review label and restore INBOX
                                 async def _restore_to_inbox_gmail(_email, _msg_id):
                                     try:
                                         hdrs = await _get_sa_headers_async(_email)
@@ -1040,7 +1040,7 @@ async def _apply_verdict(
                                         async with _hx.AsyncClient(timeout=15) as _cl:
                                             label_id = await _get_or_create_named_label(
                                                 _cl, hdrs, _email,
-                                                name="Helios-Review",
+                                                name="Himaya-Review",
                                                 bg_color="#16a765",
                                                 text_color="#ffffff",
                                             )
@@ -1199,7 +1199,7 @@ async def run_auto_triage_loop(org_id: str) -> None:
 async def send_triage_rollup_email(org_id: str) -> None:
     """
     Sends a 24-hour auto-triage rollup email to all tenant admins.
-    Summarises every action Helios Analysis took automatically in the past 24 hours:
+    Summarises every action Himaya Analysis took automatically in the past 24 hours:
     quarantined, marked spam, escalated, dismissed.
     Triggered once per 24h while auto-triage is enabled for the org.
     """
@@ -1274,7 +1274,7 @@ async def send_triage_rollup_email(org_id: str) -> None:
         )
 
         subject = (
-            f"Helios Auto-Triage Report — {org.name} — "
+            f"Himaya Auto-Triage Report — {org.name} — "
             f"{datetime.utcnow().strftime('%b %d, %Y')}"
         )
 
@@ -1300,10 +1300,10 @@ def _build_triage_rollup_html(
 
     summary_color = "#ef4444" if quarantined + escalated > 0 else "#22c55e"
     summary_text = (
-        f"Helios Analysis automatically handled {total} threat{'s' if total != 1 else ''} "
+        f"Himaya Analysis automatically handled {total} threat{'s' if total != 1 else ''} "
         f"in the past 24 hours."
         if total > 0
-        else "Helios Analysis reviewed your mailbox traffic — no threats required automated action."
+        else "Himaya Analysis reviewed your mailbox traffic — no threats required automated action."
     )
 
     # Action rows for top threats table
@@ -1374,7 +1374,7 @@ def _build_triage_rollup_html(
     table_section = ""
     if top_threats:
         table_section = f"""
-      <h3 style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 12px 0;">Actions Taken by Helios Analysis</h3>
+      <h3 style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin:0 0 12px 0;">Actions Taken by Himaya Analysis</h3>
       <table width="100%" cellpadding="0" cellspacing="0"
              style="background:#0d1117;border-radius:8px;border:1px solid #1e293b;margin-bottom:24px;">
         <thead>
@@ -1416,8 +1416,8 @@ def _build_triage_rollup_html(
     {table_section}
     <div style="background:#0d1117;border-radius:8px;padding:14px 20px;border:1px solid #1e293b;">
       <p style="color:#64748b;font-size:11px;margin:0;">
-        This report was generated automatically by Helios Analysis.
-        Actions reflect the Helios Auto-Triage engine decisions based on threat intelligence,
+        This report was generated automatically by Himaya Analysis.
+        Actions reflect the Himaya Auto-Triage engine decisions based on threat intelligence,
         sender reputation, and behavioural analysis.
         To review or override any action, visit your
         <a href="https://app.himaya.ai/threats" style="color:#3b6ef6;">Threats dashboard</a>.
@@ -1425,7 +1425,7 @@ def _build_triage_rollup_html(
     </div>
   </td></tr>
   <tr><td style="background:#0d0d12;padding:16px 32px;border-radius:0 0 12px 12px;border-top:1px solid #1e293b;">
-    <p style="color:#475569;font-size:11px;margin:0;">Helios by Himaya Technologies · <a href="https://app.himaya.ai" style="color:#3b6ef6;">app.himaya.ai</a></p>
+    <p style="color:#475569;font-size:11px;margin:0;">Himaya by Himaya Technologies · <a href="https://app.himaya.ai" style="color:#3b6ef6;">app.himaya.ai</a></p>
   </td></tr>
 </table>
 </body></html>"""

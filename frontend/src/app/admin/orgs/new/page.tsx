@@ -94,7 +94,7 @@ export default function NewOrg() {
           <Link href="/admin/orgs" className="flex-1 bg-gray-800 hover:bg-gray-700 text-white text-center py-3 rounded-lg text-sm transition-colors">
             View All Organizations
           </Link>
-          <Link href={`/admin/orgs/${result.org_id}`} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-center py-3 rounded-lg text-sm transition-colors">
+          <Link href={`/admin/orgs/${result.org_id}`} className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent)] text-white text-center py-3 rounded-lg text-sm transition-colors">
             View Customer Details
           </Link>
         </div>
@@ -118,7 +118,7 @@ export default function NewOrg() {
 
       <form onSubmit={handleSubmit} className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
         <div className="flex items-center gap-3 pb-4 border-b border-gray-800">
-          <div className="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center">
             <Building2 className="w-4 h-4 text-white" />
           </div>
           <h2 className="text-white font-semibold">Organization Details</h2>
@@ -129,38 +129,38 @@ export default function NewOrg() {
             <label className="text-gray-400 text-sm mb-1.5 block">Organization Name *</label>
             <input required value={form.org_name} onChange={e => set('org_name', e.target.value)}
               placeholder="Acme Fintech LLC"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" />
           </div>
           <div className="col-span-2">
             <label className="text-gray-400 text-sm mb-1.5 block">Primary Domain *</label>
             <input required value={form.domain} onChange={e => set('domain', e.target.value)}
               placeholder="acmefintech.com"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" />
             <p className="text-gray-600 text-xs mt-1">Admin account will be created as admin@{form.domain || 'domain.com'}</p>
           </div>
           <div>
             <label className="text-gray-400 text-sm mb-1.5 block">Country</label>
             <select value={form.country} onChange={e => set('country', e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500">
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
               {GULF_COUNTRIES.map(c => <option key={c}>{c}</option>)}
             </select>
           </div>
           <div>
             <label className="text-gray-400 text-sm mb-1.5 block">Plan</label>
             <select value={form.plan} onChange={e => { set('plan', e.target.value); set('billing_rate_usd', String(PLANS.find(p => p.value === e.target.value)?.rate || 8)) }}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500">
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[var(--accent)]">
               {PLANS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
           </div>
           <div>
             <label className="text-gray-400 text-sm mb-1.5 block">Mailbox Limit</label>
             <input type="number" value={form.mailbox_limit} onChange={e => set('mailbox_limit', e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500" />
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[var(--accent)]" />
           </div>
           <div>
             <label className="text-gray-400 text-sm mb-1.5 block">Billing Rate ($/mailbox/mo)</label>
             <input type="number" step="0.01" value={form.billing_rate_usd} onChange={e => set('billing_rate_usd', e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-purple-500" />
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[var(--accent)]" />
             <p className="text-gray-600 text-xs mt-1">
               Est. MRR: ${(parseInt(form.mailbox_limit || '0') * parseFloat(form.billing_rate_usd || '0')).toFixed(2)}/mo
             </p>
@@ -174,19 +174,19 @@ export default function NewOrg() {
               <label className="text-gray-400 text-sm mb-1.5 block">Contact Name *</label>
               <input required value={form.contact_name} onChange={e => set('contact_name', e.target.value)}
                 placeholder="Ahmed Al-Rashid"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" />
             </div>
             <div>
               <label className="text-gray-400 text-sm mb-1.5 block">Contact Email *</label>
               <input required type="email" value={form.contact_email} onChange={e => set('contact_email', e.target.value)}
                 placeholder="ahmed@acmefintech.com"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-purple-500" />
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:border-[var(--accent)]" />
             </div>
           </div>
         </div>
 
         <button type="submit" disabled={loading}
-          className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
+          className="w-full bg-[var(--accent)] hover:bg-[var(--accent)] disabled:opacity-50 text-white font-semibold py-3 rounded-lg transition-colors text-sm">
           {loading ? 'Provisioning...' : 'Provision Customer'}
         </button>
       </form>

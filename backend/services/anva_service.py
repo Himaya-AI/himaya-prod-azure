@@ -304,7 +304,7 @@ async def fetch_and_cache_anva_pack(redis, pack_id: str) -> int:
     async with httpx.AsyncClient(
         timeout=30,
         follow_redirects=True,
-        headers={"User-Agent": "Mozilla/5.0 (compatible; Helios/1.0)"},
+        headers={"User-Agent": "Mozilla/5.0 (compatible; Himaya/1.0)"},
     ) as client:
         if use_auth:
             logged_in = await _login(client)

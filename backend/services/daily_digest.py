@@ -99,7 +99,7 @@ async def _send_all_digests(target_org_id=None):
                     html = _build_digest_html(org.name, threat_today, clean_today, threats_today[:5], top_targets)
                     send_email(
                         to=admin.email,
-                        subject=f"Helios Daily Digest — {org.name} — {datetime.utcnow().strftime('%b %d, %Y')}",
+                        subject=f"Himaya Daily Digest — {org.name} — {datetime.utcnow().strftime('%b %d, %Y')}",
                         html_body=html,
                     )
                 logger.info(f"Daily digest sent for org {org.id}: {threat_today} threats, {len(admins)} admins notified")
@@ -175,7 +175,7 @@ def _build_digest_html(org_name: str, threat_count: int, clean_count: int, top_t
     {'<h3 style="color:#94a3b8;font-size:11px;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;">Most Targeted Employees</h3><table width="100%" cellpadding="0" cellspacing="0" style="background:#0d1117;border-radius:8px;border:1px solid #1e293b;margin-bottom:24px;"><thead><tr style="border-bottom:1px solid #1e293b;"><th style="padding:8px 12px;text-align:left;font-size:10px;color:#64748b;text-transform:uppercase;">Email</th><th style="padding:8px 12px;text-align:left;font-size:10px;color:#64748b;text-transform:uppercase;">Threats</th></tr></thead><tbody>' + target_rows + '</tbody></table>' if top_targets else ''}
   </td></tr>
   <tr><td style="background:#0d0d12;padding:16px 32px;border-radius:0 0 12px 12px;border-top:1px solid #1e293b;">
-    <p style="color:#475569;font-size:11px;margin:0;">Helios by Himaya Technologies · <a href="https://app.himaya.ai" style="color:#3b6ef6;">app.himaya.ai</a></p>
+    <p style="color:#475569;font-size:11px;margin:0;">Himaya by Himaya Technologies · <a href="https://app.himaya.ai" style="color:#3b6ef6;">app.himaya.ai</a></p>
   </td></tr>
 </table>
 </body></html>"""

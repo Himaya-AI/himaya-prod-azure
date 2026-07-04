@@ -285,9 +285,9 @@ function onGmailMessageOpen(e) {
   var accessToken = e.gmail.accessToken;
   GmailApp.setCurrentMessageAccessToken(accessToken);
   var card = CardService.newCardBuilder()
-    .setName('Helios Phish Reporter')
+    .setName('Himaya Phish Reporter')
     .setHeader(CardService.newCardHeader()
-      .setTitle('Helios Security')
+      .setTitle('Himaya Security')
       .setSubtitle('AI-Powered Email Protection'))
     .addSection(CardService.newCardSection()
       .setHeader('Report this email')
@@ -328,7 +328,7 @@ function reportPhishing(e) {
   if (response.getResponseCode() === 200) {
     message.moveToTrash();
     return CardService.newActionResponseBuilder()
-      .setNotification(CardService.newNotification().setText('Reported! Helios is investigating.'))
+      .setNotification(CardService.newNotification().setText('Reported! Himaya is investigating.'))
       .setStateChanged(true).build();
   }
   return CardService.newActionResponseBuilder()
@@ -345,7 +345,7 @@ const APPS_SCRIPT_MANIFEST = `{
     "https://www.googleapis.com/auth/userinfo.email"
   ],
   "gmail": {
-    "name": "Helios Phish Reporter",
+    "name": "Himaya Phish Reporter",
     "logoUrl": "https://app.himaya.ai/himaya-logo.png",
     "primaryColor": "#1a2744",
     "secondaryColor": "#3b6ef6",
@@ -397,8 +397,8 @@ function PhishReportTab() {
   <Version>1.0.0.1</Version>
   <ProviderName>Himaya Technologies</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Helios Phish Reporter"/>
-  <Description DefaultValue="Report suspicious emails to your Helios security platform"/>
+  <DisplayName DefaultValue="Himaya Phish Reporter"/>
+  <Description DefaultValue="Report suspicious emails to your Himaya security platform"/>
   <IconUrl DefaultValue="https://app.himaya.ai/himaya-3-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://app.himaya.ai/himaya-3-80.png"/>
   <SupportUrl DefaultValue="https://app.himaya.ai"/>
@@ -468,11 +468,11 @@ function PhishReportTab() {
         <bt:Url id="Taskpane.Url" DefaultValue="${taskpaneUrl}"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="Group.Label" DefaultValue="Helios Security"/>
+        <bt:String id="Group.Label" DefaultValue="Himaya Security"/>
         <bt:String id="Button.Label" DefaultValue="Report Phishing"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="Button.Tooltip" DefaultValue="Report this email as suspicious to your Helios security platform."/>
+        <bt:String id="Button.Tooltip" DefaultValue="Report this email as suspicious to your Himaya security platform."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
@@ -498,7 +498,7 @@ function PhishReportTab() {
         </div>
         <p className="text-[12px] text-[var(--muted)]">
           Let employees report suspicious emails directly from Gmail or Outlook.
-          Reports go straight into your Helios threat queue for AI investigation.
+          Reports go straight into your Himaya threat queue for AI investigation.
         </p>
       </div>
 
@@ -546,16 +546,16 @@ function PhishReportTab() {
           </div>
           <div className="bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 rounded-lg px-3 py-2 mb-2">
             <p className="text-[11px] text-[#3b6ef6] font-medium leading-relaxed">
-              The Helios Phish Reporter add-on is published by <strong>Himaya Technologies</strong> from a single shared GCP project.
+              The Himaya Phish Reporter add-on is published by <strong>Himaya Technologies</strong> from a single shared GCP project.
               Your org key (above) ties each report to your tenant. Install it once from your Google Workspace Admin console.
             </p>
           </div>
           <ol className="space-y-2 text-[11px] text-[var(--muted)]">
             <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">1.</span><span>Sign in to your <strong>Google Workspace Admin Console</strong> (<a href="https://admin.google.com" target="_blank" rel="noreferrer" className="text-[#3b6ef6] hover:underline">admin.google.com</a>) as a super admin</span></li>
             <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">2.</span><span>Go to <strong>Apps → Google Workspace Marketplace apps → Add app to domain install list</strong></span></li>
-            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">3.</span><span>Search for <strong>&quot;Helios Phish Reporter&quot;</strong> by Himaya Technologies, click Install</span></li>
+            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">3.</span><span>Search for <strong>&quot;Himaya Phish Reporter&quot;</strong> by Himaya Technologies, click Install</span></li>
             <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">4.</span><span>Select the OUs or users to deploy to, then click <strong>Finish</strong></span></li>
-            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">5.</span><span>Employees will see the Helios panel the next time they open an email in Gmail</span></li>
+            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">5.</span><span>Employees will see the Himaya panel the next time they open an email in Gmail</span></li>
           </ol>
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
             <p className="text-[11px] text-amber-400 leading-relaxed">
@@ -633,8 +633,8 @@ function PhishReportTab() {
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
           {[
             { Icon: MousePointerClick, label: 'Employee clicks "Report as Phishing" on any email' },
-            { Icon: ArrowUpFromLine, label: 'Email is moved out of inbox while Helios investigates' },
-            { Icon: ShieldAlert, label: 'Helios AI investigates: VT, threat feeds, sender history' },
+            { Icon: ArrowUpFromLine, label: 'Email is moved out of inbox while Himaya investigates' },
+            { Icon: ShieldAlert, label: 'Himaya AI investigates: VT, threat feeds, sender history' },
             { Icon: CheckCircle2, label: 'If clean (DISMISS), email is automatically restored to inbox' },
             { Icon: Brain, label: 'All reports train the AI model to get smarter over time' },
           ].map(({ Icon, label }, i) => (
@@ -857,7 +857,7 @@ export default function OnboardingPage() {
             disconnecting={disconnecting === 'm365'}
             requiresAdmin="Requires a Microsoft 365 Global Admin or Exchange Admin. They will see a tenant-wide consent prompt during authorization."
             permissions={[
-              { scope: 'Mail.ReadWrite', label: 'Read & modify all mailboxes (WRITE — required for quarantine)', reason: 'Without Mail.ReadWrite, Helios can detect threats but cannot physically move emails into quarantine folders. Mail.Read alone is NOT sufficient.' },
+              { scope: 'Mail.ReadWrite', label: 'Read & modify all mailboxes (WRITE — required for quarantine)', reason: 'Without Mail.ReadWrite, Himaya can detect threats but cannot physically move emails into quarantine folders. Mail.Read alone is NOT sufficient.' },
               { scope: 'MailboxSettings.Read', label: 'Read mailbox settings', reason: 'Understand delivery rules and forwarding' },
               { scope: 'User.Read.All', label: 'List all users', reason: 'Build recipient risk profiles for all employees' },
               { scope: 'Directory.Read.All', label: 'Read directory', reason: 'Map organizational hierarchy for impersonation detection' },
@@ -875,7 +875,7 @@ export default function OnboardingPage() {
             disconnecting={disconnecting === 'google'}
             requiresAdmin="Requires a Google Workspace Super Admin. This grants access to list all users via the Admin SDK Directory API."
             permissions={[
-              { scope: 'gmail.modify', label: 'Read & modify Gmail messages (WRITE — required for quarantine & blocking)', reason: 'Without this scope Helios can detect threats but cannot physically move emails out of inboxes. gmail.readonly is NOT sufficient.' },
+              { scope: 'gmail.modify', label: 'Read & modify Gmail messages (WRITE — required for quarantine & blocking)', reason: 'Without this scope Himaya can detect threats but cannot physically move emails out of inboxes. gmail.readonly is NOT sufficient.' },
               { scope: 'admin.directory.user.readonly', label: 'List all users in org', reason: 'Build recipient risk profiles for all employees' },
             ]}
             setupSteps={[{
@@ -886,17 +886,17 @@ export default function OnboardingPage() {
                   note: 'Direct path: admin.google.com → Security → API Controls → Domain-wide Delegation'
                 },
                 {
-                  label: 'Click "Add new" and enter the Helios Service Account Client ID:',
+                  label: 'Click "Add new" and enter the Himaya Service Account Client ID:',
                   value: '114733393163502940734',
                 },
                 {
                   label: 'Paste these OAuth scopes (include both — modify is required for quarantine):',
                   value: 'https://www.googleapis.com/auth/gmail.modify,https://www.googleapis.com/auth/admin.directory.user.readonly',
-                  note: '⚠️ gmail.modify is required for quarantine to work. gmail.readonly only lets Helios read — it cannot move emails out of inboxes.',
+                  note: '⚠️ gmail.modify is required for quarantine to work. gmail.readonly only lets Himaya read — it cannot move emails out of inboxes.',
                 },
                 {
-                  label: 'Click Authorize. Helios will now scan and protect all mailboxes in your org.',
-                  note: 'This is a one-time setup per tenant. The same Client ID is shared across all Helios deployments — you are only granting access to your own org\'s data.'
+                  label: 'Click Authorize. Himaya will now scan and protect all mailboxes in your org.',
+                  note: 'This is a one-time setup per tenant. The same Client ID is shared across all Himaya deployments — you are only granting access to your own org\'s data.'
                 },
               ]
             }]}
@@ -925,7 +925,7 @@ export default function OnboardingPage() {
                   Domain-Wide Delegation active
                 </p>
                 <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isLight ? '#047857' : '#a7f3d0' }}>
-                  Helios is scanning all mailboxes in your domain and can quarantine threats directly.
+                  Himaya is scanning all mailboxes in your domain and can quarantine threats directly.
                   {(dwdStatus.monitored_mailboxes ?? 0) > 1 && (
                     <> Currently protecting{' '}
                       <strong style={{ color: isLight ? '#065f46' : '#6ee7b7' }}>
@@ -940,7 +940,7 @@ export default function OnboardingPage() {
                   Domain-Wide Delegation not confirmed
                 </p>
                 <p className="text-xs mt-1 leading-relaxed" style={{ color: isLight ? '#b45309' : '#fde68a' }}>
-                  Without DWD, Helios can only scan{' '}
+                  Without DWD, Himaya can only scan{' '}
                   <strong style={{ color: isLight ? '#92400e' : '#fcd34d' }}>
                     {dwdStatus.admin_email ?? 'the admin mailbox'}
                   </strong>{' '}

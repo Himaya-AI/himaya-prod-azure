@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Vendored from: https://github.com/Krishcalin/SSPM-Snowflake-Data-Platform
 # Original license: MIT, Copyright (c) 2026 KRISH
-# Integrated into Helios as a library (CLI/report functions still present
+# Integrated into Himaya as a library (CLI/report functions still present
 # but unused; connector router calls SnowflakeScanner.run_all + Finding directly).
 """
 Snowflake Data Platform SSPM Scanner v1.0.0
@@ -206,7 +206,7 @@ class SnowflakeClient:
         self.role = role
         self.warehouse = warehouse
         self.private_key_path = private_key_path
-        # Helios extension: accept PEM contents directly (not just a path).
+        # Himaya extension: accept PEM contents directly (not just a path).
         self.private_key_pem = private_key_pem
         self.private_key_passphrase = private_key_passphrase
         self.authenticator = authenticator

@@ -1,5 +1,5 @@
 """
-Helios AWS Connector Router — manages AWS integrations and security scanning.
+Himaya AWS Connector Router — manages AWS integrations and security scanning.
 """
 from __future__ import annotations
 

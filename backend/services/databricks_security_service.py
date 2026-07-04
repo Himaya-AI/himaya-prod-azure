@@ -315,7 +315,7 @@ class DatabricksSecurityService:
         # 1. Create test notebooks with security issues
         test_notebooks = [
             {
-                "path": "/Shared/HeliosTest/data_pipeline_with_secrets",
+                "path": "/Shared/HimayaTest/data_pipeline_with_secrets",
                 "language": "PYTHON",
                 "content": '''# Databricks notebook source
 # MAGIC %md
@@ -348,7 +348,7 @@ credit_cards = ["4111-1111-1111-1111", "5500-0000-0000-0004"]
 '''
             },
             {
-                "path": "/Shared/HeliosTest/ml_model_training",
+                "path": "/Shared/HimayaTest/ml_model_training",
                 "language": "PYTHON",
                 "content": '''# Databricks notebook source
 # MAGIC %md
@@ -376,7 +376,7 @@ model.save("/dbfs/mnt/public-bucket/models/churn_v1")
 '''
             },
             {
-                "path": "/Shared/HeliosTest/admin_utils",
+                "path": "/Shared/HimayaTest/admin_utils",
                 "language": "PYTHON",
                 "content": '''# Databricks notebook source
 # MAGIC %md
@@ -433,14 +433,14 @@ FILEFORMAT = CSV;
             },
         ]
 
-        # First, ensure the /Shared/HeliosTest directory exists
+        # First, ensure the /Shared/HimayaTest directory exists
         try:
             await self._api_call(
                 "POST",
                 "workspace/mkdirs",
-                json={"path": "/Shared/HeliosTest"}
+                json={"path": "/Shared/HimayaTest"}
             )
-            logger.info("Created /Shared/HeliosTest directory")
+            logger.info("Created /Shared/HimayaTest directory")
         except Exception as e:
             if "RESOURCE_ALREADY_EXISTS" not in str(e):
                 logger.warning(f"Failed to create directory: {e}")

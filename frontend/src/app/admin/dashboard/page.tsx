@@ -52,7 +52,7 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 const PLAN_BADGE: Record<string, string> = {
-  enterprise:   'bg-purple-500/15 text-purple-300 border-purple-500/40',
+  enterprise:   'bg-[var(--accent)]/15 text-[var(--accent)] border-[var(--accent)]/40',
   professional: 'bg-blue-500/15   text-blue-300   border-blue-500/40',
   starter:      'bg-slate-500/15  text-slate-300  border-slate-500/40',
 }
@@ -155,7 +155,7 @@ export default function AdminDashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -167,7 +167,7 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-white text-2xl font-bold tracking-tight">Command Center</h1>
           <p className="text-[#a0a0c0] text-sm mt-0.5">
-            Himaya Helios · Live platform overview
+            Himaya · Live platform overview
             <span className="text-[#6060a0] ml-2">
               · Updated {lastRefresh.toLocaleTimeString()}
             </span>
@@ -197,7 +197,7 @@ export default function AdminDashboard() {
           label="Active Orgs"
           value={String(usage?.total_orgs ?? orgs.filter(o => o.status === 'active').length)}
           sub="Customer tenants"
-          color="bg-purple-500/20 text-purple-300"
+          color="bg-[var(--accent)]/20 text-[var(--accent)]"
         />
         <StatCard
           icon={Inbox}
@@ -235,7 +235,7 @@ export default function AdminDashboard() {
         <div className="bg-[#111118] border border-[#2a2a3a] rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-white font-semibold flex items-center gap-2">
-              <Cloud className="w-4 h-4 text-purple-400" />
+              <Cloud className="w-4 h-4 text-[var(--accent)]" />
               AWS Infrastructure Costs
             </h2>
             {awsCosts?.source === 'aws_cost_explorer' ? (
@@ -297,7 +297,7 @@ export default function AdminDashboard() {
         {/* Orgs by Plan */}
         <div className="bg-[#111118] border border-[#2a2a3a] rounded-xl p-6">
           <h2 className="text-white font-semibold flex items-center gap-2 mb-4">
-            <TrendingUp className="w-4 h-4 text-purple-400" />
+            <TrendingUp className="w-4 h-4 text-[var(--accent)]" />
             Orgs by Plan
           </h2>
           <div className="space-y-4">
@@ -305,7 +305,7 @@ export default function AdminDashboard() {
               const count = planCounts[plan] || 0
               const pct = Math.round((count / Math.max(orgs.length, 1)) * 100)
               const barColor: Record<string, string> = {
-                enterprise: 'bg-purple-500',
+                enterprise: 'bg-[var(--accent)]',
                 professional: 'bg-blue-500',
                 starter: 'bg-slate-500',
               }
@@ -351,7 +351,7 @@ export default function AdminDashboard() {
           <h2 className="text-white font-semibold">Customer Orgs</h2>
           <Link
             href="/admin/orgs/new"
-            className="text-sm px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors"
+            className="text-sm px-3 py-1.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg transition-colors"
           >
             + New Org
           </Link>
@@ -376,7 +376,7 @@ export default function AdminDashboard() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => router.push(`/admin/orgs/${org.org_id}`)}
-                      className="text-white text-sm font-medium hover:text-purple-400 transition-colors text-left"
+                      className="text-white text-sm font-medium hover:text-[var(--accent)] transition-colors text-left"
                     >
                       {org.name}
                     </button>

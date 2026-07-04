@@ -1,5 +1,5 @@
 """
-Helios DLP Service — classification, event persistence, email release.
+Himaya DLP Service — classification, event persistence, email release.
 """
 from __future__ import annotations
 

@@ -120,7 +120,7 @@ async def download_report(
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<title>Helios Security Report — {org_name}</title>
+<title>Himaya Security Report — {org_name}</title>
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
   body {{ background: #0a0a0f; color: #e2e8f0; font-family: system-ui, -apple-system, sans-serif; padding: 40px 20px; }}
@@ -139,7 +139,7 @@ async def download_report(
       <span style="color:white;font-size:26px;font-weight:900;">H</span>
     </div>
     <div style="flex:1;">
-      <div style="font-size:20px;font-weight:800;color:#f8fafc;">Helios Security Report</div>
+      <div style="font-size:20px;font-weight:800;color:#f8fafc;">Himaya Security Report</div>
       <div style="font-size:13px;color:#64748b;margin-top:3px;">{org_name} · {period}</div>
     </div>
     <div style="text-align:right;">
@@ -178,7 +178,7 @@ async def download_report(
   <table><thead><tr><th>Framework</th><th>Total Controls</th><th>Compliant</th><th>Score</th></tr></thead><tbody>{fw_table}</tbody></table>
 
   <div style="margin-top:32px;padding-top:16px;border-top:1px solid #1e293b;font-size:11px;color:#475569;">
-    Helios by Himaya Technologies · app.himaya.ai · Confidential — For internal use only
+    Himaya by Himaya Technologies · app.himaya.ai · Confidential — For internal use only
   </div>
 </div>
 </body></html>"""

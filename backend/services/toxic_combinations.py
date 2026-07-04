@@ -999,7 +999,7 @@ async def run_for_org(org_id: str, db: AsyncSession) -> dict[str, Any]:
         "shadow_data_external":         "Remove external sharing on the resource or move the data into a sanctioned location.",
         "cross_provider_exposure":      "Audit and revoke the cross-cloud trust/role until business owner is identified.",
         "unowned_high_risk":            "Assign an owner tag (Owner / OwnerEmail) and route to that owner for review.",
-        "salesforce_guest_custom_object": "Open Salesforce Setup → Sites → Guest User Profile and remove Read access from this custom object. Audit CRUD/FLS and re-run the Helios scan.",
+        "salesforce_guest_custom_object": "Open Salesforce Setup → Sites → Guest User Profile and remove Read access from this custom object. Audit CRUD/FLS and re-run the Himaya scan.",
         "salesforce_guest_pii_object": "Restrict guest user access to this standard object in Setup → Profiles → Site Guest User. Review sharing rules and field-level security.",
         "salesforce_api_anonymous_enum": "In Setup → Session Settings restrict API access for guest users. Disable Partner SOAP if not used. Block /services/data and /services/Soap from the guest profile.",
     }

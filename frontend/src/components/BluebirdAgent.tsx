@@ -377,7 +377,7 @@ export default function FalconAgent() {
               </button>
             </div>
             <p className="text-[10px] text-[var(--muted)] mt-2 text-center">
-              Powered by Helios AI • Connected to your security data
+              Powered by Himaya AI • Connected to your security data
             </p>
           </form>
         </div>

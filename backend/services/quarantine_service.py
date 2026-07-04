@@ -1,11 +1,11 @@
 """
 Quarantine service — retroactively moves emails out of inbox via Gmail/M365 API.
 
-When Helios classifies an email as high-risk (QUARANTINED), this service:
-  - Gmail: creates a "Helios-Quarantine" label (if needed), adds it, removes INBOX
-  - M365: moves the message to a "Helios-Quarantine" mail folder
+When Himaya classifies an email as high-risk (QUARANTINED), this service:
+  - Gmail: creates a "Himaya-Quarantine" label (if needed), adds it, removes INBOX
+  - M365: moves the message to a "Himaya-Quarantine" mail folder
 
-This is the retroactive quarantine that makes Helios behave like Abnormal Security —
+This is the retroactive quarantine that makes Himaya behave like Abnormal Security —
 the email was already delivered, but we move it out of view after the fact.
 """
 import logging
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 GMAIL_API_BASE = "https://gmail.googleapis.com/gmail/v1"
 GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
-HELIOS_LABEL = "Helios-Quarantine"
+HELIOS_LABEL = "Himaya-Quarantine"
 
 
 def _get_sa_headers(user_email: str) -> dict | None:
@@ -40,7 +40,7 @@ async def _get_sa_headers_async(user_email: str) -> dict | None:
 
 async def quarantine_gmail_message(user_email: str, gmail_message_id: str, access_token: str = None) -> bool:
     """
-    Move a Gmail message to "Helios-Quarantine" label and remove from INBOX.
+    Move a Gmail message to "Himaya-Quarantine" label and remove from INBOX.
     Uses service account impersonation (DWD) if configured, falls back to OAuth token.
     Returns True if successful.
     """
@@ -56,10 +56,10 @@ async def quarantine_gmail_message(user_email: str, gmail_message_id: str, acces
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            # Step 1: Get or create "Helios-Quarantine" label
+            # Step 1: Get or create "Himaya-Quarantine" label
             label_id = await _get_or_create_gmail_label(client, headers, user_email)
 
-            # Step 2: Move message — remove INBOX, add Helios-Quarantine label
+            # Step 2: Move message — remove INBOX, add Himaya-Quarantine label
             modify_payload = {
                 "removeLabelIds": ["INBOX"],
             }
@@ -85,7 +85,7 @@ async def quarantine_gmail_message(user_email: str, gmail_message_id: str, acces
 
 
 async def _get_or_create_gmail_label(client: httpx.AsyncClient, headers: dict, user_email: str) -> str | None:
-    """Return the label ID for 'Helios-Quarantine', creating it if needed."""
+    """Return the label ID for 'Himaya-Quarantine', creating it if needed."""
     try:
         # List existing labels
         resp = await client.get(
@@ -103,7 +103,7 @@ async def _get_or_create_gmail_label(client: httpx.AsyncClient, headers: dict, u
         #   messageListVisibility = hide         → messages with this label do not show
         #                                          in the conversation list unless the
         #                                          user explicitly searches for it.
-        # Power users can still find it via `label:Helios-Quarantine` search, but it is
+        # Power users can still find it via `label:Himaya-Quarantine` search, but it is
         # not surfaced anywhere in the normal Gmail UI.
         create_resp = await client.post(
             f"{GMAIL_API_BASE}/users/{user_email}/labels",
@@ -209,7 +209,7 @@ async def mark_as_spam_gmail(user_email: str, gmail_message_id: str) -> bool:
 
 async def quarantine_m365_message(user_email: str, m365_message_id: str, access_token: str) -> bool:
     """
-    Move an M365 message to "Helios-Quarantine" folder.
+    Move an M365 message to "Himaya-Quarantine" folder.
     """
     if not m365_message_id or not user_email or not access_token:
         return False
@@ -221,7 +221,7 @@ async def quarantine_m365_message(user_email: str, m365_message_id: str, access_
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            # Step 1: Get or create Helios-Quarantine folder
+            # Step 1: Get or create Himaya-Quarantine folder
             folder_id = await _get_or_create_m365_folder(client, headers, user_email)
             if not folder_id:
                 return False
@@ -245,14 +245,14 @@ async def quarantine_m365_message(user_email: str, m365_message_id: str, access_
 
 async def _get_or_create_m365_folder(client: httpx.AsyncClient, headers: dict, user_email: str) -> str | None:
     """
-    Return the folder ID for 'Helios-Quarantine', creating it if needed.
+    Return the folder ID for 'Himaya-Quarantine', creating it if needed.
 
     The folder is created HIDDEN (`isHidden=true`) and patched to hidden every
     time we touch it, so a user who manually unhides it has the setting reverted
     on the next quarantine action. This means quarantined mail does not appear
     in the normal Outlook folder tree without the user explicitly toggling
     "Show hidden folders" in Outlook settings (and even then it's clearly
-    labelled Helios-Quarantine so they know not to interact).
+    labelled Himaya-Quarantine so they know not to interact).
 
     Note: Graph API supports `isHidden` on mailFolders only via PATCH (not
     POST). The POST creates the folder, then we PATCH `isHidden=true` so the
@@ -310,8 +310,8 @@ async def _get_or_create_m365_folder(client: httpx.AsyncClient, headers: dict, u
     return None
 
 
-HELIOS_REVIEW_LABEL = "Helios-Review"
-HELIOS_ALERT_LABEL = "Helios-Alert"
+HELIOS_REVIEW_LABEL = "Himaya-Review"
+HELIOS_ALERT_LABEL = "Himaya-Alert"
 HIMAYA_FLAGGED_LABEL = "Himaya-Flagged"
 
 
@@ -321,7 +321,7 @@ async def apply_review_label_gmail(
     fallback_access_token: str | None = None,
 ) -> bool:
     """
-    Apply a yellow 'Helios-Review' label to an email (TAG / DELIVER_WITH_BANNER policy action).
+    Apply a yellow 'Himaya-Review' label to an email (TAG / DELIVER_WITH_BANNER policy action).
     Email stays in INBOX — visibly tagged for user and analyst.
     Tries SA (DWD) first, falls back to OAuth token if provided.
     Returns True if label was applied.
@@ -339,7 +339,7 @@ async def apply_review_label_gmail(
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            # Get or create the Helios-Review label
+            # Get or create the Himaya-Review label
             label_id = await _get_or_create_review_label(client, headers, user_email)
             if not label_id:
                 logger.warning(f"Could not get/create {HELIOS_REVIEW_LABEL} label for {user_email}")
@@ -364,7 +364,7 @@ async def apply_review_label_gmail(
 async def _get_or_create_review_label(
     client: httpx.AsyncClient, headers: dict, user_email: str
 ) -> str | None:
-    """Return the label ID for 'Helios-Review', creating it if it doesn't exist."""
+    """Return the label ID for 'Himaya-Review', creating it if it doesn't exist."""
     return await _get_or_create_named_label(
         client, headers, user_email,
         name=HELIOS_REVIEW_LABEL,
@@ -380,7 +380,7 @@ async def apply_flagged_label_gmail(
 ) -> bool:
     """
     Apply an orange 'Himaya-Flagged' label to an email (TAG policy action).
-    Email stays in INBOX but is visibly flagged. Similar to Helios-Quarantine
+    Email stays in INBOX but is visibly flagged. Similar to Himaya-Quarantine
     flow but email is NOT removed from inbox — purely informational label.
     Tries SA (DWD) first, falls back to OAuth token if provided.
     Returns True if label was applied.
@@ -509,7 +509,7 @@ async def apply_alert_label_gmail(
     fallback_access_token: str | None = None,
 ) -> bool:
     """
-    Apply a red 'Helios-Alert' label to an email (ALERT policy action).
+    Apply a red 'Himaya-Alert' label to an email (ALERT policy action).
     Email stays in INBOX — visibly flagged in red so recipient sees it immediately.
     Tries SA (DWD) first, falls back to OAuth token if provided.
 
@@ -638,7 +638,7 @@ async def quarantine_m365_message_with_fallback(
     user_email: str, m365_message_id: str, access_token: str | None = None, org_id: str | None = None
 ) -> bool:
     """
-    QUARANTINE for M365: move to 'Helios-Quarantine' folder.
+    QUARANTINE for M365: move to 'Himaya-Quarantine' folder.
     Refreshes token if needed.
     """
     if not m365_message_id or not user_email:
@@ -678,13 +678,13 @@ async def apply_category_m365(
 
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    # Colour presets: Helios-Alert → red (preset2), Himaya-Flagged → orange (preset3)
+    # Colour presets: Himaya-Alert → red (preset2), Himaya-Flagged → orange (preset3)
     COLOR_MAP = {
-        "Helios-Alert":     "preset2",   # Red
-        "Helios-Suspicious": "preset2",   # Red — high visibility for escalated threats
+        "Himaya-Alert":     "preset2",   # Red
+        "Himaya-Suspicious": "preset2",   # Red — high visibility for escalated threats
         "Himaya-Flagged":   "preset3",   # Orange
-        "Helios-Review":    "preset5",   # Yellow
-        "Helios-Quarantine": "preset8",  # Purple (shouldn't be used here but included for safety)
+        "Himaya-Review":    "preset5",   # Yellow
+        "Himaya-Quarantine": "preset8",  # Purple (shouldn't be used here but included for safety)
     }
     color = COLOR_MAP.get(category_name, "preset3")
 
@@ -807,7 +807,7 @@ async def reinject_to_inbox(user_email: str, message_id: str, org_id: str):
         except Exception as e:
             import logging; logging.getLogger(__name__).debug(f"reinject M365 failed: {e}")
     else:
-        # Gmail: remove TRASH/Helios-Quarantine labels, add INBOX label
+        # Gmail: remove TRASH/Himaya-Quarantine labels, add INBOX label
         try:
             sa_headers = await _get_sa_headers_async(user_email)
             if sa_headers:

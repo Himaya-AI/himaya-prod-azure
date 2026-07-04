@@ -1,5 +1,5 @@
 """
-HTTP client for the Helios graph-service microservice.
+HTTP client for the Himaya graph-service microservice.
 Drop-in replacement for graph_service.py — same method signatures,
 calls the graph microservice instead of Neo4j directly.
 """

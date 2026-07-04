@@ -1,5 +1,5 @@
 """
-Helios DSPM (Data Security Posture Management) router.
+Himaya DSPM (Data Security Posture Management) router.
 
 Endpoints:
     POST /api/dspm/scan/aws/{connection_id}    — trigger scan against AWS conn

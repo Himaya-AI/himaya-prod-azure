@@ -1,5 +1,5 @@
 """
-Helios DLP (Data Loss Prevention) Router — enterprise tier only.
+Himaya DLP (Data Loss Prevention) Router — enterprise tier only.
 Manages policies, events, held-email queue, and classification.
 
 DB tables created at startup (raw SQL, no Alembic):

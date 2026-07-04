@@ -1,5 +1,5 @@
 """
-Sandbox Analysis API — Himaya Helios
+Sandbox Analysis API — Himaya
 
 Submitting a threat for sandbox analysis queues an in-process background job that:
   1. Fetches the threat context from the DB
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sandbox", tags=["sandbox"])
 
 REDIS_TTL = 7200   # 2h
-SANDBOX_PROMPT = """You are a security sandbox analysis engine inside Himaya Helios, an enterprise email security platform.
+SANDBOX_PROMPT = """You are a security sandbox analysis engine inside Himaya, an enterprise email security platform.
 
 You have analysed a suspicious email in an isolated environment. Based on the threat data provided, generate a REALISTIC and DETAILED sandbox analysis report as if the email payload was detonated and observed.
 
@@ -371,7 +371,7 @@ async def create_interactive_session(
                 block_notice = """
 <!DOCTYPE html><html><body style='margin:0;padding:0;font-family:Arial'>
 <div style='background:#1a1a2e;color:#fff;padding:14px 20px;font-size:13px'>
-  <b>🔒 Helios Live Sandbox</b>
+  <b>🔒 Himaya Live Sandbox</b>
 </div>
 <div style='padding:32px 24px;text-align:center'>
   <div style='font-size:48px;margin-bottom:16px'>🚫</div>
@@ -393,7 +393,7 @@ async def create_interactive_session(
             # ── Header bar ─────────────────────────────────────────────────
             header = f"""
 <div style='background:#1a1a2e;color:#fff;padding:14px 20px;font-family:Arial;font-size:13px'>
-  <div><b>🔒 Helios Live Sandbox</b> — interact with links/attachments to observe behaviour</div>
+  <div><b>🔒 Himaya Live Sandbox</b> — interact with links/attachments to observe behaviour</div>
   <div style='margin-top:6px;color:#aaa'>
     <b>From:</b> {t.sender or 'Unknown'} &nbsp;|&nbsp;
     <b>Subject:</b> {t.subject or '(no subject)'} &nbsp;|&nbsp;
@@ -629,10 +629,10 @@ async def create_interactive_session(
     title='Email body'></iframe>
 </div>"""
 
-            # ── Helios analysis footer ─────────────────────────────────────
+            # ── Himaya analysis footer ─────────────────────────────────────
             ai_footer = f"""
 <div style='background:#f5f5f5;padding:14px 20px;font-family:Arial;font-size:12px;color:#555;border-top:1px solid #ddd'>
-  <b>Helios AI Analysis:</b> {t.ai_explanation_en or 'N/A'}
+  <b>Himaya AI Analysis:</b> {t.ai_explanation_en or 'N/A'}
 </div>"""
 
             email_html = f"""<!DOCTYPE html><html><body style='margin:0;padding:0'>

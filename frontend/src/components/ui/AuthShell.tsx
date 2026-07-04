@@ -22,7 +22,7 @@ export default function AuthShell({ children, subtitle }: Props) {
           ">
             <Image
               src="/himaya-logo.png"
-              alt="Himaya Helios"
+              alt="Himaya"
               width={140}
               height={46}
               className="object-contain"

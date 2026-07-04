@@ -486,7 +486,7 @@ async def apply_policy_action(
             threat.action_taken = "QUARANTINED"
             threat.status = "quarantined"
             threat.resolved_at = now
-            # Move to Helios-Quarantine folder/label (recoverable)
+            # Move to Himaya-Quarantine folder/label (recoverable)
             if email_message_id and _recipient:
                 try:
                     if _provider == "m365":
@@ -658,10 +658,10 @@ async def _send_policy_notifications(
     Send admin + recipient + sender notifications for a policy match.
     Recipient and sender both get full context: preview, attachments, links, AI explanation.
     """
-    # ── Guard: never send notifications for Helios system emails (breaks loops) ──
+    # ── Guard: never send notifications for Himaya system emails (breaks loops) ──
     _HELIOS_SYSTEM = {"noreply@himaya.ai", "no-reply@himaya.ai"}
     if (sender_email or "").lower() in _HELIOS_SYSTEM:
-        logger.debug(f"_send_policy_notifications: skipping — sender is Helios system ({sender_email})")
+        logger.debug(f"_send_policy_notifications: skipping — sender is Himaya system ({sender_email})")
         return
 
     import asyncio as _asyncio

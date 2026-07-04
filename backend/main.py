@@ -1,5 +1,5 @@
 """
-Himaya Helios - FastAPI Application Entry Point
+Himaya - FastAPI Application Entry Point
 """
 import asyncio
 import ipaddress as _ipaddress
@@ -78,7 +78,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    logger.info("Starting Himaya Helios API...")
+    logger.info("Starting Himaya API...")
 
     # graph-service handles Neo4j directly — no local init needed
 
@@ -1989,16 +1989,16 @@ async def lifespan(app: FastAPI):
     except Exception as _seed_e:
         logger.warning(f"Security rules seeding failed (non-fatal): {_seed_e}")
 
-    logger.info("Himaya Helios API ready ✓")
+    logger.info("Himaya API ready ✓")
     yield
 
     # Shutdown
     await engine.dispose()
-    logger.info("Himaya Helios API shutdown complete")
+    logger.info("Himaya API shutdown complete")
 
 
 app = FastAPI(
-    title="Himaya Helios API",
+    title="Himaya API",
     description="AI-powered email security for Gulf financial institutions",
     version="1.0.0",
     docs_url="/docs",
@@ -2121,7 +2121,7 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "service": "Himaya Helios API",
+        "service": "Himaya API",
         "version": "1.0.0",
         "docs": "/docs",
         "health": "/health",

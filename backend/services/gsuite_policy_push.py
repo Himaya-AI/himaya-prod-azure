@@ -1,5 +1,5 @@
 """
-Pushes Himaya Helios DLP policies downstream to Google Workspace tenant as
+Pushes Himaya DLP policies downstream to Google Workspace tenant as
 Content Compliance Rules via the Google Admin SDK.
 
 Mirrors the M365 transport rule pattern from m365_policy_push.py.
@@ -47,7 +47,7 @@ class GSuitePolicyPusher:
     # ── Content Compliance Rule CRUD ──────────────────────────────────────────
 
     async def create_content_compliance_rule(self, policy: dict, org_id: str) -> dict:
-        """Create Google Workspace Content Compliance Rule from Helios DLP policy."""
+        """Create Google Workspace Content Compliance Rule from Himaya DLP policy."""
         rule_config = self._translate_policy_to_compliance_rule(policy)
 
         if self.mock_mode:
@@ -176,7 +176,7 @@ class GSuitePolicyPusher:
                 if resp.status_code == 200:
                     rules = resp.json().get("contentComplianceSettings", [])
                     # Filter to only Himaya-managed rules
-                    himaya_rules = [r for r in rules if "HimayaHelios" in r.get("name", "")]
+                    himaya_rules = [r for r in rules if "HimayaHimaya" in r.get("name", "")]
                     return {"status": "success", "rules": himaya_rules}
                 return {"status": "error", "http_status": resp.status_code}
         except Exception as exc:
@@ -218,12 +218,12 @@ class GSuitePolicyPusher:
     # ── Policy → Compliance Rule Translation ──────────────────────────────────
 
     def _translate_policy_to_compliance_rule(self, policy: dict) -> dict:
-        """Convert Himaya Helios DLP policy to Google Workspace Content Compliance Rule format."""
+        """Convert Himaya DLP policy to Google Workspace Content Compliance Rule format."""
         action = policy.get("action", "WARN")
         policy_name = policy.get("name", "Unnamed Policy")
         custom_keywords: list = policy.get("custom_keywords") or []
 
-        # Map Helios action → GSuite compliance rule action
+        # Map Himaya action → GSuite compliance rule action
         action_map = {
             "BLOCK": "REJECT",
             "BLOCK_DELETE": "REJECT",
@@ -273,7 +273,7 @@ class GSuitePolicyPusher:
 
         # GSuite content compliance rule format
         rule = {
-            "name": f"HimayaHelios-{policy_name[:60]}",
+            "name": f"HimayaHimaya-{policy_name[:60]}",
             "expressions": [
                 {
                     "allExpressions": {

@@ -1,5 +1,5 @@
 """
-Helios DLP Webhook Router
+Himaya DLP Webhook Router
 Receives outbound email from M365 transport rules and Gmail content compliance.
 NOT enterprise-gated — called by transport layer, not by user UI.
 
@@ -128,7 +128,7 @@ async def _run_webhook_classification(
 
 class WebhookPayload(BaseModel):
     mime_base64: Optional[str] = None   # base64-encoded raw MIME
-    org_id: str                         # Helios org ID (embedded by transport rule)
+    org_id: str                         # Himaya org ID (embedded by transport rule)
     # Optional pre-parsed fields (if transport rule extracts them)
     sender: Optional[str] = None
     recipients: Optional[list[str]] = None

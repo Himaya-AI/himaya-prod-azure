@@ -24,7 +24,7 @@ class AlertService:
     async def send_threat_alert(self, threat: dict, org_name: str):
         """Send high-priority threat alert to configured channels."""
         message = (
-            f"🚨 *Himaya Helios Alert* | {org_name}\n"
+            f"🚨 *Himaya Alert* | {org_name}\n"
             f"Threat Type: {threat.get('threat_type', 'Unknown')}\n"
             f"Risk Score: {threat.get('risk_score', 0)}/100\n"
             f"Sender: {threat.get('sender', 'Unknown')}\n"

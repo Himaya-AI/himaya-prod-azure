@@ -1,5 +1,5 @@
 """
-Vendor Admin API — Himaya Helios
+Vendor Admin API — Himaya
 Protected by X-Admin-API-Key header or Admin JWT.
 Allows provisioning tenants, viewing platform usage, and billing management.
 """
@@ -80,7 +80,7 @@ verify_admin_key = verify_admin_key_or_token
 async def send_admin_otp_email(to_email: str, otp: str):
     """Send OTP email. In dev mode just prints to console."""
     print(f"\n{'='*50}")
-    print(f"HIMAYA HELIOS ADMIN OTP")
+    print(f"HIMAYA ADMIN OTP")
     print(f"To: {to_email}")
     print(f"OTP Code: {otp}")
     print(f"Valid for 10 minutes")
@@ -94,13 +94,13 @@ async def send_admin_otp_email(to_email: str, otp: str):
     if smtp_host and smtp_user and smtp_pass:
         try:
             msg = MIMEMultipart("alternative")
-            msg["Subject"] = f"Himaya Helios Admin OTP: {otp}"
+            msg["Subject"] = f"Himaya Admin OTP: {otp}"
             msg["From"] = smtp_user
             msg["To"] = to_email
 
             html = f"""
             <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 40px;">
-              <img src="https://himayahelios.io/himaya-logo.png" alt="Himaya Helios" style="height: 40px; margin-bottom: 24px;" />
+              <img src="https://himaya.ai/himaya-logo.png" alt="Himaya" style="height: 40px; margin-bottom: 24px;" />
               <h2 style="color: #1a1a2e;">Vendor Admin Login</h2>
               <p style="color: #666;">Your one-time login code:</p>
               <div style="font-size: 48px; font-weight: bold; letter-spacing: 12px; color: #7c3aed; margin: 24px 0; text-align: center;">
@@ -262,12 +262,12 @@ async def provision_org(req: ProvisionOrgRequest, db: AsyncSession = Depends(get
     <tr><td align="center">
       <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#0d1b2e;border-radius:16px;border:1px solid #1a2744;overflow:hidden;">
         <tr><td style="background:#0d1b2e;padding:36px 40px 28px;text-align:center;border-bottom:2px solid #3b6ef6;">
-          <img src="cid:himaya-logo" alt="Himaya Helios" height="40"
+          <img src="cid:himaya-logo" alt="Himaya" height="40"
                style="display:block;margin:0 auto;max-width:180px;border:0;" />
           <p style="margin:12px 0 0;color:#a1a1aa;font-size:11px;letter-spacing:2px;text-transform:uppercase;">Vendor Portal &mdash; New Account</p>
         </td></tr>
         <tr><td style="padding:36px 40px 32px;">
-          <h1 style="margin:0 0 8px;color:#ffffff;font-size:22px;font-weight:700;">Welcome to Himaya Helios</h1>
+          <h1 style="margin:0 0 8px;color:#ffffff;font-size:22px;font-weight:700;">Welcome to Himaya</h1>
           <p style="margin:0 0 24px;color:#a1a1aa;font-size:14px;line-height:1.75;">
             Your account for <strong style="color:#fff;">{req.org_name}</strong> has been provisioned by Himaya Technologies.
             Click below to set your password and gain access to the platform.
@@ -315,9 +315,9 @@ async def provision_org(req: ProvisionOrgRequest, db: AsyncSession = Depends(get
 </html>"""
         send_email(
             req.contact_email,
-            f"Welcome to Himaya Helios — {req.org_name}",
+            f"Welcome to Himaya — {req.org_name}",
             welcome_html,
-            f"Welcome to Himaya Helios\n\nHi {req.contact_name or req.org_name},\n\nYour account for {req.org_name} is ready.\nAdmin Email: {admin_email}\n\nSet up your account: {cft_activation_url}\n\nLink expires in 72 hours.\n\n© 2026 Himaya Technologies Group Inc.",
+            f"Welcome to Himaya\n\nHi {req.contact_name or req.org_name},\n\nYour account for {req.org_name} is ready.\nAdmin Email: {admin_email}\n\nSet up your account: {cft_activation_url}\n\nLink expires in 72 hours.\n\n© 2026 Himaya Technologies Group Inc.",
         )
     logger.info(f"Welcome email sent to {req.contact_email}: org={req.org_name}, login={admin_email}")
 
@@ -854,7 +854,7 @@ class ForcePasswordResetRequest(BaseModel):
 async def clean_triage_reasoning(db: AsyncSession = Depends(get_db)):
     """
     One-time maintenance: replace legacy 'Claude unavailable' / 'Claude API error' strings
-    in threat_indicators.auto_triage_reasoning with Helios Analysis branding.
+    in threat_indicators.auto_triage_reasoning with Himaya Analysis branding.
     """
     from backend.models.db_models import Threat
     from sqlalchemy import select
@@ -874,9 +874,9 @@ async def clean_triage_reasoning(db: AsyncSession = Depends(get_db)):
             # Replace legacy Claude references
             new_reasoning = (
                 reasoning
-                .replace("Claude unavailable", "Helios Analysis fallback")
+                .replace("Claude unavailable", "Himaya Analysis fallback")
                 .replace("Claude API error", "analysis engine error")
-                .replace("Claude unavailable — verdict based on", "Helios Analysis fallback — verdict based on")
+                .replace("Claude unavailable — verdict based on", "Himaya Analysis fallback — verdict based on")
             )
             # Strip old exception text appended after the period
             import re
@@ -920,7 +920,7 @@ async def inject_test_threats(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Dev/QA: inject simulated threat emails directly into the Helios processing pipeline
+    Dev/QA: inject simulated threat emails directly into the Himaya processing pipeline
     for the given org. Bypasses email delivery — calls process_email() directly with
     crafted payloads simulating real attacker scenarios.
     Requires admin API key.
@@ -1360,7 +1360,7 @@ async def inject_inbox_threats(
             "internetMessageHeaders": [
                 {"name": "X-Simulated-Spf", "value": "fail"},
                 {"name": "X-Simulated-Dmarc", "value": "fail"},
-                {"name": "X-Helios-Threat-Test", "value": "inject-2026"},
+                {"name": "X-Himaya-Threat-Test", "value": "inject-2026"},
             ],
             "isRead": False,
             "isDraft": False,
@@ -1436,7 +1436,7 @@ async def cleanup_loop_threats(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Bulk-resolve all threats generated by Helios system notification emails
+    Bulk-resolve all threats generated by Himaya system notification emails
     (noreply@himaya.ai sender) to clear alert loop artifacts from the queue.
     """
     import uuid as _uuid
@@ -1469,7 +1469,7 @@ async def gmail_trash_loop_emails(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Trash all Helios quarantine notification emails sitting in Gmail inboxes
+    Trash all Himaya quarantine notification emails sitting in Gmail inboxes
     to stop delta-sync from re-ingesting them and triggering more loop threats.
     Uses DWD service account to access each Gmail mailbox.
     """
@@ -1534,7 +1534,7 @@ async def gmail_trash_loop_emails(
 
             mailboxes = [u["primaryEmail"] for u in users_resp.json().get("users", [])]
 
-        # For each mailbox, search and trash Helios notification emails
+        # For each mailbox, search and trash Himaya notification emails
         for mailbox in mailboxes:
             try:
                 # Get DWD token for this mailbox with gmail.modify scope
@@ -1916,12 +1916,12 @@ async def setup_new_org(req: NewOrgRequest, db: AsyncSession = Depends(get_db)):
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0d1b2e;border-radius:16px;border:1px solid #1a2744;overflow:hidden;">
         <tr><td style="background:#0d1b2e;padding:32px 40px 24px;text-align:center;border-bottom:2px solid #3b6ef6;">
-          <h2 style="margin:0;color:#ffffff;font-size:22px;">Welcome to Himaya Helios</h2>
+          <h2 style="margin:0;color:#ffffff;font-size:22px;">Welcome to Himaya</h2>
           <p style="margin:8px 0 0;color:#a1a1aa;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Your account is ready</p>
         </td></tr>
         <tr><td style="padding:32px 40px;">
           <p style="margin:0 0 16px;color:#a1a1aa;font-size:14px;line-height:1.7;">
-            Hi {req.contact_name}, your Helios account for <strong style="color:#fff;">{req.name}</strong> has been set up.
+            Hi {req.contact_name}, your Himaya account for <strong style="color:#fff;">{req.name}</strong> has been set up.
           </p>
           <table width="100%" cellpadding="0" cellspacing="0" style="background:#0a0f1e;border:1px solid #1a2744;border-radius:10px;padding:16px;margin-bottom:24px;">
             <tr><td style="padding:6px 0;color:#a1a1aa;font-size:13px;width:120px;">Login Email</td>
@@ -1931,7 +1931,7 @@ async def setup_new_org(req: NewOrgRequest, db: AsyncSession = Depends(get_db)):
             <tr><td style="padding:6px 0;color:#a1a1aa;font-size:13px;">Tier</td>
                 <td style="padding:6px 0;color:#fff;font-size:13px;">{req.tier}</td></tr>
           </table>
-          <a href="{login_url}" style="display:inline-block;background:#3b6ef6;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Log In to Helios</a>
+          <a href="{login_url}" style="display:inline-block;background:#3b6ef6;color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;">Log In to Himaya</a>
           <p style="margin:24px 0 0;color:#52525b;font-size:12px;">Please change your password after first login. If you did not request this account, contact support@himaya.ai</p>
         </td></tr>
       </table>
@@ -1939,7 +1939,7 @@ async def setup_new_org(req: NewOrgRequest, db: AsyncSession = Depends(get_db)):
   </table>
 </body>
 </html>"""
-            send_email(req.contact_email, f"Your Himaya Helios account is ready — {req.name}", activation_html)
+            send_email(req.contact_email, f"Your Himaya account is ready — {req.name}", activation_html)
         except Exception as _e:
             logger.warning(f"new-org activation email failed (non-fatal): {_e}")
 

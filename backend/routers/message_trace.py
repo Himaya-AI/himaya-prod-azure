@@ -81,7 +81,7 @@ async def search_messages(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Search and trace all emails processed by Himaya Helios.
+    Search and trace all emails processed by Himaya.
     Returns paginated results with full threat metadata.
     """
     from backend.models.db_models import Threat
@@ -332,7 +332,7 @@ async def export_messages(
     writer.writerow([
         "Delivered At", "Analysed At", "Sender", "Recipient", "Sender Domain",
         "Subject", "Classification", "Risk Score", "SPF", "DKIM", "DMARC",
-        "Sender IP", "Helios Status", "Status",
+        "Sender IP", "Himaya Status", "Status",
     ])
     for t in threats:
         auth = getattr(t, "auth_results", None) or {}
@@ -368,7 +368,7 @@ async def perform_action(
 ):
     """
     Perform an analyst action on a message:
-      quarantine      — move to Helios-Quarantine label in Gmail, update status
+      quarantine      — move to Himaya-Quarantine label in Gmail, update status
       release         — restore from quarantine back to inbox
       block_sender    — create a policy rule blocking this sender domain
       false_positive  — mark as false positive, downgrade classification
@@ -570,7 +570,7 @@ async def get_message_detail(
             f"Sent from {t.sender or 'unknown sender'}"
             + (f" (originating IP: {sender_ip})" if sender_ip else "")
             + f". {auth_summary}. "
-            "Helios detected this email during the next background scan cycle and queued it for analysis."
+            "Himaya detected this email during the next background scan cycle and queued it for analysis."
         ),
     })
 
@@ -652,7 +652,7 @@ async def get_message_detail(
     risk = t.risk_score or 0
     llm_conf = getattr(t, "llm_confidence", None)
     llm_class = getattr(t, "llm_classification", None)
-    llm_model_raw = getattr(t, "llm_model", None) or "Helios"
+    llm_model_raw = getattr(t, "llm_model", None) or "Himaya"
     # Mark as inconclusive when confidence is low or model fell back to heuristics
     is_inconclusive = (
         (llm_conf is not None and llm_conf < 0.5)
@@ -660,7 +660,7 @@ async def get_message_detail(
         or (llm_class and "inconclusive" in str(llm_class).lower())
     )
     conf_pct = f"{int(llm_conf * 100)}%" if llm_conf is not None else None
-    model_label = "Helios AI"
+    model_label = "Himaya AI"
     if is_inconclusive:
         ai_status = "flagged"
         conf_str = f" ({conf_pct} confidence)" if conf_pct else ""
@@ -709,17 +709,17 @@ async def get_message_detail(
     }
     action_status = action_status_map.get(action, "ok")
     action_labels = {
-        "CLEAN": "Email assessed as clean and left in inbox. No action required. Helios will continue monitoring future emails from this sender.",
-        "DELIVER": "Email assessed as clean and left in inbox. No action required. Helios will continue monitoring future emails from this sender.",
+        "CLEAN": "Email assessed as clean and left in inbox. No action required. Himaya will continue monitoring future emails from this sender.",
+        "DELIVER": "Email assessed as clean and left in inbox. No action required. Himaya will continue monitoring future emails from this sender.",
         "FLAGGED_LOW": "Email flagged as low risk. Left in inbox but marked for analyst review. The recipient has not been notified — monitor for follow-up suspicious activity.",
         "FLAGGED_HIGH": "Email flagged as high risk and left in inbox. Analyst review is strongly recommended. Consider quarantining if the recipient has not yet acted on this email.",
-        "QUARANTINED": "Email removed from inbox and moved to the Helios-Quarantine folder. The recipient can no longer see this email in their inbox. Analyst can review and release from the Quarantine tab.",
-        "QUARANTINE": "Email removed from inbox and moved to the Helios-Quarantine folder. The recipient can no longer see this email in their inbox. Analyst can review and release from the Quarantine tab.",
+        "QUARANTINED": "Email removed from inbox and moved to the Himaya-Quarantine folder. The recipient can no longer see this email in their inbox. Analyst can review and release from the Quarantine tab.",
+        "QUARANTINE": "Email removed from inbox and moved to the Himaya-Quarantine folder. The recipient can no longer see this email in their inbox. Analyst can review and release from the Quarantine tab.",
         "BLOCK_DELETE": "Email has been blocked and deleted. A policy rule is active to reject future emails from this sender. No further action required unless the block needs to be reviewed.",
         "BLOCK": "Email has been blocked and deleted. A policy rule is active to reject future emails from this sender. No further action required unless the block needs to be reviewed.",
     }
     flow.append({
-        "stage": "Helios Action",
+        "stage": "Himaya Action",
         "timestamp": ts(5),
         "status": action_status,
         "detail": action_labels.get(action, f"Action applied: {action}"),

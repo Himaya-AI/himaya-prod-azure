@@ -43,7 +43,7 @@ What we probe
    ANY return data anonymously. SALSA's `--bruteforce`-equivalent.
 
 The implementation prioritises being polite (low concurrency, short
-timeouts, a `Helios-SSPM/1.0` user-agent so the customer's WAF can
+timeouts, a `Himaya-SSPM/1.0` user-agent so the customer's WAF can
 allowlist us) and idempotent (writes to salesforce_findings with
 ON CONFLICT). Each finding has a stable `finding_id` so re-running
 the scan updates rather than duplicates.
@@ -72,7 +72,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-USER_AGENT = "Helios-SSPM/1.0 (+https://himaya.ai)"
+USER_AGENT = "Himaya-SSPM/1.0 (+https://himaya.ai)"
 HTTP_TIMEOUT = 20.0
 
 

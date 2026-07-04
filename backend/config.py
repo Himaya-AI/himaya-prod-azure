@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     AZURE_SERVICE_BUS_NAMESPACE: str = ""
     AZURE_REGION: str = "uaenorth"
     AZURE_CLIENT_ID: str = ""
+    AZURE_SUBSCRIPTION_ID: str = ""
+    AZURE_RESOURCE_GROUP: str = "rg-himaya-prod"
 
     # AWS fallback settings (keep during migration; SES still uses AWS us-east-1)
     AWS_REGION: str = "us-east-1"

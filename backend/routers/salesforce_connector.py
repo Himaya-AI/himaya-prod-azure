@@ -1,5 +1,5 @@
 """
-Helios Salesforce Connector — SALSA-inspired SaaS Security Posture Management
+Himaya Salesforce Connector — SALSA-inspired SaaS Security Posture Management
 
 Inspired by https://github.com/cosad3s/salsa (SALesforce Scanner for Aura).
 SALSA is an offensive-security tool that probes Salesforce orgs for:
@@ -14,7 +14,7 @@ SALSA is an offensive-security tool that probes Salesforce orgs for:
   - Permissive Apex controllers (`@AuraEnabled` endpoints
     returning sensitive data without permission checks).
 
-This connector implements the **defensive** half: it lets a Helios
+This connector implements the **defensive** half: it lets a Himaya
 customer point at one or more of their own Salesforce orgs and run
 the SALSA-style probes in a safe, read-only mode against the SAME
 endpoints so we surface findings BEFORE a real attacker does.

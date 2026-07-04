@@ -1,5 +1,5 @@
 """
-Helios Oracle Cloud Infrastructure (OCI) Connector Router.
+Himaya Oracle Cloud Infrastructure (OCI) Connector Router.
 """
 from __future__ import annotations
 

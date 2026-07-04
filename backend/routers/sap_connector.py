@@ -1,5 +1,5 @@
 """
-Helios SAP Connector Router — manages SAP S/4HANA integrations and security scanning.
+Himaya SAP Connector Router — manages SAP S/4HANA integrations and security scanning.
 """
 from __future__ import annotations
 

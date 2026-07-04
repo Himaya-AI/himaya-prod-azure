@@ -1,5 +1,5 @@
 """
-URL Detonation Service — Himaya Helios
+URL Detonation Service — Himaya
 
 Visits suspicious URLs in a headless Playwright Chromium browser and captures:
   - Full-page screenshot (base64 PNG)
@@ -257,7 +257,7 @@ async def _fallback_httpx_check(url: str, result: DetonationResult) -> Detonatio
         async with httpx.AsyncClient(
             follow_redirects=True,
             timeout=10,
-            headers={"User-Agent": "Mozilla/5.0 (compatible; Helios/1.0)"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; Himaya/1.0)"},
         ) as client:
             resp = await client.get(url)
             result.final_url = str(resp.url)

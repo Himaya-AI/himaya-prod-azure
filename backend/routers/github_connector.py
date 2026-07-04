@@ -1,5 +1,5 @@
 """
-Helios GitHub Connector Router.
+Himaya GitHub Connector Router.
 """
 from __future__ import annotations
 

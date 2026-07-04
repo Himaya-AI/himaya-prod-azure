@@ -256,7 +256,7 @@ export default function ThreatsPage() {
     try {
       await api.post('/api/threats/auto-triage/toggle', { enabled: newEnabled })
       if (newEnabled) {
-        setAutoTriageResult('Helios Analysis started — investigating threats every 2 min')
+        setAutoTriageResult('Himaya Analysis started — investigating threats every 2 min')
       } else {
         setAutoTriageResult('Agent stopped')
         setAutoTriageStatus(null)
@@ -648,7 +648,7 @@ export default function ThreatsPage() {
           <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a2744] flex-shrink-0">
             <div className="flex items-center gap-2">
               <ClipboardList size={16} className="text-[#3b6ef6]" />
-              <span className="font-semibold text-white text-sm">Helios Analysis — Audit Trail</span>
+              <span className="font-semibold text-white text-sm">Himaya Analysis — Audit Trail</span>
               {auditItems.length > 0 && (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#3b6ef6]/20 text-[#3b6ef6] border border-[#3b6ef6]/30">
                   {auditItems.length}{auditItems.length >= 500 ? '+' : ''}
@@ -675,8 +675,8 @@ export default function ThreatsPage() {
             ) : auditItems.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-center px-8">
                 <ClipboardList size={32} className="text-slate-700" />
-                <p className="text-slate-400 text-sm font-medium">No Helios Analysis records yet</p>
-                <p className="text-slate-500 text-xs">Enable the agent and Helios Analysis will start investigating threats. Results appear here.</p>
+                <p className="text-slate-400 text-sm font-medium">No Himaya Analysis records yet</p>
+                <p className="text-slate-500 text-xs">Enable the agent and Himaya Analysis will start investigating threats. Results appear here.</p>
               </div>
             ) : (
               <div className="divide-y divide-[#1a2744]/50">

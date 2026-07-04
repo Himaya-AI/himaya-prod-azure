@@ -411,7 +411,7 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
                   : <span className="text-green-400 text-xs font-medium">Clean</span>}
               </div>
               <div className="flex gap-3">
-                <span className="text-slate-500 w-24 flex-shrink-0">Helios Status</span>
+                <span className="text-slate-500 w-24 flex-shrink-0">Himaya Status</span>
                 {d.action_taken
                   ? <Badge label={HELIOS_LABELS[d.action_taken] ?? d.action_taken} colorClass={HELIOS_COLORS[d.action_taken] ?? 'bg-slate-700 text-slate-300 border-slate-600'} />
                   : <span className="text-slate-400">—</span>}
@@ -505,7 +505,7 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles size={14} className={detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive ? 'text-amber-400' : 'text-[#3b6ef6]'} />
                 <span className={clsx('text-xs font-semibold', detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive ? 'text-amber-400' : 'text-[#3b6ef6]')}>
-                  Helios AI Analysis
+                  Himaya AI Analysis
                   {detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive && (
                     <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-900/40 text-amber-300 border border-amber-700/40">INCONCLUSIVE</span>
                   )}
@@ -845,7 +845,7 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
           <section className="pt-2">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Analyst Actions</h3>
             <p className="text-xs text-slate-500 mb-3">
-              Actions are applied immediately and feed back into Helios AI to improve future detections.
+              Actions are applied immediately and feed back into Himaya AI to improve future detections.
             </p>
 
             {actionMsg && (
@@ -1096,7 +1096,7 @@ export default function MessageTracePage() {
               </select>
             </div>
             <div>
-              <label className="text-xs text-slate-500 mb-1 block">Helios Status</label>
+              <label className="text-xs text-slate-500 mb-1 block">Himaya Status</label>
               <select className={clsx(inputCls, 'cursor-pointer')} value={actionTaken} onChange={e => setActionTaken(e.target.value)}>
                 <option value="">All</option>
                 {[
@@ -1107,7 +1107,7 @@ export default function MessageTracePage() {
                   ['MARKED_SPAM','⚠ Marked Spam'],
                   ['BLOCK_DELETE','✕ Blocked & Deleted'],
                   ['HIMAYA_FLAGGED','◈ Himaya-Flagged'],
-                  ['HELIOS_ALERT','◉ Helios-Alert'],
+                  ['HELIOS_ALERT','◉ Himaya-Alert'],
                 ].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </div>
@@ -1182,7 +1182,7 @@ export default function MessageTracePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#0f3460]/40">
-                  {['Delivered', 'Sender', 'Recipient', 'Domain', 'Classification', 'Risk', 'Helios Status', ''].map(h => (
+                  {['Delivered', 'Sender', 'Recipient', 'Domain', 'Classification', 'Risk', 'Himaya Status', ''].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
                 </tr>

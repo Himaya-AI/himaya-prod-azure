@@ -42,7 +42,7 @@ THREAT_TYPES = [
 
 _classifier = None
 
-# Default: use the remote Helios classifier-service (Kimi K2.5 via Bedrock) for
+# Default: use the remote Himaya classifier-service (Kimi K2.5 via Bedrock) for
 # inbound email classification. Falls back to Claude Haiku on timeout only.
 # Flip USE_REMOTE_CLASSIFIER=false in the ECS task env to revert to the legacy
 # local Claude Opus -> GPT-4o ensemble.
@@ -262,7 +262,7 @@ def _calculate_risk_score(content_score: int, graph_score: int, reputation_score
 
 def _determine_action(risk_score: int, threat_type: str) -> str:
     """
-    Post-delivery action — Helios sits AFTER email is delivered (like Abnormal Security).
+    Post-delivery action — Himaya sits AFTER email is delivered (like Abnormal Security).
     Actions are retroactive analysis outcomes, not gateway interceptions.
     """
     # SPAM at high confidence — auto-move to junk/spam folder
@@ -326,11 +326,11 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
     7. Compliance evidence
     8. WebSocket broadcast
     """
-    # ── Guard: skip Helios system notification emails to prevent alert loops ──
+    # ── Guard: skip Himaya system notification emails to prevent alert loops ──
     _HELIOS_SYSTEM_SENDERS = {"noreply@himaya.ai", "no-reply@himaya.ai"}
     _raw_sender = (email_data.get("sender") or "").lower().strip()
     if _raw_sender in _HELIOS_SYSTEM_SENDERS:
-        logger.debug(f"process_email: skipping Helios system email from {_raw_sender} (loop guard)")
+        logger.debug(f"process_email: skipping Himaya system email from {_raw_sender} (loop guard)")
         return None
 
     try:
@@ -390,7 +390,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                         logger.debug(f"Dedup: skipping already-resolved clean {message_id} for {recipient_email}")
                         return None
                     # If previously quarantined/spam but now 'resolved' (user moved it back to inbox),
-                    # fall through to re-process — Helios will re-quarantine it.
+                    # fall through to re-process — Himaya will re-quarantine it.
                     if _ex_action in ("QUARANTINED", "QUARANTINE", "MARKED_SPAM") and _ex_status == "resolved":
                         logger.info(f"Re-quarantine: {message_id} was released by user, re-processing for {recipient_email}")
                         # Don't return — let the full pipeline run again
@@ -844,7 +844,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
             logger.debug(f"Sandbox auto-detonate task failed (non-fatal): {_se}")
 
         # Step 7d: Send threat alerts for high-confidence detections (risk >= 80, or >= 60 for VIPs)
-        # Skip alerts when sender is a Helios system address (loop guard)
+        # Skip alerts when sender is a Himaya system address (loop guard)
         _HELIOS_SYSTEM_SENDERS_7D = {"noreply@himaya.ai", "no-reply@himaya.ai"}
         alert_threshold = 60 if is_vip_recipient else 80
         if (risk_result["risk_score"] >= alert_threshold

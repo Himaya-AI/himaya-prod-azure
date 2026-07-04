@@ -1,5 +1,5 @@
 """
-Himaya Helios Email Service — Azure Communication Email primary, Amazon SES fallback.
+Himaya Email Service — Azure Communication Email primary, Amazon SES fallback.
 All transactional emails go through this service.
 """
 import os
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 SES_CLIENT = boto3.client("ses", region_name=os.getenv("SES_REGION", "us-east-1"))
 AZURE_COMMUNICATION_CONNECTION_STRING = os.getenv("AZURE_COMMUNICATION_CONNECTION_STRING", "")
 FROM_EMAIL = os.getenv("EMAIL_FROM", "noreply@himaya.ai")
-FROM_NAME = "Himaya Helios"
+FROM_NAME = "Himaya"
 REPLY_TO = "support@himaya.ai"
 
 # ─── Shared brand constants ────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ LOGO_HTML = """
   <tr>
     <td align="center">
       <img src="cid:himaya-logo"
-           alt="Himaya Helios"
+           alt="Himaya"
            width="180"
            style="display:block;max-width:180px;height:auto;border:0;outline:none;text-decoration:none;" />
     </td>
@@ -61,7 +61,7 @@ def _footer() -> str:
         © 2026 Himaya Technologies Group Inc. — All rights reserved.
       </p>
       <p style="margin:0 0 6px;color:{MUTED};font-size:11px;text-align:center;font-family:{FONT};">
-        Himaya Helios ·
+        Himaya ·
         <a href="https://app.himaya.ai" style="color:{BLUE};text-decoration:none;">app.himaya.ai</a>
       </p>
 
@@ -107,12 +107,22 @@ def send_email(to: str, subject: str, html_body: str, text_body: Optional[str] =
             from azure.communication.email import EmailClient
 
             client = EmailClient.from_connection_string(AZURE_COMMUNICATION_CONNECTION_STRING)
+            attachments = []
+            if _LOGO_BYTES and "cid:himaya-logo" in html_body:
+                attachments.append(
+                    {
+                        "name": "himaya-logo.png",
+                        "contentType": "image/png",
+                        "contentInBase64": _b64.b64encode(_LOGO_BYTES).decode(),
+                        "contentId": "himaya-logo",
+                    }
+                )
             poller = client.begin_send(
                 {
                     "senderAddress": FROM_EMAIL,
                     "recipients": {"to": [{"address": to}]},
                     "content": {"subject": subject, "html": html_body, "plainText": text_body or ""},
-                    "attachments": [],
+                    "attachments": attachments,
                 }
             )
             result = poller.result()
@@ -161,7 +171,7 @@ def send_admin_otp(to_email: str, otp: str) -> bool:
             Admin Login Verification
           </h2>
           <p style="margin:0 0 32px;color:{MUTED};font-size:14px;line-height:1.7;font-family:{FONT};">
-            Enter the code below to complete sign-in to the Himaya Helios Vendor Portal.
+            Enter the code below to complete sign-in to the Himaya Vendor Portal.
             This code expires in <strong style="color:{WHITE};">10 minutes</strong>.
           </p>
 
@@ -189,13 +199,13 @@ def send_admin_otp(to_email: str, otp: str) -> bool:
 </html>"""
 
     text = (
-        f"Himaya Helios — Vendor Portal\n\n"
+        f"Himaya — Vendor Portal\n\n"
         f"Admin Login Verification\n\n"
         f"Your one-time passcode: {otp}\n\n"
         f"This code expires in 10 minutes. Do not share it with anyone.\n\n"
         f"© 2026 Himaya Technologies Group Inc. — app.himaya.ai"
     )
-    return send_email(to_email, "Himaya Helios — Admin Login Code", html, text)
+    return send_email(to_email, "Himaya — Admin Login Code", html, text)
 
 
 def send_threat_alert(to_email: str, org_name: str, threat_type: str,
@@ -318,7 +328,7 @@ def send_threat_alert(to_email: str, org_name: str, threat_type: str,
 
     return send_email(
         to_email,
-        f"[{severity}] {threat_type} — Threat Detected · Himaya Helios",
+        f"[{severity}] {threat_type} — Threat Detected · Himaya",
         html
     )
 
@@ -348,7 +358,7 @@ def send_welcome_email(to_email: str, org_name: str, contact_name: str,
             Your account is ready
           </h1>
           <p style="margin:0 0 6px;color:{MUTED};font-size:13px;font-family:{FONT};">
-            Himaya Helios — AI-Powered Email Security
+            Himaya — AI-Powered Email Security
           </p>
 
           <hr style="border:none;border-top:1px solid {BORDER};margin:24px 0;" />
@@ -357,7 +367,7 @@ def send_welcome_email(to_email: str, org_name: str, contact_name: str,
             Hi {contact_name},
           </p>
           <p style="margin:0 0 28px;color:{MUTED};font-size:14px;line-height:1.75;font-family:{FONT};">
-            Your Himaya Helios account for <strong style="color:{WHITE};">{org_name}</strong> has been
+            Your Himaya account for <strong style="color:{WHITE};">{org_name}</strong> has been
             provisioned. Click the button below to set your password and access the platform.
           </p>
 
@@ -424,7 +434,7 @@ def send_welcome_email(to_email: str, org_name: str, contact_name: str,
 </html>"""
 
     text = (
-        f"Welcome to Himaya Helios\n\n"
+        f"Welcome to Himaya\n\n"
         f"Hi {contact_name},\n\n"
         f"Your account for {org_name} is ready. Set your password at the link below:\n\n"
         f"{activation_url}\n\n"
@@ -433,7 +443,7 @@ def send_welcome_email(to_email: str, org_name: str, contact_name: str,
         f"Questions? support@himaya.ai\n\n"
         f"© 2026 Himaya Technologies Group Inc. — app.himaya.ai"
     )
-    return send_email(to_email, "Your Himaya Helios account is ready", html, text)
+    return send_email(to_email, "Your Himaya account is ready", html, text)
 
 
 def send_weekly_report(to_email: str, org_name: str, week_start: str, week_end: str,
@@ -566,7 +576,7 @@ def send_weekly_report(to_email: str, org_name: str, week_start: str, week_end: 
 </html>"""
 
     text = (
-        f"Himaya Helios — Weekly Security Report\n"
+        f"Himaya — Weekly Security Report\n"
         f"{org_name} · {week_start} – {week_end}\n\n"
         f"Emails Scanned:   {emails_scanned:,}\n"
         f"Threats Detected: {threats_detected:,}\n"
@@ -579,7 +589,7 @@ def send_weekly_report(to_email: str, org_name: str, week_start: str, week_end: 
     )
     return send_email(
         to_email,
-        f"Himaya Helios Weekly Report · {week_start} – {week_end}",
+        f"Himaya Weekly Report · {week_start} – {week_end}",
         html,
         text
     )
@@ -676,7 +686,7 @@ def send_sender_block_notification(
           </h2>
           <p style="margin:0 0 24px;color:{MUTED};font-size:14px;line-height:1.75;font-family:{FONT};">
             An email you sent to <strong style="color:{WHITE};">{recipient_org}</strong> was intercepted by their
-            AI-powered email security system (Himaya Helios) and has been
+            AI-powered email security system (Himaya) and has been
             <strong style="color:{outcome_color};">{outcome_label}</strong>.
           </p>
 
@@ -713,7 +723,7 @@ def send_sender_block_notification(
           </div>
 
           <p style="margin:0;color:{MUTED};font-size:12px;line-height:1.6;font-family:{FONT};">
-            This is an automated notice from Himaya Helios on behalf of {recipient_org}.
+            This is an automated notice from Himaya on behalf of {recipient_org}.
             Please do not reply to this email — it is not monitored.
           </p>
         </td></tr>
@@ -727,7 +737,7 @@ def send_sender_block_notification(
 
     verb = "blocked" if is_blocked else "quarantined"
     text = (
-        f"Himaya Helios — Delivery Failure Notice\n\n"
+        f"Himaya — Delivery Failure Notice\n\n"
         f"Your email was {verb} by {recipient_org}'s security system.\n\n"
         f"Subject:        {subject or '(no subject)'}\n"
         + (f"Addressed To:   {recipient_email}\n" if recipient_email else "")
@@ -815,7 +825,7 @@ def send_quarantine_notification(
 
     explanation_block = f"""
           <div style="background:#0b0f1f;border:1px solid #1e2d5e;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
-            <p style="margin:0 0 6px;color:#93b4fd;font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:{FONT};">Helios AI Analysis</p>
+            <p style="margin:0 0 6px;color:#93b4fd;font-size:10px;letter-spacing:1px;text-transform:uppercase;font-family:{FONT};">Himaya AI Analysis</p>
             <p style="margin:0;color:#c7d2fe;font-size:13px;line-height:1.75;font-family:{FONT};">{clean_explanation}</p>
           </div>""" if clean_explanation else ""
 
@@ -840,10 +850,10 @@ def send_quarantine_notification(
         <!-- Title -->
         <tr><td style="padding:28px 40px 8px;">
           <h2 style="margin:0 0 6px;color:{WHITE};font-size:20px;font-weight:700;font-family:{FONT};">
-            ⚠️ Email {action_label} by Helios
+            ⚠️ Email {action_label} by Himaya
           </h2>
           <p style="margin:0;color:{MUTED};font-size:13px;font-family:{FONT};">
-            Himaya Helios intercepted a suspicious email directed to your inbox and took protective action automatically.
+            Himaya intercepted a suspicious email directed to your inbox and took protective action automatically.
           </p>
         </td></tr>
 
@@ -912,7 +922,7 @@ def send_quarantine_notification(
             <ul style="margin:0;padding:0 0 0 18px;color:{MUTED};font-size:13px;line-height:1.9;font-family:{FONT};">
               <li>If this email looks <strong style="color:{WHITE};">legitimate</strong>, contact your IT/security team to release it from quarantine.</li>
               <li><strong style="color:{RED};">Do not</strong> click any links or open attachments from this sender until verified by your security team.</li>
-              <li>If you were expecting this email, ask your admin to mark it as a false positive in the Helios dashboard.</li>
+              <li>If you were expecting this email, ask your admin to mark it as a false positive in the Himaya dashboard.</li>
             </ul>
           </div>
 
@@ -922,7 +932,7 @@ def send_quarantine_notification(
                style="display:inline-block;background:{BLUE};color:{WHITE};text-decoration:none;
                       padding:13px 32px;border-radius:10px;font-size:14px;font-weight:700;
                       letter-spacing:0.2px;font-family:{FONT};">
-              Review in Helios Dashboard →
+              Review in Himaya Dashboard →
             </a>
           </div>''' if is_admin_recipient else ''}
         </td></tr>
@@ -949,8 +959,8 @@ def send_quarantine_notification(
 </html>"""
 
     text = (
-        f"Himaya Helios — Security Alert · {org_name}\n\n"
-        f"An email directed to your inbox has been {action_label} by Helios.\n\n"
+        f"Himaya — Security Alert · {org_name}\n\n"
+        f"An email directed to your inbox has been {action_label} by Himaya.\n\n"
         f"FROM:         {sender_email}\n"
         f"SUBJECT:      {subject or '(no subject)'}\n"
         + (f"RECEIVED:     {received_at}\n" if received_at else "")
@@ -970,7 +980,7 @@ def send_quarantine_notification(
     )
     return send_email(
         to_email,
-        f"[{severity}] Email {action_label}: {threat_type} — Himaya Helios",
+        f"[{severity}] Email {action_label}: {threat_type} — Himaya",
         html,
         text,
     )
@@ -986,7 +996,7 @@ def send_suspicious_recipient_notification(
     key_factors: list = None,
 ) -> bool:
     """
-    Notify the original recipient that their email has been flagged as Helios Suspicious.
+    Notify the original recipient that their email has been flagged as Himaya Suspicious.
     No dashboard link — plain readable explanation only.
     """
     if not to_email:
@@ -1042,7 +1052,7 @@ def send_suspicious_recipient_notification(
       An email you received has been flagged
     </h1>
     <p style="margin:0;color:{MUTED};font-family:{FONT};font-size:13px;">
-      Helios has detected suspicious characteristics in an email delivered to your inbox and has marked it for review.
+      Himaya has detected suspicious characteristics in an email delivered to your inbox and has marked it for review.
     </p>
   </td></tr>
 
@@ -1084,7 +1094,7 @@ def send_suspicious_recipient_notification(
   <!-- Footer border -->
   <tr><td style="background:{CARD};border:1px solid {BORDER};border-top:none;border-radius:0 0 8px 8px;padding:16px 32px;">
     <p style="margin:0;color:{MUTED};font-family:{FONT};font-size:11px;">
-      This notification was generated automatically by Himaya Helios email security. You are receiving this because you are a recipient of the flagged email.
+      This notification was generated automatically by Himaya email security. You are receiving this because you are a recipient of the flagged email.
     </p>
   </td></tr>
 
@@ -1096,9 +1106,9 @@ def send_suspicious_recipient_notification(
 </html>"""
 
     text = (
-        "SECURITY NOTICE — Helios Email Security\n"
+        "SECURITY NOTICE — Himaya Email Security\n"
         "=========================================\n\n"
-        "An email you received has been flagged by Helios as suspicious.\n\n"
+        "An email you received has been flagged by Himaya as suspicious.\n\n"
         f"FROM:        {sender_email}\n"
         f"SUBJECT:     {subject or '(No Subject)'}\n"
         f"THREAT TYPE: {clean_threat}\n"
@@ -1109,13 +1119,13 @@ def send_suspicious_recipient_notification(
         "  - Exercise caution — do not click links or open attachments until you can verify the sender.\n"
         "  - If legitimate, contact your IT or security team.\n"
         "  - If suspicious, do not reply to the sender.\n\n"
-        "This notification was generated by Himaya Helios email security.\n"
+        "This notification was generated by Himaya email security.\n"
         "© 2026 Himaya Technologies Group Inc."
     )
 
     return send_email(
         to_email,
-        "Security Notice: An email you received has been flagged by Helios",
+        "Security Notice: An email you received has been flagged by Himaya",
         html,
         text,
     )

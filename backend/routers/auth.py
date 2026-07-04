@@ -212,7 +212,7 @@ async def mfa_setup(
 ):
     secret = pyotp.random_base32()
     totp = pyotp.TOTP(secret)
-    qr_uri = totp.provisioning_uri(name=current_user.email, issuer_name="HimayaHelios")
+    qr_uri = totp.provisioning_uri(name=current_user.email, issuer_name="HimayaHimaya")
 
     backup_codes = [secrets.token_hex(4).upper() for _ in range(8)]
 
@@ -336,7 +336,7 @@ async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends
         <a href="{reset_url}" style="background:#6d28d9;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;margin-top:16px;">Set New Password</a>
         <p style="color:#6b7280;margin-top:24px;font-size:12px;">If you didn't request this, ignore this email.</p>
     </div>"""
-    send_email(user.email, "Reset your Himaya Helios password", html)
+    send_email(user.email, "Reset your Himaya password", html)
     return {"message": "If that email exists, a reset link has been sent."}
 
 

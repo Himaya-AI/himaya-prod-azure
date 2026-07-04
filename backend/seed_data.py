@@ -1,5 +1,5 @@
 """
-Seed script for Himaya Helios demo data.
+Seed script for Himaya demo data.
 Run from himaya-helios/ root: python -m backend.seed_data
 or from backend/: python seed_data.py
 """
@@ -587,7 +587,7 @@ async def seed():
         print(f"Analyst:    analyst@acmefintech.com    / SentinelDemo123!")
         print(f"Compliance: compliance@acmefintech.com / SentinelDemo123!")
         print(f"\nVendor Admin Portal: http://localhost:3000/admin")
-        print(f"Vendor Admin Login:  sentinel-admin@himayahelios.io / SentinelVendor2026!")
+        print(f"Vendor Admin Login:  sentinel-admin@himaya.ai / SentinelVendor2026!")
         print("=" * 50)
         print(f"\nAPI Docs: http://localhost:8000/docs")
         print(f"Health:   http://localhost:8000/health")

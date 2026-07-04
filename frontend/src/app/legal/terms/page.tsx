@@ -28,12 +28,12 @@ export default function TermsOfServicePage() {
 
           <div>
             <h2 className="text-base font-semibold text-[#e4e4e7] mb-2">1. Acceptance</h2>
-            <p>By accessing or using the Helios platform operated by <strong className="text-[#e4e4e7]">Himaya Technologies Group Inc.</strong> ("Himaya," "we," "us"), you agree to be bound by these Terms of Service. If you do not agree, you must not access or use the platform.</p>
+            <p>By accessing or using the Himaya platform operated by <strong className="text-[#e4e4e7]">Himaya Technologies Group Inc.</strong> ("Himaya," "we," "us"), you agree to be bound by these Terms of Service. If you do not agree, you must not access or use the platform.</p>
           </div>
 
           <div>
             <h2 className="text-base font-semibold text-[#e4e4e7] mb-2">2. Permitted Use</h2>
-            <p>The Helios platform is intended for use by authorized security professionals within your organization. By using the platform, you agree to:</p>
+            <p>The Himaya platform is intended for use by authorized security professionals within your organization. By using the platform, you agree to:</p>
             <ul className="list-disc list-inside mt-2 space-y-1">
               <li>Use the platform only for lawful purposes and in accordance with your organization's security policies</li>
               <li>Not share your account credentials with other individuals</li>
@@ -49,7 +49,7 @@ export default function TermsOfServicePage() {
 
           <div>
             <h2 className="text-base font-semibold text-[#e4e4e7] mb-2">4. Intellectual Property</h2>
-            <p>All platform content, software, tooling, and data provided through Helios remain the sole property of Himaya Technologies Group Inc. or its licensors. Unauthorized reproduction, redistribution, or commercial exploitation of any platform content is strictly prohibited.</p>
+            <p>All platform content, software, tooling, and data provided through Himaya remain the sole property of Himaya Technologies Group Inc. or its licensors. Unauthorized reproduction, redistribution, or commercial exploitation of any platform content is strictly prohibited.</p>
           </div>
 
           <div>

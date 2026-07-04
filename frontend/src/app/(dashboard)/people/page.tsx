@@ -214,7 +214,7 @@ function VipCriteriaPanel({ expanded, onToggle }: { expanded: boolean; onToggle:
               <span className="text-[12px] font-semibold text-slate-200">Executive Title</span>
             </div>
             <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
-              User has a C-suite or senior leadership job title recognized by Helios.
+              User has a C-suite or senior leadership job title recognized by Himaya.
             </p>
             <div className="flex flex-wrap gap-1">
               {['CEO', 'CFO', 'CTO', 'CISO', 'COO', 'Director', 'VP', 'Head of', 'President', 'Partner'].map(t => (

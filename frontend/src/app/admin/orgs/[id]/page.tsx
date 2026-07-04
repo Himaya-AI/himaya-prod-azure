@@ -76,7 +76,7 @@ type Tab = 'overview' | 'audit' | 'account'
 // ─── Badges ───────────────────────────────────────────────────────────────────
 
 const PLAN_BADGE: Record<string, string> = {
-  enterprise:   'bg-purple-500/20 text-purple-300 border-purple-700',
+  enterprise:   'bg-[var(--accent)]/20 text-[var(--accent)] border-[var(--accent)]',
   professional: 'bg-blue-500/20   text-blue-300   border-blue-700',
   starter:      'bg-slate-500/15  text-slate-300   border-slate-500/40',
 }
@@ -131,7 +131,7 @@ function OverviewTab({ metrics, metricsError, org }: {
   if (!metrics) {
     return (
       <div className="flex items-center justify-center h-32 text-[#6060a0]">
-        <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mr-3" />
+        <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin mr-3" />
         Loading metrics…
       </div>
     )
@@ -253,7 +253,7 @@ function OverviewTab({ metrics, metricsError, org }: {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Zap className={`w-4 h-4 ${metrics.auto_triage_enabled ? 'text-orange-400' : 'text-[#6060a0]'}`} />
-            <span className="text-white font-medium text-sm">Auto-Triage (Helios Analysis)</span>
+            <span className="text-white font-medium text-sm">Auto-Triage (Himaya Analysis)</span>
           </div>
           <span className={`px-2 py-0.5 rounded border text-xs font-medium ${
             metrics.auto_triage_enabled
@@ -314,7 +314,7 @@ function AuditTrailTab({ orgId }: { orgId: string }) {
         <select
           value={eventTypeFilter}
           onChange={e => setEventTypeFilter(e.target.value)}
-          className="bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[#d0d0f0] text-sm focus:outline-none focus:border-purple-500"
+          className="bg-[#111118] border border-[#2a2a3a] rounded-lg px-3 py-2 text-[#d0d0f0] text-sm focus:outline-none focus:border-[var(--accent)]"
         >
           <option value="">All Event Types</option>
           <option value="AUTO_TRIAGE">Auto-Triage</option>
@@ -343,7 +343,7 @@ function AuditTrailTab({ orgId }: { orgId: string }) {
       <div className="bg-[#111118] border border-[#2a2a3a] rounded-xl overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center h-48">
-            <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -571,7 +571,7 @@ function AccountTab({ org, onRefresh }: { org: OrgDetail; onRefresh: () => void 
           <select
             value={planValue}
             onChange={e => setPlanValue(e.target.value)}
-            className="bg-[#1a1a28] border border-[#2a2a3a] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500"
+            className="bg-[#1a1a28] border border-[#2a2a3a] text-white text-sm rounded-lg px-3 py-2 focus:outline-none focus:border-[var(--accent)]"
           >
             <option value="starter">Starter</option>
             <option value="professional">Professional</option>
@@ -580,7 +580,7 @@ function AccountTab({ org, onRefresh }: { org: OrgDetail; onRefresh: () => void 
           <button
             onClick={doSavePlan}
             disabled={savingPlan || planValue === org.plan}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-lg text-sm transition-colors"
+            className="px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent)] disabled:opacity-50 text-white rounded-lg text-sm transition-colors"
           >
             {savingPlan ? 'Saving…' : 'Save Plan'}
           </button>
@@ -605,7 +605,7 @@ function AccountTab({ org, onRefresh }: { org: OrgDetail; onRefresh: () => void 
       {/* Inject test threats */}
       <div className="bg-[#111118] border border-[#2a2a3a] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-1">
-          <FlaskConical className="w-4 h-4 text-purple-400" />
+          <FlaskConical className="w-4 h-4 text-[var(--accent)]" />
           <h3 className="text-white font-semibold">Inject Test Threats</h3>
         </div>
         <p className="text-[#a0a0c0] text-sm mb-4">
@@ -614,7 +614,7 @@ function AccountTab({ org, onRefresh }: { org: OrgDetail; onRefresh: () => void 
         <button
           onClick={doInjectThreats}
           disabled={injectLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white rounded-lg text-sm transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] disabled:opacity-50 text-white rounded-lg text-sm transition-colors"
         >
           {injectLoading ? (
             <>
@@ -760,7 +760,7 @@ export default function OrgDetail() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full animate-spin" />
       </div>
     )
   }
@@ -819,7 +819,7 @@ export default function OrgDetail() {
             onClick={() => setTab(key)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
               tab === key
-                ? 'border-purple-500 text-purple-300'
+                ? 'border-[var(--accent)] text-[var(--accent)]'
                 : 'border-transparent text-[#a0a0c0] hover:text-white'
             }`}
           >

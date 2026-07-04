@@ -327,7 +327,7 @@ async def _send_all_weekly_digests(target_org_id=None):
                     send_email(
                         to=admin.email,
                         subject=(
-                            f"Helios Weekly Security Digest — {org.name} — "
+                            f"Himaya Weekly Security Digest — {org.name} — "
                             f"{week_start}–{week_end}"
                         ),
                         html_body=html,
@@ -626,7 +626,7 @@ def _build_weekly_html(
       <!-- Footer -->
       <tr><td style="background:#0d0d12;padding:16px 36px;border-top:1px solid {BORDER};">
         <p style="color:#475569;font-size:11px;margin:0;">
-          Helios by Himaya Technologies ·
+          Himaya by Himaya Technologies ·
           <a href="https://app.himaya.ai" style="color:{BLUE};">app.himaya.ai</a>
           · To manage email preferences visit Settings → Alerts
         </p>

@@ -223,7 +223,7 @@ async def release_email(
 
             if headers:
                 async with _httpx.AsyncClient(timeout=10) as client:
-                    # Find the Helios-Quarantine label ID so we can remove it
+                    # Find the Himaya-Quarantine label ID so we can remove it
                     helios_label_id = None
                     try:
                         labels_resp = await client.get(
@@ -232,7 +232,7 @@ async def release_email(
                         )
                         if labels_resp.status_code == 200:
                             for lbl in labels_resp.json().get("labels", []):
-                                if lbl.get("name") == "Helios-Quarantine":
+                                if lbl.get("name") == "Himaya-Quarantine":
                                     helios_label_id = lbl["id"]
                                     break
                     except Exception:
@@ -242,7 +242,7 @@ async def release_email(
                     if helios_label_id:
                         remove_labels.append(helios_label_id)
 
-                    # Restore INBOX and remove Helios-Quarantine + SPAM labels
+                    # Restore INBOX and remove Himaya-Quarantine + SPAM labels
                     resp = await client.post(
                         f"https://gmail.googleapis.com/gmail/v1/users/{threat.recipient_email}/messages/{threat.email_message_id}/modify",
                         headers={**headers, "Content-Type": "application/json"},
@@ -360,7 +360,7 @@ async def manual_quarantine(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Manually quarantine an email from the Helios UI.
+    Manually quarantine an email from the Himaya UI.
     Calls Gmail/M365 API to physically move the email out of the inbox.
     Returns whether the physical move succeeded.
     """

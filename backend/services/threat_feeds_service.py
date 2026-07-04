@@ -167,7 +167,7 @@ async def refresh_feed(feed_id: str, pack_info: dict, redis) -> int:
         async with httpx.AsyncClient(
             timeout=30,
             follow_redirects=True,
-            headers={"User-Agent": "Helios/1.0 threat-feed-sync"},
+            headers={"User-Agent": "Himaya/1.0 threat-feed-sync"},
         ) as client:
             resp = await client.get(url)
             resp.raise_for_status()

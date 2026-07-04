@@ -1278,7 +1278,7 @@ function GuideModal({ type, onClose }: { type: GuideType; onClose: () => void })
   const steps = isM365 ? [
     {
       n: 1, title: 'How it works',
-      body: 'Helios DLP intercepts outbound email by acting as an SMTP smart host (relay). Your Exchange tenant routes outbound mail through a Helios-managed gateway before it reaches the internet. No transport rule can POST to an HTTP endpoint natively — the connector approach is required.',
+      body: 'Himaya DLP intercepts outbound email by acting as an SMTP smart host (relay). Your Exchange tenant routes outbound mail through a Himaya-managed gateway before it reaches the internet. No transport rule can POST to an HTTP endpoint natively — the connector approach is required.',
     },
     {
       n: 2, title: 'Prerequisites',
@@ -1286,15 +1286,15 @@ function GuideModal({ type, onClose }: { type: GuideType; onClose: () => void })
     },
     {
       n: 3, title: 'Create an outbound connector in Exchange Admin',
-      body: 'Go to admin.exchange.microsoft.com → Mail flow → Connectors → + Add a connector.\n\nFrom: Office 365\nTo: Partner organization\nName: Helios DLP Gateway\n\nRouting: Route email through these smart hosts → add the gateway FQDN provided by Himaya.\n\nSecurity: Always use TLS → Issued by a trusted CA.',
+      body: 'Go to admin.exchange.microsoft.com → Mail flow → Connectors → + Add a connector.\n\nFrom: Office 365\nTo: Partner organization\nName: Himaya DLP Gateway\n\nRouting: Route email through these smart hosts → add the gateway FQDN provided by Himaya.\n\nSecurity: Always use TLS → Issued by a trusted CA.',
     },
     {
       n: 4, title: 'Create a transport rule to use the connector',
-      body: 'Mail flow → Rules → + Add a rule → Create a new rule.\n\nApply this rule if: The sender is located → Inside the organization\nAND the recipient is located → Outside the organization.\n\nDo the following: Redirect the message to → the following connector → select "Helios DLP Gateway".',
+      body: 'Mail flow → Rules → + Add a rule → Create a new rule.\n\nApply this rule if: The sender is located → Inside the organization\nAND the recipient is located → Outside the organization.\n\nDo the following: Redirect the message to → the following connector → select "Himaya DLP Gateway".',
     },
     {
       n: 5, title: 'How blocking works',
-      body: 'When Helios DLP classifies an email as HOLD or BLOCK, the gateway returns a 5xx SMTP rejection. Exchange generates an NDR to the sender automatically. ALLOW and WARN emails are delivered normally.',
+      body: 'When Himaya DLP classifies an email as HOLD or BLOCK, the gateway returns a 5xx SMTP rejection. Exchange generates an NDR to the sender automatically. ALLOW and WARN emails are delivered normally.',
     },
     {
       n: 6, title: 'Test it',
@@ -1303,7 +1303,7 @@ function GuideModal({ type, onClose }: { type: GuideType; onClose: () => void })
   ] : [
     {
       n: 1, title: 'How it works',
-      body: 'Helios DLP intercepts outbound Gmail by acting as an SMTP relay (smart host). Gmail\'s content compliance rules can\'t POST to HTTP endpoints — the correct integration is routing outbound mail through a Helios-managed SMTP gateway that inspects and optionally rejects messages.',
+      body: 'Himaya DLP intercepts outbound Gmail by acting as an SMTP relay (smart host). Gmail\'s content compliance rules can\'t POST to HTTP endpoints — the correct integration is routing outbound mail through a Himaya-managed SMTP gateway that inspects and optionally rejects messages.',
     },
     {
       n: 2, title: 'Prerequisites',
@@ -1315,7 +1315,7 @@ function GuideModal({ type, onClose }: { type: GuideType; onClose: () => void })
     },
     {
       n: 4, title: 'How blocking works',
-      body: 'When Helios DLP classifies an email as HOLD or BLOCK, the gateway returns a 5xx SMTP rejection. Gmail generates a bounce to the sender. ALLOW and WARN emails are delivered normally through the relay.',
+      body: 'When Himaya DLP classifies an email as HOLD or BLOCK, the gateway returns a 5xx SMTP rejection. Gmail generates a bounce to the sender. ALLOW and WARN emails are delivered normally through the relay.',
     },
     {
       n: 5, title: 'Test it',
@@ -1619,7 +1619,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
         </div>
         <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">Enable Data Loss Prevention</h2>
         <p className="text-[14px] text-[#a1a1aa] mb-6 max-w-md mx-auto">
-          Protect your organization from accidental data leaks. Helios automatically scans emails
+          Protect your organization from accidental data leaks. Himaya automatically scans emails
           for sensitive data using your existing email integration — no complex routing required.
         </p>
         
@@ -1845,7 +1845,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
         sender: 'test@himaya.ai',
         recipients: ['external-test@gmail.com'],
         subject: 'DLP Test — Synthetic Sensitive Email',
-        body: 'This is a synthetic test from Helios DLP. Test SSN: 123-45-6789. Wire transfer to IBAN GB29NWBK60161331926819 for $50,000.',
+        body: 'This is a synthetic test from Himaya DLP. Test SSN: 123-45-6789. Wire transfer to IBAN GB29NWBK60161331926819 for $50,000.',
         provider: 'm365',
       })
       setTestResult({

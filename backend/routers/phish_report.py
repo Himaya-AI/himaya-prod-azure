@@ -1,5 +1,5 @@
 """
-Phish Report Router — Helios Employee Phish Report Add-on.
+Phish Report Router — Himaya Employee Phish Report Add-on.
 
 Provides endpoints for:
   - Gmail Add-on and Outlook Add-in to submit phishing reports (no JWT, keyed by X-Phish-Report-Key)
@@ -135,7 +135,7 @@ async def submit_phish_report_keyless(
     Auth: none — org is resolved by the reporter's email domain.
     This endpoint is safe to call without any API key; it resolves the tenant
     automatically from the reporter_email domain, so a single published add-on
-    works across all Helios customers.
+    works across all Himaya customers.
     """
     reporter_email = (body.get("reporter_email") or "").strip().lower()
     if not reporter_email or "@" not in reporter_email:
@@ -217,7 +217,7 @@ async def submit_phish_report_keyless(
         f"reporter={reporter_email} provider={provider}"
     )
 
-    # Apply Helios-Review label (non-blocking)
+    # Apply Himaya-Review label (non-blocking)
     message_id = body.get("message_id")
     if message_id and reporter_email:
         import asyncio
@@ -433,8 +433,8 @@ async def get_outlook_manifest(
   <Version>1.0.0.5</Version>
   <ProviderName>Himaya Technologies</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="Helios Phish Reporter"/>
-  <Description DefaultValue="Report suspicious emails to your Helios security platform"/>
+  <DisplayName DefaultValue="Himaya Phish Reporter"/>
+  <Description DefaultValue="Report suspicious emails to your Himaya security platform"/>
   <IconUrl DefaultValue="https://app.himaya.ai/himaya-3-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://app.himaya.ai/himaya-3-80.png"/>
   <SupportUrl DefaultValue="https://app.himaya.ai"/>
@@ -504,11 +504,11 @@ async def get_outlook_manifest(
         <bt:Url id="Taskpane.Url" DefaultValue="{taskpane_url}"/>
       </bt:Urls>
       <bt:ShortStrings>
-        <bt:String id="Group.Label" DefaultValue="Helios Security"/>
+        <bt:String id="Group.Label" DefaultValue="Himaya Security"/>
         <bt:String id="Button.Label" DefaultValue="Report Phishing"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="Button.Tooltip" DefaultValue="Report this email as suspicious to your Helios security platform."/>
+        <bt:String id="Button.Tooltip" DefaultValue="Report this email as suspicious to your Himaya security platform."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
@@ -534,7 +534,7 @@ TASKPANE_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://app.himaya.ai; script-src 'self' 'unsafe-inline' https://appsforoffice.microsoft.com https://ajax.aspnetcdn.com; style-src 'self' 'unsafe-inline'; img-src 'self' https://app.himaya.ai data:; connect-src 'self' https://app.himaya.ai https://appsforoffice.microsoft.com;"/>
-<title>Helios Phish Reporter</title>
+<title>Himaya Phish Reporter</title>
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -560,7 +560,7 @@ body { font-family: 'Segoe UI', -apple-system, Arial, sans-serif; background: #f
 <body>
 <div class="header">
   <div>
-    <div class="header-text">Helios Phish Reporter</div>
+    <div class="header-text">Himaya Phish Reporter</div>
     <div class="header-sub">Himaya Technologies</div>
   </div>
 </div>
@@ -570,7 +570,7 @@ body { font-family: 'Segoe UI', -apple-system, Arial, sans-serif; background: #f
   <button class="btn-report" id="reportBtn" disabled onclick="reportPhishing()">Report as Phishing</button>
   <div class="status" id="status"></div>
 </div>
-<div class="footer">Helios by <a href="https://app.himaya.ai" target="_blank">Himaya Technologies</a></div>
+<div class="footer">Himaya by <a href="https://app.himaya.ai" target="_blank">Himaya Technologies</a></div>
 <script>
 var HELIOS_API = 'https://app.himaya.ai';
 function getKey() { try { return new URLSearchParams(window.location.search).get('key') || ''; } catch(e) { return ''; } }

@@ -1,5 +1,5 @@
 """
-Helios Azure Connector Router — manages Azure subscription integrations and
+Himaya Azure Connector Router — manages Azure subscription integrations and
 CSPM scanning via the unified CSPM engine.
 """
 from __future__ import annotations

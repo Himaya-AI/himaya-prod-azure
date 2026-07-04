@@ -1,5 +1,5 @@
 """
-Pushes Himaya Helios DLP policies downstream to Microsoft 365 tenant as
+Pushes Himaya DLP policies downstream to Microsoft 365 tenant as
 Exchange Online transport rules via the Microsoft Graph API.
 
 In production: calls Graph API / Exchange Online PowerShell REST.
@@ -49,7 +49,7 @@ class M365PolicyPusher:
     # ── Transport Rule CRUD ────────────────────────────────────────────────────
 
     async def create_transport_rule(self, policy: dict, org_id: str) -> dict:
-        """Create Exchange Online transport rule from Helios DLP policy."""
+        """Create Exchange Online transport rule from Himaya DLP policy."""
         rule_config = self._translate_policy_to_transport_rule(policy)
 
         if self.mock_mode:
@@ -164,7 +164,7 @@ class M365PolicyPusher:
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
-                    f"{GRAPH}/admin/exchange/transportRules?$filter=startsWith(name,'HimayaHelios-')",
+                    f"{GRAPH}/admin/exchange/transportRules?$filter=startsWith(name,'HimayaHimaya-')",
                     headers={"Authorization": f"Bearer {self.access_token}"},
                 )
                 if resp.status_code == 200:
@@ -209,13 +209,13 @@ class M365PolicyPusher:
     # ── Policy → Transport Rule Translation ────────────────────────────────────
 
     def _translate_policy_to_transport_rule(self, policy: dict) -> dict:
-        """Convert Himaya Helios DLP policy to M365 Exchange transport rule format."""
+        """Convert Himaya DLP policy to M365 Exchange transport rule format."""
         action = policy.get("action", "WARN")
         policy_name = policy.get("name", "Unnamed Policy")
         custom_keywords: list = policy.get("custom_keywords") or []
         custom_regex: list = policy.get("custom_regex") or []
 
-        # Map Helios action → Exchange transport rule action
+        # Map Himaya action → Exchange transport rule action
         action_map = {
             "BLOCK": "delete",
             "BLOCK_DELETE": "delete",
@@ -255,7 +255,7 @@ class M365PolicyPusher:
             rule_actions.append({"type": "delete"})
         elif rule_action == "quarantine":
             rule_actions.append({"type": "quarantine"})
-            rule_actions.append({"type": "notifyRecipient", "message": "Your email has been held for DLP review by Himaya Helios."})
+            rule_actions.append({"type": "notifyRecipient", "message": "Your email has been held for DLP review by Himaya."})
         elif rule_action == "prepend_disclaimer":
             rule_actions.append({
                 "type": "prependDisclaimer",
@@ -273,12 +273,12 @@ class M365PolicyPusher:
             })
 
         return {
-            "name": f"HimayaHelios-{policy_name[:60]}",
+            "name": f"HimayaHimaya-{policy_name[:60]}",
             "priority": 50,  # Medium priority, below critical security rules
             "enabled": policy.get("enabled", True),
             "conditions": conditions,
             "actions": rule_actions,
             "state": "enabled" if policy.get("enabled", True) else "disabled",
             "mode": "enforce",
-            "comments": f"Managed by Himaya Helios DLP · Policy ID: {policy.get('id', 'unknown')}",
+            "comments": f"Managed by Himaya DLP · Policy ID: {policy.get('id', 'unknown')}",
         }

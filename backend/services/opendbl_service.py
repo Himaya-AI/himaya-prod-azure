@@ -81,7 +81,7 @@ async def fetch_and_cache_pack(redis, pack_id: str) -> int:
     url = info["url"]
     try:
         async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Helios/1.0 opendbl-sync"})
+            resp = await client.get(url, headers={"User-Agent": "Himaya/1.0 opendbl-sync"})
             resp.raise_for_status()
             raw = resp.text
     except Exception as e:

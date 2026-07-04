@@ -372,15 +372,15 @@ async def invite_user(
             _org = org_result.scalar_one_or_none()
             org_name = _org.name if _org else "Your Organization"
             _se(to=req.email.lower(),
-                subject=f"Your Helios access credentials — {org_name}",
+                subject=f"Your Himaya access credentials — {org_name}",
                 html_body=f"""<div style="font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;background:#111117;border-radius:12px;padding:32px;border:1px solid #1e293b;">
                   <h2 style="color:#e2e8f0;">Access credentials resent</h2>
-                  <p style="color:#64748b;">Your login details for <strong style="color:#e2e8f0;">{org_name}</strong> on Helios:</p>
+                  <p style="color:#64748b;">Your login details for <strong style="color:#e2e8f0;">{org_name}</strong> on Himaya:</p>
                   <div style="background:#0d1117;border-radius:8px;padding:16px;border:1px solid #1e293b;margin:16px 0;">
                     <div style="color:#e2e8f0;font-size:13px;">Email: <strong>{req.email.lower()}</strong></div>
                     <div style="color:#e2e8f0;font-size:13px;margin-top:4px;">Password: <strong style="font-family:monospace;background:#1e293b;padding:2px 6px;border-radius:4px;">{temp_password}</strong></div>
                   </div>
-                  <a href="https://app.himaya.ai/login" style="display:inline-block;background:#3b6ef6;color:white;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Log in to Helios →</a>
+                  <a href="https://app.himaya.ai/login" style="display:inline-block;background:#3b6ef6;color:white;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Log in to Himaya →</a>
                 </div>""")
         except Exception: pass
         await db.commit()
@@ -416,7 +416,7 @@ async def invite_user(
             <div style="width:40px;height:40px;background:linear-gradient(135deg,#3b6ef6,#8b5cf6);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;">
               <span style="color:white;font-size:20px;font-weight:900;">H</span>
             </div>
-            <h2 style="color:#e2e8f0;font-size:18px;margin:0;">You've been invited to Helios</h2>
+            <h2 style="color:#e2e8f0;font-size:18px;margin:0;">You've been invited to Himaya</h2>
             <p style="color:#64748b;font-size:13px;margin-top:6px;">{org_name} has added you as a {req.role}.</p>
           </div>
           <div style="background:#0d1117;border-radius:8px;padding:16px;border:1px solid #1e293b;margin-bottom:20px;">
@@ -424,10 +424,10 @@ async def invite_user(
             <div style="color:#e2e8f0;font-size:13px;">Email: <strong>{req.email}</strong></div>
             <div style="color:#e2e8f0;font-size:13px;margin-top:4px;">Password: <strong style="font-family:monospace;background:#1e293b;padding:2px 6px;border-radius:4px;">{temp_password}</strong></div>
           </div>
-          <a href="https://app.himaya.ai/login" style="display:inline-block;background:#3b6ef6;color:white;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Log in to Helios →</a>
+          <a href="https://app.himaya.ai/login" style="display:inline-block;background:#3b6ef6;color:white;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:600;">Log in to Himaya →</a>
           <p style="color:#475569;font-size:11px;margin-top:20px;">Please change your password after first login. This invite was sent by {current_user.email}.</p>
         </div>"""
-        send_email(to=req.email, subject=f"You've been invited to {org_name} on Helios", html_body=html)
+        send_email(to=req.email, subject=f"You've been invited to {org_name} on Himaya", html_body=html)
     except Exception as _e:
         import logging; logging.getLogger(__name__).warning(f"Invite email failed: {_e}")
 

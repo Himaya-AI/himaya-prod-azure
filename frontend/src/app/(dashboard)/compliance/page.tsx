@@ -374,7 +374,7 @@ export default function CompliancePage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `Himaya-Helios-${LABELS[activeTab]}-Compliance-Report.${format}`
+      a.download = `Himaya-Himaya-${LABELS[activeTab]}-Compliance-Report.${format}`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -612,7 +612,7 @@ export default function CompliancePage() {
                 <TrendingUp size={11} className="text-[#3b6ef6]" />
               </div>
               <span className="text-[13px] font-semibold text-white">AI Analysis & Findings</span>
-              <span className="text-[11px] text-slate-500">· Helios Compliance Intelligence</span>
+              <span className="text-[11px] text-slate-500">· Himaya Compliance Intelligence</span>
             </div>
             {showAi ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
           </button>
