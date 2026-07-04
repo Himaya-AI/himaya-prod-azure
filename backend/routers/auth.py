@@ -101,6 +101,11 @@ async def register(
     req: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    if not settings.ALLOW_SELF_REGISTRATION:
+        raise HTTPException(
+            status_code=403,
+            detail="Self-registration is disabled. Contact sales@himaya.ai to get onboarded.",
+        )
     # Check if org domain already exists
     existing_org = await db.execute(select(Organization).where(Organization.domain == req.domain))
     if existing_org.scalar_one_or_none():

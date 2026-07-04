@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 SES_CLIENT = boto3.client("ses", region_name=os.getenv("SES_REGION", "us-east-1"))
 AZURE_COMMUNICATION_CONNECTION_STRING = os.getenv("AZURE_COMMUNICATION_CONNECTION_STRING", "")
-FROM_EMAIL = "noreply@himaya.ai"
+FROM_EMAIL = os.getenv("EMAIL_FROM", "noreply@himaya.ai")
 FROM_NAME = "Himaya Helios"
 REPLY_TO = "support@himaya.ai"
 

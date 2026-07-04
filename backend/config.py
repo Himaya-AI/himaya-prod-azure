@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     VENDOR_ADMIN_EMAIL: str = "adnan@himaya.ai"
     VENDOR_ADMIN_PASSWORD: str = ""  # Required: set via env var
 
+    # Tenant provisioning is vendor-managed only. Self-registration is disabled
+    # in production; new orgs are created via the vendor admin portal.
+    ALLOW_SELF_REGISTRATION: bool = False
+    # Comma-separated IPs/CIDRs allowed to reach the vendor admin portal + API.
+    # Empty = admin API is fully disabled (fail-closed).
+    ADMIN_IP_ALLOWLIST: str = ""
+    # Sender address for transactional email (must be verified in ACS/SES)
+    EMAIL_FROM: str = "noreply@himaya.ai"
+
     # Microservices (graph trust scoring + reputation threat intel)
     GRAPH_SERVICE_URL: str = "http://localhost:8001"
     REPUTATION_SERVICE_URL: str = "http://localhost:8080"

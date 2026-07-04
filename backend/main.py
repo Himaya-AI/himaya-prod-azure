@@ -2,6 +2,7 @@
 Himaya Helios - FastAPI Application Entry Point
 """
 import asyncio
+import ipaddress as _ipaddress
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -2013,6 +2014,48 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=422,
         content={"detail": exc.errors(), "body": str(exc.body)[:200] if exc.body else None},
     )
+
+# Vendor admin IP allowlist — fail-closed. Only IPs/CIDRs in ADMIN_IP_ALLOWLIST
+# may reach /api/admin/*. Client IP comes from Front Door (X-Azure-ClientIP)
+# with X-Forwarded-For fallback for direct Container App ingress.
+def _parse_admin_allowlist() -> list:
+    nets = []
+    for part in (settings.ADMIN_IP_ALLOWLIST or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            nets.append(_ipaddress.ip_network(part if "/" in part else f"{part}/32", strict=False))
+        except ValueError:
+            logger.warning(f"ADMIN_IP_ALLOWLIST: skipping invalid entry '{part}'")
+    return nets
+
+_ADMIN_ALLOWED_NETS = _parse_admin_allowlist()
+
+def _client_ip(request: Request) -> str:
+    ip = request.headers.get("x-azure-clientip", "")
+    if not ip:
+        fwd = request.headers.get("x-forwarded-for", "")
+        ip = fwd.split(",")[0].strip() if fwd else ""
+    if not ip and request.client:
+        ip = request.client.host
+    return ip
+
+@app.middleware("http")
+async def admin_ip_allowlist_middleware(request: Request, call_next):
+    if request.url.path.startswith("/api/admin"):
+        ip_str = _client_ip(request)
+        allowed = False
+        if _ADMIN_ALLOWED_NETS and ip_str:
+            try:
+                addr = _ipaddress.ip_address(ip_str)
+                allowed = any(addr in net for net in _ADMIN_ALLOWED_NETS)
+            except ValueError:
+                allowed = False
+        if not allowed:
+            logger.warning(f"Admin API blocked for IP '{ip_str}' on {request.url.path}")
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+    return await call_next(request)
 
 # CORS Middleware
 app.add_middleware(
