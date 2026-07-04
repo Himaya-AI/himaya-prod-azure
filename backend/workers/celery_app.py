@@ -33,6 +33,12 @@ celery_app.conf.update(
     task_track_started=True,
     worker_prefetch_multiplier=1,
     task_acks_late=True,
+    # Azure Managed Redis runs in cluster mode: pidbox/gossip channels use
+    # multi-key ops that violate cluster slot hashing. Task queue + results
+    # are single-key and unaffected.
+    worker_enable_remote_control=False,
+    worker_send_task_events=False,
+    task_send_sent_event=False,
 )
 
 
