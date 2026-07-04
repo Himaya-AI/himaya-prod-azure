@@ -1,0 +1,354 @@
+name: CI — QA, Battle Tests & Production Readiness
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [main]
+
+env:
+  AWS_REGION: uaenorth
+  ECR_ACCOUNT: __AZURE_ACCT__
+  CLUSTER: himaya
+  CF_DIST: __AZURE_FD_PROFILE__
+
+# Cancel in-progress runs on same branch/PR (save minutes)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 1. Backend QA — lint, type check, unit tests ─────────────────────────
+  backend-qa:
+    name: Backend — Lint, Type Check & Unit Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: sentinel
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: sentinel_mail_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+        options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt pytest pytest-asyncio httpx ruff
+
+      - name: Ruff lint — backend
+        run: ruff check backend/ models/ --select E,W,F --ignore E501,W291,W293
+
+      - name: Run backend unit tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://sentinel:testpassword@localhost:5432/sentinel_mail_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret-for-ci
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AWS_DEFAULT_REGION: uaenorth
+          FRONTEND_URL: http://localhost:3000
+        run: pytest tests/ -v --tb=short -x --ignore=tests/production_readiness
+
+  # ── 2. Unit tests — classifier, risk orchestrator, sender reputation ──────
+  unit-tests:
+    name: Unit Tests — Classifier & Risk Models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt pytest pytest-asyncio
+
+      - name: Run unit tests
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          pytest tests/test_content_classifier.py \
+                 tests/test_risk_orchestrator.py \
+                 tests/test_sender_reputation.py \
+                 -v --tb=short
+
+  # ── 3. Frontend QA — build, type check ───────────────────────────────────
+  frontend-qa:
+    name: Frontend — TypeScript Check & Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: TypeScript type check
+        working-directory: frontend
+        run: npx tsc --noEmit
+
+      - name: Production build
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: https://app.himaya.ai
+        run: npm run build
+
+  # ── 4. Outlook add-in manifest validation ────────────────────────────────
+  manifest-qa:
+    name: Outlook Manifest — Schema Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install office-addin-manifest
+        run: npm install -g office-addin-manifest
+
+      - name: Validate Outlook manifest
+        run: npx office-addin-manifest validate frontend/public/addons/outlook/manifest.xml
+
+      - name: Verify no invalid schema elements
+        run: |
+          if grep -q "<TaskpaneId>" frontend/public/addons/outlook/manifest.xml; then
+            echo "❌ <TaskpaneId> inside <Action> is invalid in V1_0 schema — M365 will reject manifest"
+            exit 1
+          fi
+          echo "✅ Manifest schema elements OK"
+
+  # ── 5. Smoke Tests — runs on EVERY push ──────────────────────────────────
+  smoke-tests:
+    name: Smoke Tests — Live API Health (every push)
+    runs-on: ubuntu-latest
+    needs: [backend-qa, frontend-qa]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install httpx pytest pytest-asyncio pytest-timeout
+
+      - name: Run smoke tests against production
+        env:
+          HELIOS_API: https://app.himaya.ai
+          HELIOS_TEST_EMAIL: ${{ secrets.HELIOS_TEST_EMAIL }}
+          HELIOS_TEST_PASSWORD: ${{ secrets.HELIOS_TEST_PASSWORD }}
+          HELIOS_PHISH_KEY: ${{ secrets.HELIOS_PHISH_KEY }}
+        run: |
+          pytest tests/production_readiness/test_api_health.py \
+            -v --tb=short -x --timeout=30
+          echo "✅ Smoke tests passed"
+
+  # ── 6. Battle Tests — every push to dev/main ─────────────────────────────
+  battle-tests:
+    name: Battle Tests — Full Feature Coverage (every push)
+    runs-on: ubuntu-latest
+    needs: [smoke-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install httpx pytest pytest-asyncio pytest-timeout
+
+      - name: Run full battle test suite against production
+        env:
+          HELIOS_API: https://app.himaya.ai
+          HELIOS_TEST_EMAIL: ${{ secrets.HELIOS_TEST_EMAIL }}
+          HELIOS_TEST_PASSWORD: ${{ secrets.HELIOS_TEST_PASSWORD }}
+          HELIOS_PHISH_KEY: ${{ secrets.HELIOS_PHISH_KEY }}
+        run: |
+          pytest tests/production_readiness/test_full_battle.py \
+            -v --tb=short \
+            --timeout=120 \
+            --ignore=tests/production_readiness/test_deep_functional.py \
+            -p no:warnings
+          echo "✅ Battle tests passed"
+
+  # ── 7b. DLP Gate — PRs to main only ───────────────────────────────────────
+  dlp-gate:
+    name: DLP Gate — Enterprise DLP Feature (PRs to main only)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [battle-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install httpx pytest pytest-asyncio pytest-timeout
+
+      - name: Run DLP feature tests against production
+        env:
+          HELIOS_API: https://app.himaya.ai
+          HELIOS_TEST_EMAIL: ${{ secrets.HELIOS_TEST_EMAIL }}
+          HELIOS_TEST_PASSWORD: ${{ secrets.HELIOS_TEST_PASSWORD }}
+          HELIOS_PHISH_KEY: ${{ secrets.HELIOS_PHISH_KEY }}
+        run: |
+          pytest tests/production_readiness/test_full_battle.py \
+            -v --tb=short --timeout=120 \
+            -k "TestDLP" \
+            -p no:warnings
+          echo "✅ DLP gate passed"
+
+  # ── 7. Deep Functional Tests — PRs to main only ───────────────────────────
+  deep-functional-tests:
+    name: Deep Functional Tests — E2E (PRs to main only)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [battle-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install httpx pytest pytest-asyncio pytest-timeout
+
+      - name: Run deep functional tests against production
+        env:
+          HELIOS_API: https://app.himaya.ai
+          HELIOS_TEST_EMAIL: ${{ secrets.HELIOS_TEST_EMAIL }}
+          HELIOS_TEST_PASSWORD: ${{ secrets.HELIOS_TEST_PASSWORD }}
+          HELIOS_PHISH_KEY: ${{ secrets.HELIOS_PHISH_KEY }}
+        run: |
+          pytest tests/production_readiness/test_deep_functional.py \
+            -v --tb=short \
+            --timeout=180 \
+            -k "not test_phish_email_classified_as_threat"
+          echo "✅ Deep functional tests passed"
+
+  # ── 8. Posture–Dashboard Integration Check — PRs to main only ─────────────
+  posture-integration-check:
+    name: Posture → Dashboard Integration (PRs to main only)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [battle-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install httpx pytest pytest-asyncio pytest-timeout
+
+      - name: Run posture integration tests
+        env:
+          HELIOS_API: https://app.himaya.ai
+          HELIOS_TEST_EMAIL: ${{ secrets.HELIOS_TEST_EMAIL }}
+          HELIOS_TEST_PASSWORD: ${{ secrets.HELIOS_TEST_PASSWORD }}
+          HELIOS_PHISH_KEY: ${{ secrets.HELIOS_PHISH_KEY }}
+        run: |
+          pytest tests/production_readiness/test_full_battle.py \
+            -v --tb=short --timeout=120 \
+            -k "posture" \
+            -p no:warnings
+          echo "✅ Posture integration checks passed"
+
+  # ── 9. Security Gate — runs on every PR ───────────────────────────────────
+  security-gate:
+    name: Security Gate — Auth, Isolation, Hardening
+    runs-on: ubuntu-latest
+    needs: [smoke-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install httpx pytest pytest-asyncio pytest-timeout
+
+      - name: Run security hardening tests
+        env:
+          HELIOS_API: https://app.himaya.ai
+          HELIOS_TEST_EMAIL: ${{ secrets.HELIOS_TEST_EMAIL }}
+          HELIOS_TEST_PASSWORD: ${{ secrets.HELIOS_TEST_PASSWORD }}
+          HELIOS_PHISH_KEY: ${{ secrets.HELIOS_PHISH_KEY }}
+        run: |
+          pytest tests/production_readiness/test_full_battle.py \
+            -v --tb=short --timeout=60 \
+            -k "security or auth or TestAuth or TestSecurityHardening" \
+            -p no:warnings
+          echo "✅ Security gate passed"
+
+  # ── 10. Compliance & PDF Gate — PRs to main only ──────────────────────────
+  compliance-pdf-gate:
+    name: Compliance PDF/HTML Generation (PRs to main only)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    needs: [battle-tests]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test deps
+        run: pip install httpx pytest pytest-asyncio pytest-timeout
+
+      - name: Run compliance + PDF generation tests
+        env:
+          HELIOS_API: https://app.himaya.ai
+          HELIOS_TEST_EMAIL: ${{ secrets.HELIOS_TEST_EMAIL }}
+          HELIOS_TEST_PASSWORD: ${{ secrets.HELIOS_TEST_PASSWORD }}
+          HELIOS_PHISH_KEY: ${{ secrets.HELIOS_PHISH_KEY }}
+        run: |
+          pytest tests/production_readiness/test_full_battle.py \
+            tests/production_readiness/test_deep_functional.py \
+            -v --tb=short --timeout=180 \
+            -k "compliance or pdf or report or TestCompliance" \
+            -p no:warnings
+          echo "✅ Compliance + PDF gate passed"

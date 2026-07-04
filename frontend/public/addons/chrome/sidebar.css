@@ -1,0 +1,211 @@
+/* Helios Gmail Sidebar — injected styles */
+
+#helios-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 300px;
+  height: 100vh;
+  background: #ffffff;
+  border-left: 1px solid #e2e8f0;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+  z-index: 999999;
+  font-family: 'Google Sans', 'Segoe UI', -apple-system, Arial, sans-serif;
+  font-size: 13px;
+  color: #1a1a2e;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.2s ease;
+}
+
+#helios-sidebar.helios-visible {
+  transform: translateX(0);
+}
+
+#helios-sidebar * {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+#helios-header {
+  background: #0f172a;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 2px solid #2563eb;
+  flex-shrink: 0;
+}
+
+#helios-header img {
+  height: 22px;
+}
+
+#helios-header-text {
+  flex: 1;
+}
+
+#helios-header-title {
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+#helios-header-sub {
+  color: #94a3b8;
+  font-size: 10px;
+  margin-top: 1px;
+}
+
+#helios-close {
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: none;
+  border: none;
+}
+
+#helios-close:hover {
+  color: #f8fafc;
+  background: rgba(255,255,255,0.1);
+}
+
+#helios-body {
+  padding: 20px 16px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.helios-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+
+.helios-description {
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  padding: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+}
+
+.helios-btn-report {
+  width: 100%;
+  padding: 10px 16px;
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+  border-radius: 3px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.01em;
+  transition: background 0.15s;
+}
+
+.helios-btn-report:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.helios-btn-report:disabled {
+  background: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.helios-btn-report.helios-success {
+  background: #15803d;
+}
+
+.helios-status {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 3px;
+  font-size: 12px;
+  display: none;
+  border-left: 3px solid transparent;
+  line-height: 1.5;
+}
+
+.helios-status.helios-success {
+  display: block;
+  background: #f0fdf4;
+  border-left-color: #16a34a;
+  color: #15803d;
+}
+
+.helios-status.helios-error {
+  display: block;
+  background: #fef2f2;
+  border-left-color: #dc2626;
+  color: #b91c1c;
+}
+
+.helios-status.helios-warning {
+  display: block;
+  background: #fffbeb;
+  border-left-color: #d97706;
+  color: #92400e;
+}
+
+#helios-footer {
+  padding: 10px 16px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 10px;
+  color: #94a3b8;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+#helios-footer a {
+  color: #3b82f6;
+  text-decoration: none;
+}
+
+/* Toggle button — always visible in Gmail */
+#helios-toggle {
+  position: fixed;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 72px;
+  background: #0f172a;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 999998;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: -2px 0 8px rgba(0,0,0,0.15);
+  transition: background 0.15s, right 0.2s;
+}
+
+#helios-toggle.helios-open {
+  right: 308px;
+}
+
+#helios-toggle:hover {
+  background: #1e293b;
+}
+
+#helios-toggle svg {
+  width: 14px;
+  height: 14px;
+  fill: #f8fafc;
+}

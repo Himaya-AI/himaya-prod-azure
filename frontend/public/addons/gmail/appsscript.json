@@ -1,0 +1,29 @@
+{
+  "timeZone": "UTC",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/gmail.readonly",
+    "https://www.googleapis.com/auth/gmail.modify",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/script.external_request"
+  ],
+  "urlFetchWhitelist": [
+    "https://app.himaya.ai/"
+  ],
+  "addOns": {
+    "common": {
+      "name": "Helios Phish Reporter",
+      "logoUrl": "https://app.himaya.ai/himaya-logo.png",
+      "homepageTrigger": {
+        "runFunction": "onGmailMessageOpen"
+      }
+    },
+    "gmail": {
+      "contextualTriggers": [{
+        "unconditional": {},
+        "onTriggerFunction": "onGmailMessageOpen"
+      }]
+    }
+  }
+}

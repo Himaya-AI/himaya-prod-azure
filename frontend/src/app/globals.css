@@ -1,0 +1,613 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-900: #0a0a0c;
+  --color-brand-800: #121217;
+  --color-brand-700: #1a1a22;
+  --color-brand-accent: #3b6ef6;
+  --color-background: #0a0a0c;
+  --color-foreground: #f0f1f5;
+}
+
+:root {
+  /* Strata-inspired dark theme - softer, more refined */
+  --background: #0a0a0c;
+  --background-secondary: #121217;
+  --foreground: #f0f1f5;
+  --foreground-secondary: #a8aab3;
+  --border: rgba(255,255,255,0.06);
+  --border-strong: rgba(255,255,255,0.10);
+  --card: #121217;
+  --card-hover: #18181f;
+  --accent: #3b6ef6;
+  --accent-hover: #2d5fe0;
+  --accent-subtle: rgba(59,110,246,0.12);
+  --danger: #ef4444;
+  --danger-subtle: rgba(239,68,68,0.12);
+  --success: #10b981;
+  --success-subtle: rgba(16,185,129,0.12);
+  --warning: #f59e0b;
+  --warning-subtle: rgba(245,158,11,0.12);
+  --muted: #6b6e7a;
+  --sidebar-bg: #0d0d10;
+  --input-bg: #0f0f14;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.2), 0 4px 8px rgba(0,0,0,0.15);
+  --shadow-elevated: 0 4px 16px rgba(0,0,0,0.3), 0 8px 32px rgba(0,0,0,0.2);
+}
+
+/* Light mode overrides - Strata-inspired clean light theme */
+html[data-theme="light"] {
+  --background: #f7f8fa;
+  --background-secondary: #ffffff;
+  --foreground: #0f1419;
+  --foreground-secondary: #536471;
+  --border: rgba(0,0,0,0.08);
+  --border-strong: rgba(0,0,0,0.12);
+  --card: #ffffff;
+  --card-hover: #f7f8fa;
+  --accent: #3b6ef6;
+  --accent-hover: #2d5fe0;
+  --accent-subtle: rgba(59,110,246,0.08);
+  --danger: #dc2626;
+  --danger-subtle: rgba(220,38,38,0.08);
+  --success: #059669;
+  --success-subtle: rgba(5,150,105,0.08);
+  --warning: #d97706;
+  --warning-subtle: rgba(217,119,6,0.08);
+  --muted: #6b7280;
+  --sidebar-bg: #ffffff;
+  --input-bg: #f3f4f6;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.06), 0 2px 6px rgba(0,0,0,0.04);
+  --shadow-elevated: 0 4px 12px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+}
+
+html[data-theme="light"] body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Light mode component overrides */
+html[data-theme="light"] .bg-\[\#0c0c0e\] { background: #f4f4f8 !important; }
+html[data-theme="light"] .bg-\[\#141417\] { background: #ffffff !important; }
+html[data-theme="light"] .bg-\[\#1e1e24\] { background: #f0f0f5 !important; }
+html[data-theme="light"] .bg-\[\#0d1117\] { background: #f8f9fc !important; }
+html[data-theme="light"] .bg-\[\#0d1324\] { background: #f8f9fc !important; }
+html[data-theme="light"] .bg-\[\#0d1b2e\] { background: #eef2ff !important; }
+html[data-theme="light"] .text-white { color: #111118 !important; }
+html[data-theme="light"] .text-\[\#e4e4e7\] { color: #1f2937 !important; }
+html[data-theme="light"] .text-\[\#d4d4d8\] { color: #374151 !important; }
+html[data-theme="light"] .text-\[\#a1a1aa\] { color: #6b7280 !important; }
+html[data-theme="light"] .text-\[\#71717a\] { color: #9ca3af !important; }
+html[data-theme="light"] .text-\[\#52525b\] { color: #9ca3af !important; }
+html[data-theme="light"] .border-white\/\[0\.07\] { border-color: rgba(0,0,0,0.08) !important; }
+html[data-theme="light"] .border-white\/\[0\.06\] { border-color: rgba(0,0,0,0.06) !important; }
+html[data-theme="light"] .border-white\/\[0\.05\] { border-color: rgba(0,0,0,0.05) !important; }
+html[data-theme="light"] .bg-\[\#3f3f46\] { background: #d1d5db !important; }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); }
+
+/* Light mode — message trace sender country chip */
+html[data-theme="light"] .bg-slate-800\/60 { background: rgba(0,0,0,0.05) !important; }
+html[data-theme="light"] .border-slate-700\/40 { border-color: rgba(0,0,0,0.12) !important; }
+
+/* Light mode — quarantine detail drawer */
+html[data-theme="light"] .bg-\[\#0d1b2e\] { background: #ffffff !important; }
+html[data-theme="light"] .bg-\[\#0a0f1e\] { background: #f4f6fb !important; }
+html[data-theme="light"] .border-\[\#1a2744\] { border-color: #dde3f0 !important; }
+html[data-theme="light"] .bg-\[\#0a1628\] { background: #eef1f9 !important; }
+html[data-theme="light"] .hover\:bg-\[\#0d1b2e\]:hover { background: #f0f3fa !important; }
+
+/* Light mode — sandbox panel dark cards */
+html[data-theme="light"] .bg-\[\#060d1a\] { background: #f0f3fa !important; }
+html[data-theme="light"] .border-\[\#1a2d5a\]\/60 { border-color: rgba(0,0,0,0.1) !important; }
+html[data-theme="light"] .bg-\[\#0d1b2a\] { background: #f4f6fb !important; }
+
+/* Light mode — People tab member expansion row + chips */
+html[data-theme="light"] .bg-\[\#0e0e11\] { background: #f0f0f7 !important; }
+html[data-theme="light"] .bg-white\/\[0\.04\] { background: rgba(0,0,0,0.06) !important; }
+html[data-theme="light"] .text-slate-400 { color: #4b5563 !important; }
+html[data-theme="light"] .text-slate-500 { color: #6b7280 !important; }
+html[data-theme="light"] .text-slate-600 { color: #9ca3af !important; }
+
+/* Light mode — sidebar & nav */
+html[data-theme="light"] aside { background: #ffffff !important; border-color: rgba(0,0,0,0.08) !important; }
+html[data-theme="light"] aside nav a { color: #6b7280; }
+html[data-theme="light"] aside nav a:hover { background: rgba(0,0,0,0.04) !important; color: #111118; }
+html[data-theme="light"] aside nav a.bg-\[\#3b6ef6\]\/10 { background: rgba(59,110,246,0.12) !important; color: #111118 !important; }
+html[data-theme="light"] aside .border-b,
+html[data-theme="light"] aside .border-t { border-color: rgba(0,0,0,0.08) !important; }
+
+/* Light mode — inputs & selects */
+html[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]),
+html[data-theme="light"] select,
+html[data-theme="light"] textarea {
+  background: #f0f0f7 !important;
+  border-color: rgba(0,0,0,0.12) !important;
+  color: #111118 !important;
+}
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder { color: #9ca3af !important; }
+html[data-theme="light"] input:focus,
+html[data-theme="light"] select:focus,
+html[data-theme="light"] textarea:focus { box-shadow: 0 0 0 2px rgba(59,110,246,0.25) !important; }
+
+/* Light mode — typography */
+html[data-theme="light"] .text-\[\#e4e4e7\],
+html[data-theme="light"] .text-\[\#d4d4d8\],
+html[data-theme="light"] .text-\[\#e2e8f0\] { color: #1f2937 !important; }
+html[data-theme="light"] .text-\[\#a1a1aa\],
+html[data-theme="light"] .text-\[\#94a3b8\] { color: #6b7280 !important; }
+html[data-theme="light"] .text-\[\#71717a\],
+html[data-theme="light"] .text-\[\#52525b\] { color: #9ca3af !important; }
+html[data-theme="light"] label { color: #374151 !important; }
+
+/* Light mode — cards & table rows */
+html[data-theme="light"] .border-white\/\[0\.07\],
+html[data-theme="light"] .border-white\/\[0\.05\],
+html[data-theme="light"] .border-white\/\[0\.08\] { border-color: rgba(0,0,0,0.07) !important; }
+html[data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover { background: rgba(0,0,0,0.03) !important; }
+html[data-theme="light"] .hover\:bg-white\/\[0\.06\]:hover { background: rgba(0,0,0,0.04) !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   COMPREHENSIVE LIGHT MODE — covers all hardcoded dark navy colors
+   used across threats, message-trace, compliance, onboarding pages
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Dark navy panel backgrounds → white/light */
+html[data-theme="light"] .bg-\[\#16213e\]  { background: #ffffff !important; }
+html[data-theme="light"] .bg-\[\#0d1b2a\]  { background: #f5f7fc !important; }
+html[data-theme="light"] .bg-\[\#0d1b2e\]  { background: #f5f7fc !important; }
+html[data-theme="light"] .bg-\[\#0d1117\]  { background: #f8f9fc !important; }
+html[data-theme="light"] .bg-\[\#0d1324\]  { background: #f8f9fc !important; }
+html[data-theme="light"] .bg-\[\#0a0a0f\]  { background: #f0f0f7 !important; }
+html[data-theme="light"] .bg-\[\#1a1a2e\]  { background: #f0f0f7 !important; }
+html[data-theme="light"] .bg-\[\#1e1e24\]  { background: #f0f0f7 !important; }
+html[data-theme="light"] .bg-\[\#12121a\]  { background: #f4f4f8 !important; }
+html[data-theme="light"] .bg-\[\#0f0f12\]  { background: #ffffff !important; }
+html[data-theme="light"] .bg-\[\#0c0c0e\]  { background: #f4f4f8 !important; }
+html[data-theme="light"] .bg-\[\#141417\]  { background: #ffffff !important; }
+html[data-theme="light"] .bg-\[\#111117\]  { background: #ffffff !important; }
+html[data-theme="light"] .bg-\[\#0b0f1f\]  { background: #f0f4ff !important; }
+html[data-theme="light"] .bg-\[\#1a1f3c\]  { background: #e8edff !important; }
+
+/* Dark button/interactive backgrounds → soft light */
+html[data-theme="light"] .bg-\[\#0f3460\]  { background: #dde5f7 !important; }
+html[data-theme="light"] .bg-\[\#0f3460\]\/60 { background: rgba(59,110,246,0.12) !important; }
+html[data-theme="light"] .bg-\[\#16213e\]\/60 { background: rgba(248,249,252,0.9) !important; }
+html[data-theme="light"] .hover\:bg-\[\#0f3460\]:hover { background: #c7d4f5 !important; }
+html[data-theme="light"] .hover\:bg-\[\#0d1b2a\]:hover { background: #eef1f9 !important; }
+/* Removed invalid selector hover/60 */
+
+/* Borders */
+html[data-theme="light"] .border-\[\#0f3460\]      { border-color: rgba(59,110,246,0.2) !important; }
+html[data-theme="light"] .border-\[\#0f3460\]\/50  { border-color: rgba(59,110,246,0.15) !important; }
+html[data-theme="light"] .border-\[\#0f3460\]\/40  { border-color: rgba(59,110,246,0.12) !important; }
+html[data-theme="light"] .border-\[\#0f3460\]\/30  { border-color: rgba(59,110,246,0.1) !important; }
+html[data-theme="light"] .border-\[\#0f3460\]\/20  { border-color: rgba(59,110,246,0.08) !important; }
+html[data-theme="light"] .border-\[\#0f3460\]\/60  { border-color: rgba(59,110,246,0.18) !important; }
+html[data-theme="light"] .border-\[\#1a2d5a\]\/40  { border-color: rgba(59,110,246,0.1) !important; }
+html[data-theme="light"] .border-\[\#1a2d5a\]\/30  { border-color: rgba(59,110,246,0.08) !important; }
+html[data-theme="light"] .border-\[\#1a1f3c\]      { border-color: rgba(59,110,246,0.15) !important; }
+
+/* Slate text colors — must be dark in light mode */
+html[data-theme="light"] .text-slate-100 { color: #111827 !important; }
+html[data-theme="light"] .text-slate-200 { color: #1f2937 !important; }
+html[data-theme="light"] .text-slate-300 { color: #374151 !important; }
+html[data-theme="light"] .text-slate-400 { color: #6b7280 !important; }
+html[data-theme="light"] .text-slate-500 { color: #9ca3af !important; }
+html[data-theme="light"] .placeholder-slate-500::placeholder { color: #9ca3af !important; }
+html[data-theme="light"] .placeholder-slate-600::placeholder { color: #9ca3af !important; }
+
+/* Buttons — ensure text is readable when bg changes to light */
+html[data-theme="light"] .bg-\[\#0f3460\] span,
+html[data-theme="light"] .bg-\[\#0f3460\] svg,
+html[data-theme="light"] button.bg-\[\#0f3460\] { color: #1e3a8a !important; }
+html[data-theme="light"] .hover\:bg-\[\#0f3460\]:hover { color: #1e3a8a !important; }
+
+/* Tables — header rows */
+html[data-theme="light"] thead tr,
+html[data-theme="light"] .border-b.border-\[\#0f3460\]\/40 { border-color: rgba(0,0,0,0.06) !important; background: #f8f9fc !important; }
+html[data-theme="light"] tbody tr:hover { background: #f5f7fc !important; }
+
+/* Scrollbar in light mode */
+html[data-theme="light"] ::-webkit-scrollbar-track { background: #f0f0f7; }
+
+/* Make sure layout dashboard wrapper uses theme bg */
+html[data-theme="light"] .min-h-screen { background-color: #f4f4f8 !important; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+* { box-sizing: border-box; }
+
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIGHT MODE ADDENDUM — compliance / integrations / onboarding panels
+   + filter pills + color-coded text badges
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Compliance / integrations specific dark blues not covered above */
+html[data-theme="light"] .bg-\[\#0d1628\]         { background: #f0f4ff !important; }
+html[data-theme="light"] .bg-\[\#0a1628\]         { background: #e8f0ff !important; }
+html[data-theme="light"] .hover\:bg-\[\#0a1628\]:hover { background: #dce8ff !important; }
+html[data-theme="light"] .border-\[\#1a2744\]     { border-color: rgba(59,110,246,0.18) !important; }
+html[data-theme="light"] .border-\[\#1a2744\]\/50 { border-color: rgba(59,110,246,0.14) !important; }
+html[data-theme="light"] .border-\[\#1a2744\]\/60 { border-color: rgba(59,110,246,0.18) !important; }
+html[data-theme="light"] .border-\[\#1a2744\]\/30 { border-color: rgba(59,110,246,0.08) !important; }
+html[data-theme="light"] .divide-\[\#1a2744\]\/60 { border-color: rgba(59,110,246,0.14) !important; }
+
+/* Filter pill inactive backgrounds → pastel */
+html[data-theme="light"] .bg-red-900\/30            { background: #fee2e2 !important; }
+html[data-theme="light"] .bg-orange-900\/30         { background: #ffedd5 !important; }
+html[data-theme="light"] .bg-amber-900\/30          { background: #fef3c7 !important; }
+html[data-theme="light"] .bg-purple-900\/30         { background: #f3e8ff !important; }
+html[data-theme="light"] .bg-blue-900\/30           { background: #dbeafe !important; }
+html[data-theme="light"] .bg-yellow-900\/20         { background: #fef9c3 !important; }
+html[data-theme="light"] .bg-teal-900\/30           { background: #ccfbf1 !important; }
+html[data-theme="light"] .bg-pink-900\/30           { background: #fce7f3 !important; }
+html[data-theme="light"] .bg-slate-800\/40          { background: rgba(226,232,240,0.7) !important; }
+html[data-theme="light"] .hover\:bg-red-900\/50:hover    { background: #fca5a5 !important; }
+html[data-theme="light"] .hover\:bg-orange-900\/50:hover { background: #fdba74 !important; }
+html[data-theme="light"] .hover\:bg-amber-900\/50:hover  { background: #fcd34d !important; }
+html[data-theme="light"] .hover\:bg-purple-900\/50:hover { background: #d8b4fe !important; }
+html[data-theme="light"] .hover\:bg-blue-900\/50:hover   { background: #93c5fd !important; }
+html[data-theme="light"] .hover\:bg-teal-900\/50:hover   { background: #99f6e4 !important; }
+html[data-theme="light"] .hover\:bg-pink-900\/50:hover   { background: #f9a8d4 !important; }
+html[data-theme="light"] .hover\:bg-slate-800\/60:hover  { background: rgba(203,213,225,0.8) !important; }
+
+/* Filter pill inactive BORDERS */
+html[data-theme="light"] .border-red-700\/40     { border-color: #fca5a5 !important; }
+html[data-theme="light"] .border-orange-700\/40  { border-color: #fdba74 !important; }
+html[data-theme="light"] .border-amber-700\/40   { border-color: #fcd34d !important; }
+html[data-theme="light"] .border-purple-700\/40  { border-color: #d8b4fe !important; }
+html[data-theme="light"] .border-blue-700\/40    { border-color: #93c5fd !important; }
+html[data-theme="light"] .border-yellow-700\/40  { border-color: #fde68a !important; }
+html[data-theme="light"] .border-teal-700\/40    { border-color: #5eead4 !important; }
+html[data-theme="light"] .border-pink-700\/40    { border-color: #f9a8d4 !important; }
+html[data-theme="light"] .border-slate-600\/40   { border-color: rgba(100,116,139,0.3) !important; }
+
+/* Filter pill inactive TEXT — dark enough to read on pastel bg */
+html[data-theme="light"] .text-red-300    { color: #b91c1c !important; }
+html[data-theme="light"] .text-orange-300 { color: #c2410c !important; }
+html[data-theme="light"] .text-amber-300  { color: #92400e !important; }
+html[data-theme="light"] .text-purple-300 { color: #6d28d9 !important; }
+html[data-theme="light"] .text-blue-300   { color: #1d4ed8 !important; }
+html[data-theme="light"] .text-yellow-300 { color: #854d0e !important; }
+html[data-theme="light"] .text-teal-300   { color: #0f766e !important; }
+html[data-theme="light"] .text-pink-300   { color: #be185d !important; }
+
+/* Filter pill ACTIVE state backgrounds */
+html[data-theme="light"] .bg-red-700\/50    { background: #fecaca !important; }
+html[data-theme="light"] .bg-orange-700\/50 { background: #fed7aa !important; }
+html[data-theme="light"] .bg-amber-700\/50  { background: #fde68a !important; }
+html[data-theme="light"] .bg-purple-700\/50 { background: #e9d5ff !important; }
+html[data-theme="light"] .bg-blue-700\/50   { background: #bfdbfe !important; }
+html[data-theme="light"] .bg-yellow-700\/40 { background: #fef08a !important; }
+html[data-theme="light"] .bg-teal-700\/50   { background: #99f6e4 !important; }
+html[data-theme="light"] .bg-pink-700\/50   { background: #fbcfe8 !important; }
+html[data-theme="light"] .bg-slate-700\/60  { background: rgba(203,213,225,0.9) !important; }
+
+/* Filter pill ACTIVE state text */
+html[data-theme="light"] .text-red-200    { color: #991b1b !important; }
+html[data-theme="light"] .text-orange-200 { color: #9a3412 !important; }
+html[data-theme="light"] .text-amber-200  { color: #78350f !important; }
+html[data-theme="light"] .text-purple-200 { color: #5b21b6 !important; }
+html[data-theme="light"] .text-blue-200   { color: #1e40af !important; }
+html[data-theme="light"] .text-yellow-200 { color: #713f12 !important; }
+html[data-theme="light"] .text-teal-200   { color: #115e59 !important; }
+html[data-theme="light"] .text-pink-200   { color: #9d174d !important; }
+
+/* Compliance tab text colours (AI analysis section) */
+html[data-theme="light"] .text-\[\#93b4fd\] { color: #1d4ed8 !important; }
+html[data-theme="light"] .text-\[\#64748b\] { color: #475569 !important; }
+html[data-theme="light"] .bg-\[\#3b6ef6\]\/\[0\.06\] { background: rgba(59,110,246,0.06) !important; }
+
+/* Ensure link/action text in integrations stays readable */
+html[data-theme="light"] .text-\[\#3b6ef6\] { color: #1d4ed8 !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIGHT MODE — message-trace Helios status pills + threat badges
+   The HELIOS_COLORS and THREAT_COLORS maps use /50 and /70 opacity
+   variants (bg-*-900/50, bg-*-900/70) and /50 border variants that
+   were not previously covered. Without these the pills show as
+   semi-transparent dark blobs on a light background.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Backgrounds: /50 opacity */
+html[data-theme="light"] .bg-green-900\/50    { background: #dcfce7 !important; }
+html[data-theme="light"] .bg-yellow-900\/50   { background: #fef9c3 !important; }
+html[data-theme="light"] .bg-orange-900\/50   { background: #ffedd5 !important; }
+html[data-theme="light"] .bg-red-900\/50      { background: #fee2e2 !important; }
+html[data-theme="light"] .bg-red-900\/70      { background: #fecaca !important; }
+html[data-theme="light"] .bg-blue-900\/50     { background: #dbeafe !important; }
+html[data-theme="light"] .bg-purple-900\/50   { background: #f3e8ff !important; }
+html[data-theme="light"] .bg-pink-900\/50     { background: #fce7f3 !important; }
+
+/* Borders: /50 opacity */
+html[data-theme="light"] .border-green-700\/50   { border-color: #86efac !important; }
+html[data-theme="light"] .border-yellow-700\/50  { border-color: #fde68a !important; }
+html[data-theme="light"] .border-orange-700\/50  { border-color: #fdba74 !important; }
+html[data-theme="light"] .border-red-700\/50     { border-color: #fca5a5 !important; }
+html[data-theme="light"] .border-red-600\/50     { border-color: #fca5a5 !important; }
+html[data-theme="light"] .border-blue-700\/50    { border-color: #93c5fd !important; }
+html[data-theme="light"] .border-purple-700\/50  { border-color: #d8b4fe !important; }
+html[data-theme="light"] .border-pink-700\/50    { border-color: #f9a8d4 !important; }
+
+/* Text colours for badges in light mode */
+html[data-theme="light"] .text-green-300    { color: #15803d !important; }
+html[data-theme="light"] .text-green-400    { color: #16a34a !important; }
+html[data-theme="light"] .text-amber-400    { color: #d97706 !important; }
+html[data-theme="light"] .text-red-200      { color: #991b1b !important; }
+
+/* Hover states for the /50 backgrounds (action buttons in detail panel) */
+html[data-theme="light"] .hover\:bg-green-900\/40:hover    { background: #bbf7d0 !important; }
+html[data-theme="light"] .hover\:bg-orange-900\/40:hover   { background: #fed7aa !important; }
+html[data-theme="light"] .hover\:bg-red-900\/40:hover      { background: #fecaca !important; }
+html[data-theme="light"] .hover\:bg-\[\#3b6ef6\]\/20:hover  { background: rgba(59,110,246,0.15) !important; }
+
+/* Email flow timeline (ok/flagged/blocked step containers) */
+html[data-theme="light"] .bg-green-900\/20   { background: #f0fdf4 !important; }
+html[data-theme="light"] .bg-amber-900\/20   { background: #fffbeb !important; }
+html[data-theme="light"] .bg-red-900\/20     { background: #fff1f2 !important; }
+html[data-theme="light"] .border-green-700\/30  { border-color: #bbf7d0 !important; }
+html[data-theme="light"] .border-amber-700\/30  { border-color: #fde68a !important; }
+html[data-theme="light"] .border-red-700\/30    { border-color: #fecaca !important; }
+
+/* Score bar track */
+html[data-theme="light"] .bg-slate-700 { background: #e2e8f0 !important; }
+
+/* Score bar fills — retain colour semantics */
+html[data-theme="light"] .bg-green-500  { background: #22c55e !important; }
+html[data-theme="light"] .bg-amber-500  { background: #f59e0b !important; }
+html[data-theme="light"] .bg-red-500    { background: #ef4444 !important; }
+
+/* AI assessment box */
+html[data-theme="light"] .border-\[\#3b6ef6\]\/30  { border-color: rgba(59,110,246,0.25) !important; }
+html[data-theme="light"] .bg-\[\#3b6ef6\]\/5        { background: rgba(59,110,246,0.05) !important; }
+
+/* Auth result cards (SPF/DKIM/DMARC) */
+html[data-theme="light"] .bg-green-900\/20.border-green-700\/40  { background: #f0fdf4 !important; border-color: #bbf7d0 !important; }
+html[data-theme="light"] .bg-red-900\/20.border-red-700\/40      { background: #fff1f2 !important; border-color: #fecaca !important; }
+html[data-theme="light"] .border-green-700\/40  { border-color: #86efac !important; }
+html[data-theme="light"] .border-red-700\/40    { border-color: #fca5a5 !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   STRATA-STYLE GLOBAL COMPONENTS
+   Modern, clean enterprise aesthetic
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Cards - softer, more elevated feel */
+.strata-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: all 0.15s ease;
+}
+
+.strata-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-elevated);
+}
+
+/* Inputs - refined with subtle inner shadow */
+.strata-input {
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--foreground);
+  transition: all 0.15s ease;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.strata-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-subtle), inset 0 1px 2px rgba(0,0,0,0.06);
+}
+
+.strata-input::placeholder {
+  color: var(--muted);
+}
+
+/* Buttons - more refined with subtle gradient */
+.strata-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.strata-btn-primary {
+  background: linear-gradient(180deg, #4a7eff 0%, var(--accent) 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1), 0 2px 4px rgba(59,110,246,0.2);
+}
+
+.strata-btn-primary:hover {
+  background: linear-gradient(180deg, #5a8aff 0%, var(--accent-hover) 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.12), 0 4px 8px rgba(59,110,246,0.25);
+  transform: translateY(-1px);
+}
+
+.strata-btn-secondary {
+  background: var(--card);
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+}
+
+.strata-btn-secondary:hover {
+  background: var(--card-hover);
+  border-color: var(--accent);
+}
+
+/* Badge - cleaner with pill shape */
+.strata-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 100px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.strata-badge-success {
+  background: var(--success-subtle);
+  color: var(--success);
+}
+
+.strata-badge-warning {
+  background: var(--warning-subtle);
+  color: var(--warning);
+}
+
+.strata-badge-danger {
+  background: var(--danger-subtle);
+  color: var(--danger);
+}
+
+.strata-badge-info {
+  background: var(--accent-subtle);
+  color: var(--accent);
+}
+
+/* Table - cleaner with subtle row hover */
+.strata-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.strata-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+}
+
+.strata-table td {
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--foreground);
+  border-bottom: 1px solid var(--border);
+}
+
+.strata-table tbody tr {
+  transition: background 0.1s ease;
+}
+
+.strata-table tbody tr:hover {
+  background: var(--card-hover);
+}
+
+/* Section headers */
+.strata-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+
+/* Stat cards */
+.strata-stat {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.strata-stat-value {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--foreground);
+  line-height: 1.2;
+}
+
+.strata-stat-label {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* Tabs - underline style */
+.strata-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.strata-tab {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.strata-tab:hover {
+  color: var(--foreground);
+}
+
+.strata-tab-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* Sidebar nav items - cleaner */
+.strata-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  border-radius: var(--radius-md);
+  transition: all 0.15s ease;
+}
+
+.strata-nav-item:hover {
+  color: var(--foreground);
+  background: var(--accent-subtle);
+}
+
+.strata-nav-item-active {
+  color: var(--foreground);
+  background: var(--accent-subtle);
+}
+
+.strata-nav-item-active .nav-icon {
+  color: var(--accent);
+}

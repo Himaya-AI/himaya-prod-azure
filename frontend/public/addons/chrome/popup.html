@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8"/>
+<title>Helios</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 260px;
+    font-family: 'Google Sans', 'Segoe UI', Arial, sans-serif;
+    font-size: 13px;
+    color: #1a1a2e;
+    background: #ffffff;
+  }
+  .header {
+    background: #0f172a;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 2px solid #2563eb;
+  }
+  .header img { height: 22px; }
+  .header-title { color: #f8fafc; font-size: 13px; font-weight: 600; }
+  .header-sub { color: #94a3b8; font-size: 10px; margin-top: 1px; }
+  .body { padding: 16px; }
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 12px;
+    color: #475569;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #cbd5e1;
+    flex-shrink: 0;
+  }
+  .dot.active { background: #16a34a; }
+  .dot.error { background: #dc2626; }
+  .label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    margin-bottom: 6px;
+  }
+  input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 3px;
+    font-size: 12px;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+    outline: none;
+  }
+  input[type="text"]:focus { border-color: #2563eb; }
+  .btn {
+    width: 100%;
+    padding: 8px 16px;
+    background: #2563eb;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover { background: #1d4ed8; }
+  .msg {
+    margin-top: 8px;
+    font-size: 11px;
+    padding: 6px 8px;
+    border-radius: 3px;
+    display: none;
+  }
+  .msg.success { display: block; background: #f0fdf4; color: #15803d; }
+  .msg.error { display: block; background: #fef2f2; color: #b91c1c; }
+  .footer {
+    padding: 10px 16px;
+    border-top: 1px solid #e2e8f0;
+    font-size: 10px;
+    color: #94a3b8;
+    text-align: center;
+  }
+  .footer a { color: #3b82f6; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="header">
+  <img src="icons/icon48.png" alt="Helios"/>
+  <div>
+    <div class="header-title">Helios Phish Reporter</div>
+    <div class="header-sub">Himaya Technologies</div>
+  </div>
+</div>
+<div class="body">
+  <div class="status-row">
+    <div class="dot" id="status-dot"></div>
+    <span id="status-text">Checking status...</span>
+  </div>
+  <div class="status-row" id="gmail-status-row" style="display:none; margin-top:4px;">
+    <div class="dot" id="gmail-dot"></div>
+    <span id="gmail-status-text">Checking Gmail...</span>
+  </div>
+
+  <div class="label">Organization Key</div>
+  <input type="text" id="org-key-input" placeholder="Provided by your IT admin"/>
+  <button class="btn" id="save-btn">Save Key</button>
+  <div class="msg" id="msg"></div>
+</div>
+<div class="footer">
+  <a href="https://app.himaya.ai" target="_blank">app.himaya.ai</a>
+</div>
+<script src="popup.js"></script>
+</body>
+</html>

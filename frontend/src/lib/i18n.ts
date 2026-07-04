@@ -1,0 +1,116 @@
+export type Lang = 'en' | 'ar'
+
+export const translations = {
+  en: {
+    dashboard: 'Dashboard',
+    threats: 'Threats',
+    quarantine: 'Quarantine',
+    messageTrace: 'Message Trace',
+    people: 'People',
+    policies: 'Policies',
+    compliance: 'Compliance',
+    posture: 'Inbox Posture',
+    dlp: 'Data Loss Prevention',
+    drafts: 'Draft Analysis',
+    spam: 'Spam Center',
+    reports: 'Reports',
+    integrations: 'Integrations',
+    settings: 'Settings',
+    liveThreats: 'Live Potential Threat Feed',
+    noThreats: 'No recent threats — system is clean ✓',
+    polling: 'Polling',
+    updatedAgo: 'Updated',
+    allHealthy: 'All Systems Healthy',
+    noActiveThreats: 'No active threats requiring immediate attention',
+    warningThreats: 'Warning: Active Threats Detected',
+    criticalThreats: 'Critical: Immediate Action Required',
+    hi: 'Hi',
+    support: 'Support',
+    signOut: 'Sign out',
+    organization: 'Organization',
+    users: 'Users',
+    alerts: 'Alerts',
+    orgDetails: 'Organization Details',
+    saveChanges: 'Save Changes',
+    mfaEnforcement: 'MFA Enforcement',
+    mfaDesc: 'Require MFA for all users',
+    alertPreferences: 'Alert Preferences',
+    inviteUser: 'Invite User',
+    emailAddress: 'Email Address',
+    cancel: 'Cancel',
+    sendInvite: 'Send Invite',
+    name: 'Name',
+    email: 'Email',
+    role: 'Role',
+    status: 'Status',
+    active: 'Active',
+    inactive: 'Inactive',
+    noUsers: 'No users found',
+    workspaceSecurity: 'Workspace Security',
+    defaultLanguage: 'Interface Language',
+  },
+  ar: {
+    dashboard: 'لوحة التحكم',
+    threats: 'التهديدات',
+    quarantine: 'العزل',
+    messageTrace: 'تتبع الرسائل',
+    people: 'المستخدمون',
+    policies: 'السياسات',
+    compliance: 'الامتثال',
+    posture: 'وضع البريد الوارد',
+    dlp: 'Data Loss Prevention',
+    drafts: 'Draft Analysis',
+    spam: 'Spam Center',
+    reports: 'التقارير',
+    integrations: 'التكاملات',
+    settings: 'الإعدادات',
+    liveThreats: 'تدفق التهديدات المحتملة المباشر',
+    noThreats: 'لا تهديدات حديثة — النظام نظيف ✓',
+    polling: 'يتحقق',
+    updatedAgo: 'تم التحديث',
+    allHealthy: 'جميع الأنظمة تعمل بشكل طبيعي',
+    noActiveThreats: 'لا توجد تهديدات نشطة تتطلب اهتمامًا فوريًا',
+    warningThreats: 'تحذير: تم رصد تهديدات نشطة',
+    criticalThreats: 'حرج: مطلوب إجراء فوري',
+    hi: 'مرحباً',
+    support: 'الدعم',
+    signOut: 'تسجيل الخروج',
+    organization: 'المنظمة',
+    users: 'المستخدمون',
+    alerts: 'التنبيهات',
+    orgDetails: 'تفاصيل المنظمة',
+    saveChanges: 'حفظ التغييرات',
+    mfaEnforcement: 'إلزامية المصادقة الثنائية',
+    mfaDesc: 'طلب MFA لجميع المستخدمين',
+    alertPreferences: 'تفضيلات التنبيه',
+    inviteUser: 'دعوة مستخدم',
+    emailAddress: 'البريد الإلكتروني',
+    cancel: 'إلغاء',
+    sendInvite: 'إرسال الدعوة',
+    name: 'الاسم',
+    email: 'البريد',
+    role: 'الدور',
+    status: 'الحالة',
+    active: 'نشط',
+    inactive: 'غير نشط',
+    noUsers: 'لا يوجد مستخدمون',
+    workspaceSecurity: 'أمان مساحة العمل',
+    defaultLanguage: 'لغة الواجهة',
+  },
+}
+
+export function t(lang: Lang, key: keyof typeof translations.en): string {
+  return translations[lang]?.[key] ?? translations.en[key] ?? key
+}
+
+export function getLang(): Lang {
+  if (typeof window === 'undefined') return 'en'
+  return (localStorage.getItem('helios_lang') as Lang) || 'en'
+}
+
+export function setLangGlobal(lang: Lang) {
+  localStorage.setItem('helios_lang', lang)
+  document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr')
+  document.documentElement.setAttribute('lang', lang)
+  window.dispatchEvent(new CustomEvent('lang-change', { detail: lang }))
+}

@@ -1,0 +1,75 @@
+{
+  "region": "uaenorth",
+  "account_id": "__AZURE_ACCT__",
+  "vpc_id": "vpc-0679d4e8fe13575a5",
+  "public_subnets": [
+    "subnet-083b821328a41fef9",
+    "subnet-0885e4bb6dff4a03a"
+  ],
+  "private_subnets": [
+    "subnet-021389faf2633153b",
+    "subnet-0599d2a7ee409a0f3"
+  ],
+  "security_groups": {
+    "rds": "sg-00a8d62b9020b5c4c",
+    "redis": "sg-0a03010059508ea88",
+    "app": "sg-07e91ce759c0a9cf6"
+  },
+  "rds": {
+    "identifier": "himaya-db",
+    "endpoint": "himaya-db.cr86m0gaa8qb.uaenorth.rds.amazonaws.com",
+    "port": 5432,
+    "username": "sentinel",
+    "database": "sentinel_mail",
+    "status": "available"
+  },
+  "redis": {
+    "cluster_id": "himaya-redis",
+    "endpoint": "himaya-redis.yuvxb0.0001.usw2.cache.amazonaws.com",
+    "port": 6379,
+    "engine": "redis 7.1"
+  },
+  "ecs": {
+    "cluster": "himaya",
+    "service": "himaya-backend",
+    "task_family": "himaya-backend",
+    "task_definition_arn": "arn:aws:ecs:uaenorth:__AZURE_ACCT__:task-definition/himaya-backend:2",
+    "ecr_repo": "__AZURE_ACCT__.dkr.ecr.uaenorth.amazonaws.com/himaya-backend"
+  },
+  "alb": {
+    "dns": "app.himaya.ai",
+    "api_url": "http://app.himaya.ai"
+  },
+  "cloudfront": {
+    "domain": "app.himaya.ai",
+    "url": "https://app.himaya.ai"
+  },
+  "s3_buckets": {
+    "models": "himaya-models-prod",
+    "evidence": "himaya-evidence",
+    "reports": "himaya-reports",
+    "frontend": "himaya-frontend-prod"
+  },
+  "sqs_queues": {
+    "email_events": "himaya-email-events",
+    "email_events_dlq": "himaya-email-events-dlq",
+    "alerts": "himaya-alerts",
+    "compliance": "himaya-compliance"
+  },
+  "sandbox": {
+    "vpc_id": "vpc-02002811377182171",
+    "subnet_id": "subnet-0132e933e2bb6b657",
+    "orchestrator_subnet": "subnet-0bf10d3a4bcf05b75",
+    "sandbox_sg": "sg-0a1bf773021a2d2c1",
+    "orchestrator_sg": "sg-01aed6da9530b6117",
+    "igw_id": "igw-07c7feb2c1a40ad13",
+    "sqs_jobs_queue": "himaya-sandbox-jobs",
+    "sqs_results_queue": "himaya-sandbox-results",
+    "key_pair": "himaya-sandbox-key",
+    "ami_id": "ami-03caad32a158f72db",
+    "instance_profile_arn": "arn:aws:iam::__AZURE_ACCT__:instance-profile/helios-sandbox-profile",
+    "ec2_role_arn": "arn:aws:iam::__AZURE_ACCT__:role/helios-sandbox-ec2-role",
+    "status": "configured",
+    "configured_at": "2026-03-07"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Helios Phish Reporter",
+  "version": "1.0.1",
+  "description": "Report suspicious emails to your security team via Helios by Himaya Technologies.",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://mail.google.com/*",
+    "https://app.himaya.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "css": ["sidebar.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; connect-src https://app.himaya.ai; img-src 'self' https://app.himaya.ai data:; script-src 'self'; style-src 'self' 'unsafe-inline';"
+  }
+}

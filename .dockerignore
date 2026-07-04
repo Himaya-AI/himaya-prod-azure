@@ -1,0 +1,52 @@
+# Virtual environments
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.mypy_cache
+
+# Node modules (use frontend/.dockerignore for frontend builds)
+**/node_modules
+**/.next
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Tests and docs
+tests/
+docs/
+*.md
+!README.md
+
+# Build artifacts
+*.pyc
+*.pyo
+*.egg-info
+dist/
+build/
+*.egg
+
+# Local config
+.env
+.env.local
+*.log
+
+# Large files
+*.zip
+*.tar.gz
+*.rar
+
+# Infra / deploy scripts not needed in image
+infra/
+scripts/
+sandbox/
+
+# Frontend (for backend image)
+frontend/

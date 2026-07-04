@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_menu xmlns="http://openbox.org/3.4/menu">
+  <menu id="root-menu" label="Helios Sandbox">
+    <item label="📁 File Manager (Downloads)">
+      <action name="Execute"><command>thunar /root/Downloads</command></action>
+    </item>
+    <item label="📝 Text Editor">
+      <action name="Execute"><command>mousepad</command></action>
+    </item>
+    <item label="📄 LibreOffice Writer">
+      <action name="Execute"><command>libreoffice --writer</command></action>
+    </item>
+    <item label="📊 LibreOffice Calc">
+      <action name="Execute"><command>libreoffice --calc</command></action>
+    </item>
+    <item label="📑 LibreOffice Impress">
+      <action name="Execute"><command>libreoffice --impress</command></action>
+    </item>
+    <item label="🌐 Firefox">
+      <action name="Execute"><command>firefox-esr</command></action>
+    </item>
+    <item label="💻 Terminal">
+      <action name="Execute"><command>xterm -fa 'Monospace' -fs 12 -bg black -fg green</command></action>
+    </item>
+    <separator/>
+    <item label="🍷 Run EXE/MSI with Wine">
+      <action name="Execute"><command>xterm -e 'bash -c "echo Wine ready. Drag .exe/.msi here or type: wine /root/Downloads/file.exe; read"'</command></action>
+    </item>
+  </menu>
+</openbox_menu>
