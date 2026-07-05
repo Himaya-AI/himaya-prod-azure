@@ -41,6 +41,20 @@ celery_app.conf.update(
     task_send_sent_event=False,
 )
 
+# Azure Managed Redis is ALWAYS cluster-mode. Beyond pidbox, the broker itself
+# performs multi-key operations across the priority-queue variants
+# (celery, celery\x06\x163, ...) and the unacked / unacked_index keys. On a
+# cluster these hash to different slots and raise CROSSSLOT / MOVED, crash-
+# looping the worker on `LLEN`/`BRPOP` pipelines. A hash-tag global_keyprefix
+# forces every broker key into a single slot (hashed on "helios"), which keeps
+# all multi-key ops valid while preserving priority-queue behaviour.
+celery_app.conf.broker_transport_options = {
+    "global_keyprefix": "{helios}",
+}
+celery_app.conf.result_backend_transport_options = {
+    "global_keyprefix": "{helios}",
+}
+
 
 def run_async(coro):
     """Run async coroutine in celery (sync) context."""

@@ -343,7 +343,10 @@ resource redisDatabase 'Microsoft.Cache/redisEnterprise/databases@2024-09-01-pre
   properties: {
     clientProtocol: 'Encrypted'
     port: 10000
-    clusteringPolicy: 'OSSCluster'
+    // EnterpriseCluster = single proxied endpoint, NO MOVED redirects.
+    // Celery/kombu (redis-py in standalone mode) cannot follow OSSCluster
+    // MOVED redirects, which crash-loops the worker on `LLEN celery`.
+    clusteringPolicy: 'EnterpriseCluster'
     evictionPolicy: 'VolatileLRU'
     persistence: {
       aofEnabled: false
