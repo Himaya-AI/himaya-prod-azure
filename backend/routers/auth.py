@@ -152,6 +152,12 @@ async def register(
     )
 
 
+# Roles that are allowed to sign in to the Himaya dashboard. Everything else
+# (notably the default "user" role given to directory-synced mailbox accounts)
+# is monitored-only and lives under "People" — not a platform login account.
+_PLATFORM_LOGIN_ROLES = {"admin", "analyst", "viewer", "owner", "superadmin", "super_admin"}
+
+
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     # Email is matched case-insensitively so a customer typing "Admin@Acme.com"
@@ -169,12 +175,25 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=403,
             detail="Your account isn't activated yet. Check your email for the setup link, or use 'Forgot password' to set a new one.",
         )
-    # Directory-synced users (provisioned from Google Workspace / M365) are
-    # created active but WITHOUT a password_hash — they've never set a dashboard
-    # password. Falling through to the generic "Invalid credentials" here left
-    # them stuck with a confusing error even though the account exists. Surface
-    # the same actionable guidance as the inactive case so they can set one.
+    # A password-less account is one of two very different things:
+    #   1. A monitored mailbox synced from the org's directory (Google/M365).
+    #      These exist ONLY for security monitoring (email / threat / DLP) and
+    #      are NOT platform sign-in accounts — a company may have hundreds of
+    #      them. They live under "People", carry the default "user" role, and
+    #      must never be told to "set a password" (they aren't meant to log in).
+    #   2. An IT-staff platform account (admin / analyst / viewer) that has been
+    #      granted access but hasn't set a password yet (pending activation).
+    # Distinguish by role so each gets the correct, non-confusing message.
     if not user.password_hash:
+        if (user.role or "user").lower() not in _PLATFORM_LOGIN_ROLES:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "This account is monitored for security but does not have Himaya "
+                    "platform access. If you need dashboard access, ask your administrator "
+                    "to invite you (Settings → Users)."
+                ),
+            )
         raise HTTPException(
             status_code=403,
             detail="No password has been set for this account yet. Use 'Forgot password' to create one, or check your email for the setup link.",
