@@ -680,6 +680,14 @@ async def _scan_org_drafts(org_id: str, db: AsyncSession) -> dict:
     )
     user_rows = users_result.all()
     all_user_emails = [r.email for r in user_rows]
+    # Release the read locks (organizations/users/org_integrations) taken above
+    # BEFORE entering the slow per-draft loop (Gmail + Claude network calls).
+    # Otherwise this session stays 'idle in transaction' for minutes holding an
+    # AccessShareLock that blocks startup ALTER TABLE guards and stalls all reads.
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
     # For Gmail: users whose email domain matches the integration's org_domain,
     # OR whose directory_provider is null/google. Fall back to all users if no domain match.
     # For M365: users with directory_provider='m365', OR @<m365_tenant_domain> emails.
@@ -864,6 +872,9 @@ async def _scan_org_drafts(org_id: str, db: AsyncSession) -> dict:
                         },
                     )
                     scanned += 1
+                    # Commit each draft immediately so the session never holds
+                    # an open transaction across the next draft's network calls.
+                    await db.commit()
                 except Exception as e:
                     logger.warning(f"Failed to upsert draft_event for {message_id}: {e}")
                     # CRITICAL: must rollback the aborted transaction or every

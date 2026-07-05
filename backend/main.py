@@ -484,11 +484,24 @@ async def lifespan(app: FastAPI):
                 "ALTER TABLE saas_alerts ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(64)",
                 # (dedup DELETE + unique index are handled separately after startup — see below)
             ]
+            # Guard against blocking the whole DB: ADD COLUMN takes an
+            # ACCESS EXCLUSIVE lock. If a long-running transaction holds the
+            # table, an unbounded ALTER queues behind it and blocks EVERY
+            # reader (dashboard/settings/tier lookups 500 with LockNotAvailable).
+            # A short lock_timeout makes a blocked guard abort fast and retry
+            # on the next boot instead of stalling production reads.
+            try:
+                await session.execute(__import__("sqlalchemy").text("SET lock_timeout = '3s'"))
+                await session.execute(__import__("sqlalchemy").text("SET statement_timeout = '15s'"))
+                await session.commit()
+            except Exception:
+                await session.rollback()
             for _gs in _guard_stmts:
                 try:
                     await session.execute(__import__("sqlalchemy").text(_gs))
                     await session.commit()
                 except Exception as _ge:
+                    logger.warning(f"Startup column guard skipped (will retry next boot): {_ge}")
                     await session.rollback()
             await session.commit()
         logger.info("Database connected")
