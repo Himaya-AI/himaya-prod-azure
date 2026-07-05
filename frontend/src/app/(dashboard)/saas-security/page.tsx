@@ -5885,64 +5885,158 @@ function DataCorrelationGraph({ items }: { items: DataItem[] }) {
   )
   if (conf.length === 0) return null
 
-  const providerNodes = new Map<string, number>()
-  const ownerNodes = new Map<string, { provider: string; count: number; external: number }>()
+  const sanitize = (s: string) =>
+    s.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 40) || 'x'
+  const clean = (s: string) => (s || '').replace(/["|<>]/g, ' ').trim()
+  const fmtSize = (b: number) => {
+    if (!b) return ''
+    const u = ['B', 'KB', 'MB', 'GB', 'TB']
+    let i = 0
+    let n = b
+    while (n >= 1024 && i < u.length - 1) { n /= 1024; i++ }
+    return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)}${u[i]}`
+  }
+
+  type OwnerInfo = {
+    provider: string
+    owner: string
+    count: number
+    hi: number
+    external: number
+    public: number
+    size: number
+    types: Map<string, number>
+    cats: Map<string, number>
+  }
+  const providerNodes = new Map<string, { files: number; owners: Set<string>; cats: Set<string> }>()
+  const ownerNodes = new Map<string, OwnerInfo>()
+  const categoryTotals = new Map<string, number>()
+
   conf.forEach(it => {
     const p = it.provider || 'unknown'
-    providerNodes.set(p, (providerNodes.get(p) || 0) + 1)
     const owner = (it.owner_email || 'unowned').toLowerCase()
     const key = `${p}::${owner}`
-    const cur = ownerNodes.get(key) || { provider: p, count: 0, external: 0 }
+    const pn = providerNodes.get(p) || { files: 0, owners: new Set<string>(), cats: new Set<string>() }
+    pn.files += 1
+    pn.owners.add(owner)
+    const cur: OwnerInfo = ownerNodes.get(key) || {
+      provider: p, owner, count: 0, hi: 0, external: 0, public: 0, size: 0,
+      types: new Map(), cats: new Map(),
+    }
     cur.count += 1
-    if (it.sharing_scope === 'external' || it.sharing_scope === 'public') cur.external += 1
+    cur.size += it.size_bytes || 0
+    if (it.classification_label === 'highly_confidential') cur.hi += 1
+    if (it.sharing_scope === 'public') cur.public += 1
+    else if (it.sharing_scope === 'external') cur.external += 1
+    const t = it.item_type || 'item'
+    cur.types.set(t, (cur.types.get(t) || 0) + 1)
+    ;(it.classification_categories || []).forEach(rawCat => {
+      const c = (rawCat || '').toLowerCase().trim()
+      if (!c) return
+      cur.cats.set(c, (cur.cats.get(c) || 0) + 1)
+      pn.cats.add(c)
+      categoryTotals.set(c, (categoryTotals.get(c) || 0) + 1)
+    })
     ownerNodes.set(key, cur)
+    providerNodes.set(p, pn)
   })
 
   const sortedOwners = Array.from(ownerNodes.entries())
-    .sort((a, b) => (b[1].external - a[1].external) || (b[1].count - a[1].count))
-    .slice(0, 18)
+    .sort((a, b) =>
+      (b[1].public - a[1].public) ||
+      (b[1].external - a[1].external) ||
+      (b[1].hi - a[1].hi) ||
+      (b[1].count - a[1].count))
+    .slice(0, 20)
 
-  const sanitize = (s: string) =>
-    s.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 32) || 'x'
+  const usedCats = new Set<string>()
 
   const lines: string[] = []
   lines.push('flowchart LR')
   lines.push('  classDef provider fill:#1a1a22,stroke:#3a3a48,color:#e4e4e7;')
   lines.push('  classDef owner fill:#1a1f2a,stroke:#3b6ef6,color:#cdd6e8;')
-  lines.push('  classDef external fill:#2a0f12,stroke:#f87171,color:#fecaca;')
+  lines.push('  classDef ownerhi fill:#241320,stroke:#f43f5e,color:#fecdd3;')
+  lines.push('  classDef category fill:#1e152a,stroke:#a855f7,color:#e9d5ff;')
+  lines.push('  classDef external fill:#2a1a0f,stroke:#fb923c,color:#fed7aa;')
+  lines.push('  classDef publicnode fill:#2a0f12,stroke:#f87171,color:#fecaca;')
 
-  Array.from(providerNodes.entries()).forEach(([p, n]) => {
+  Array.from(providerNodes.entries()).forEach(([p, info]) => {
     const id = `P_${sanitize(p)}`
-    lines.push(`  ${id}(["${p} (${n})"]):::provider`)
+    const catN = info.cats.size
+    lines.push(
+      `  ${id}(["${clean(p)}<br/>${info.files} files · ${info.owners.size} owners · ${catN} categories"]):::provider`
+    )
   })
 
   sortedOwners.forEach(([key, info]) => {
-    const ownerEmail = key.split('::')[1] || 'unowned'
-    const safeOwner = sanitize(ownerEmail)
+    const safeOwner = sanitize(info.owner)
     const oid = `O_${sanitize(info.provider)}_${safeOwner}`
-    const label = ownerEmail.length > 24 ? ownerEmail.slice(0, 22) + '…' : ownerEmail
-    lines.push(`  ${oid}["${label}<br/>${info.count} files"]:::owner`)
-    lines.push(`  P_${sanitize(info.provider)} --> ${oid}`)
+    const label = info.owner.length > 24 ? info.owner.slice(0, 22) + '…' : info.owner
+    const topType = Array.from(info.types.entries()).sort((a, b) => b[1] - a[1])[0]
+    const parts = [`${info.count} files`]
+    if (info.hi > 0) parts.push(`${info.hi} highly-conf`)
+    if (info.size > 0) parts.push(fmtSize(info.size))
+    if (topType) parts.push(clean(topType[0]))
+    const cls = info.hi > 0 ? 'ownerhi' : 'owner'
+    lines.push(`  ${oid}["${clean(label)}<br/>${parts.join(' · ')}"]:::${cls}`)
+    lines.push(`  P_${sanitize(info.provider)} -->|${info.count}| ${oid}`)
+
+    // Owner → sensitive-data category nodes (top 3 categories this owner holds)
+    Array.from(info.cats.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .forEach(([cat, cnt]) => {
+        const cid = `C_${sanitize(cat)}`
+        usedCats.add(cat)
+        lines.push(`  ${oid} -.->|${cnt}| ${cid}`)
+      })
+
     if (info.external > 0) {
       const eid = `E_${sanitize(info.provider)}_${safeOwner}`
       lines.push(`  ${eid}(("↗ ${info.external} external")):::external`)
-      lines.push(`  ${oid} -.->|shared| ${eid}`)
+      lines.push(`  ${oid} -.->|shared ext| ${eid}`)
+    }
+    if (info.public > 0) {
+      const pid = `PU_${sanitize(info.provider)}_${safeOwner}`
+      lines.push(`  ${pid}(("● ${info.public} public")):::publicnode`)
+      lines.push(`  ${oid} ==>|public| ${pid}`)
     }
   })
 
+  // Emit category nodes (only those referenced above), labelled with global totals
+  Array.from(usedCats).forEach(cat => {
+    const cid = `C_${sanitize(cat)}`
+    const total = categoryTotals.get(cat) || 0
+    lines.push(`  ${cid}{{"${clean(cat.replace(/_/g, ' '))}<br/>${total} files"}}:::category`)
+  })
+
   const chart = lines.join('\n')
+
+  const totalCats = categoryTotals.size
+  const totalExternal = sortedOwners.reduce((s, [, i]) => s + i.external, 0)
+  const totalPublic = sortedOwners.reduce((s, [, i]) => s + i.public, 0)
 
   return (
     <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
       <div className="flex items-center gap-2 mb-3">
         <Network size={14} className="text-[#3b6ef6]" />
         <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Data Correlation Map</h3>
-        <span className="text-[10px] text-[var(--muted)] ml-auto">Top {sortedOwners.length} owners by exposure</span>
+        <span className="text-[10px] text-[var(--muted)] ml-auto">
+          Top {sortedOwners.length} owners · {totalCats} data categories · {totalExternal} external · {totalPublic} public
+        </span>
       </div>
-      <p className="text-[11px] text-[var(--muted)] mb-4">
-        How confidential data flows from each connector through its top owners to external
-        endpoints. Red “external” nodes are where data leaves your tenant.
+      <p className="text-[11px] text-[var(--muted)] mb-3">
+        How confidential data correlates across your estate: each connector fans out to its top data
+        owners, then to the <span className="text-[#e9d5ff]">sensitive-data categories</span> they hold
+        (PII, PCI, credentials, etc.) and the endpoints where data leaves your tenant.
       </p>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4 text-[10px] text-[var(--muted)]">
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#1a1f2a', border: '1px solid #3b6ef6' }} />Owner</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#241320', border: '1px solid #f43f5e' }} />Owner (highly-conf)</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#1e152a', border: '1px solid #a855f7' }} />Data category</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: '#2a1a0f', border: '1px solid #fb923c' }} />External share</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: '#2a0f12', border: '1px solid #f87171' }} />Public exposure</span>
+      </div>
       <div className="min-h-[200px]">
         <MermaidDiagram chart={chart} />
       </div>
