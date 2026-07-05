@@ -8,7 +8,7 @@ import {
   Link, UserX, Lock, Unlock, AlertOctagon, Building2, Trash2, Mail,
   Target, Zap, Network, GitBranch, Layers, Server, HardDrive, Key,
   Radio, Play, Pause, ChevronRight, ArrowRight, Code, Sparkles, Loader2,
-  Search,
+  Search, Settings,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -2291,7 +2291,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
             {/* IAM Setup Guide */}
             <details className="mb-4 bg-amber-500/5 border border-amber-500/20 rounded-lg">
               <summary className="px-3 py-2 text-[12px] font-semibold text-amber-400 cursor-pointer hover:bg-amber-500/10 rounded-lg">
-                ⚙️ IAM Setup Guide (Required Permissions)
+                <Settings size={13} className="inline align-text-bottom mr-1" /> IAM Setup Guide (Required Permissions)
               </summary>
               <div className="px-3 pb-3 text-[11px] text-[#a1a1aa] space-y-2">
                 <p className="pt-2">Create an IAM user with the following policy for Himaya to scan your AWS resources:</p>
@@ -9253,7 +9253,7 @@ function ComplianceTab() {
       {/* Expanded Framework Detail */}
       {expandedFramework && data.frameworks[expandedFramework] && (() => {
         const fw = data.frameworks[expandedFramework];
-        const meta = frameworkMeta[expandedFramework] || { icon: '📋', region: 'Global', color: '#71717a' };
+        const meta = frameworkMeta[expandedFramework] || { icon: 'FW', region: 'Global', color: '#71717a' };
         return (
           <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-5">
             <div className="flex items-center gap-3 mb-4">
@@ -9358,7 +9358,7 @@ function ComplianceTab() {
         </h3>
         <div className="space-y-4">
           {Object.entries(data.frameworks).map(([name, fw]) => {
-            const meta = frameworkMeta[name] || { icon: '📋', region: 'Global', color: '#71717a' };
+            const meta = frameworkMeta[name] || { icon: 'FW', region: 'Global', color: '#71717a' };
             const passCount = fw.checks.filter(c => c.passed).length;
             const totalChecks = fw.checks.length;
             return (
