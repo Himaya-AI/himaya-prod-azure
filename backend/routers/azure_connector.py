@@ -85,6 +85,8 @@ async def ensure_azure_tables(db: AsyncSession):
         "CREATE INDEX IF NOT EXISTS ix_azure_connections_org ON azure_connections(org_id)"
     ))
     await ensure_cspm_tables(db)
+    from backend.services.azure_resource_indexer import ensure_azure_resources_table
+    await ensure_azure_resources_table(db)
     await db.commit()
 
 
@@ -393,6 +395,19 @@ async def _run_background_scan(org_id: str, connection_id: str) -> None:
             seen = {f.fingerprint for f in report.findings if f.status.value != "ok"}
             await mark_resolved(db, org_id, "azure", seen)
             await write_scan_report(db, report)
+
+            # Persist + Claude-classify enumerated Azure resources into the
+            # azure_resources inventory table. Without this the Data Inventory /
+            # Sensitive Data Discovery views show zero Azure resources and the
+            # cross-cloud DLP classifier has nothing to work on.
+            try:
+                from backend.services.azure_resource_indexer import index_azure_resources
+                n_res = await index_azure_resources(db, org_id, connection_id, ctx)
+                logger.info(
+                    f"Azure resource index: org={org_id} conn={connection_id} resources={n_res}"
+                )
+            except Exception as _rie:
+                logger.warning(f"Azure resource indexing failed (non-fatal): {_rie}")
 
             await db.execute(text("""
                 UPDATE azure_connections SET last_scan_at = NOW()
