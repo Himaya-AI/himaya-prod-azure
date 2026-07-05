@@ -169,7 +169,17 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=403,
             detail="Your account isn't activated yet. Check your email for the setup link, or use 'Forgot password' to set a new one.",
         )
-    if not user.password_hash or not await verify_password_async(req.password, user.password_hash):
+    # Directory-synced users (provisioned from Google Workspace / M365) are
+    # created active but WITHOUT a password_hash — they've never set a dashboard
+    # password. Falling through to the generic "Invalid credentials" here left
+    # them stuck with a confusing error even though the account exists. Surface
+    # the same actionable guidance as the inactive case so they can set one.
+    if not user.password_hash:
+        raise HTTPException(
+            status_code=403,
+            detail="No password has been set for this account yet. Use 'Forgot password' to create one, or check your email for the setup link.",
+        )
+    if not await verify_password_async(req.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     user.last_login = datetime.utcnow()
