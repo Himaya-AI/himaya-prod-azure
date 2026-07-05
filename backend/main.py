@@ -483,6 +483,73 @@ async def lifespan(app: FastAPI):
                 # constraint existed).
                 "ALTER TABLE saas_alerts ADD COLUMN IF NOT EXISTS fingerprint VARCHAR(64)",
                 # (dedup DELETE + unique index are handled separately after startup — see below)
+                # billing_records — the base table was only ever ALTERed by migrations,
+                # never CREATEd, so a fresh DB (Azure) never had it and every billing/
+                # settings endpoint 500'd with 'relation "billing_records" does not exist'.
+                """CREATE TABLE IF NOT EXISTS billing_records (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    org_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+                    billing_period VARCHAR(20) NOT NULL,
+                    plan VARCHAR(50) DEFAULT 'starter',
+                    mailbox_count INTEGER DEFAULT 0,
+                    emails_scanned INTEGER DEFAULT 0,
+                    rate_per_mailbox_usd NUMERIC(10,2) DEFAULT 8.00,
+                    base_amount_usd NUMERIC(10,2) DEFAULT 0,
+                    overage_amount_usd NUMERIC(10,2) DEFAULT 0,
+                    total_amount_usd NUMERIC(10,2) DEFAULT 0,
+                    status VARCHAR(30) DEFAULT 'pending',
+                    invoice_id VARCHAR(100),
+                    paid_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )""",
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_billing_records_org_period ON billing_records(org_id, billing_period)",
+                # posture_* tables — previously only created inside a posture SCAN
+                # (_ensure_posture_tables), so read endpoints 500'd for orgs that had
+                # never run a scan. Create them unconditionally at startup. Schemas
+                # mirror backend/routers/posture.py::_ensure_posture_tables.
+                """CREATE TABLE IF NOT EXISTS posture_apps (
+                    id UUID PRIMARY KEY,
+                    org_id UUID NOT NULL,
+                    external_id TEXT,
+                    app_name TEXT NOT NULL,
+                    description TEXT,
+                    provider TEXT NOT NULL,
+                    scopes TEXT,
+                    granted_by TEXT,
+                    granted_at TIMESTAMPTZ,
+                    risk TEXT NOT NULL DEFAULT 'low',
+                    risk_reasons TEXT,
+                    can_revoke BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS posture_rules (
+                    id UUID PRIMARY KEY,
+                    org_id UUID NOT NULL,
+                    rule_name TEXT NOT NULL,
+                    mailbox TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    enabled BOOLEAN DEFAULT TRUE,
+                    conditions TEXT,
+                    actions TEXT,
+                    risk TEXT NOT NULL DEFAULT 'low',
+                    risk_reasons TEXT,
+                    created_at TIMESTAMPTZ,
+                    scanned_at TIMESTAMPTZ DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS posture_forwards (
+                    id UUID PRIMARY KEY,
+                    org_id UUID NOT NULL,
+                    mailbox TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    forward_to TEXT NOT NULL,
+                    is_external BOOLEAN DEFAULT FALSE,
+                    risk TEXT NOT NULL DEFAULT 'low',
+                    scanned_at TIMESTAMPTZ DEFAULT NOW()
+                )""",
+                """CREATE TABLE IF NOT EXISTS posture_scan_log (
+                    org_id UUID PRIMARY KEY,
+                    last_scanned_at TIMESTAMPTZ DEFAULT NOW()
+                )""",
             ]
             # Guard against blocking the whole DB: ADD COLUMN takes an
             # ACCESS EXCLUSIVE lock. If a long-running transaction holds the
