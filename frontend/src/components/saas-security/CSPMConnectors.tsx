@@ -506,16 +506,16 @@ function AzureSetupGuide() {
 
           <div>
             <div className="text-[var(--foreground)] font-medium mb-1">4 · Grant read-only roles on the subscription</div>
-            <p className="mb-1">Open <b>Subscriptions → [your sub] → Access control (IAM) → + Add → Add role assignment</b>, then repeat for each role:</p>
+            <p className="mb-1">Open <b>Subscriptions → [your sub] → Access control (IAM) → + Add → Add role assignment</b>. All three are real Azure built-in roles assigned at the <b>subscription</b> scope:</p>
             <ul className="list-disc ml-4 space-y-0.5">
               <li>
-                <b>Reader</b> <span className="opacity-70">(required)</span> — lets us inventory Storage, Key Vault, SQL, NSGs, VMs, etc.
+                <b>Reader</b> <span className="opacity-70">(required — this one resolves the connection)</span> — the built-in <code>Reader</code> role grants <code>*/read</code>, so it inventories Storage, Key Vault, SQL, NSGs, VMs, disks, App Services, public IPs <i>and</i> covers Defender for Cloud plans / auto-provisioning and role-assignment reads. This single role is enough for a full scan.
               </li>
               <li>
-                <b>Security Reader</b> <span className="opacity-70">(recommended)</span> — lets us read Microsoft Defender for Cloud pricing tier, auto-provisioning, and security recommendations.
+                <b>Key Vault Reader</b> <span className="opacity-70">(optional)</span> — only needed to enumerate Key Vault key/secret <i>metadata</i> (names/enabled state — never the values). <code>Reader</code> can&apos;t see Key Vault data-plane objects; without this role the Key Vault object checks are skipped silently.
               </li>
               <li>
-                <b>Key Vault Reader</b> <span className="opacity-70">(optional)</span> — only needed if you want us to enumerate Key Vault key/secret <i>metadata</i> (never the values). Without it, the Key Vault checks are skipped silently.
+                <b>Security Reader</b> <span className="opacity-70">(optional)</span> — not required for the current scan (<code>Reader</code> already covers the Defender plan/auto-provisioning checks). Add it only if you later enable ingestion of Defender for Cloud assessments and security alerts.
               </li>
             </ul>
             <p className="mt-1">

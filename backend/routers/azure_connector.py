@@ -141,10 +141,14 @@ async def connect_azure(
                     status_code=400,
                     detail=(
                         f"Service principal cannot read subscription {request.subscription_id} "
-                        f"(HTTP {r.status_code}). Open Azure portal → Subscriptions → your subscription "
-                        "→ Access control (IAM) → Add role assignment, and assign the app registration "
-                        "the 'Reader' role (and 'Security Reader' for Defender for Cloud checks). "
-                        "Role propagation can take up to 5 minutes."
+                        f"(HTTP {r.status_code}). Assign the built-in \"Reader\" role to your app "
+                        "registration at the SUBSCRIPTION scope: Azure portal → Subscriptions → "
+                        "[your subscription] → Access control (IAM) → + Add → Add role assignment → "
+                        "Role = Reader → Members: Assign access to \"User, group, or service principal\" "
+                        "→ select your app registration → Review + assign. \"Reader\" alone is enough — it "
+                        "grants read on all resources plus Defender for Cloud plans and role assignments. "
+                        "(Optional: add \"Key Vault Reader\" to include Key Vault key/secret metadata.) "
+                        "Role assignments can take up to 5 minutes to propagate — then retry."
                     ),
                 )
     except HTTPException:
