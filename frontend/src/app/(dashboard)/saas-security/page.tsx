@@ -2294,7 +2294,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                 <Settings size={13} className="inline align-text-bottom mr-1" /> IAM Setup Guide (Required Permissions)
               </summary>
               <div className="px-3 pb-3 text-[11px] text-[#a1a1aa] space-y-2">
-                <p className="pt-2">Create an IAM user with the following policy for Himaya to scan your AWS resources:</p>
+                <p className="pt-2">Create an IAM user with the following policy for Himaya to scan your AWS resources. The <code>s3:ListBucket</code> + <code>s3:GetObject</code> actions are what let Himaya read object contents and run <strong>deep data classification</strong> (PII/PCI/credentials/secrets) with our AI classifier — without them, S3 scanning is limited to bucket metadata only.</p>
                 <div className="bg-[var(--background)] rounded-lg p-3 font-mono text-[10px] overflow-x-auto">
                   <pre className="text-emerald-400">{`{
   "Version": "2012-10-17",
@@ -2306,6 +2306,8 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
       "s3:GetBucketEncryption",
       "s3:GetBucketPublicAccessBlock",
       "s3:GetBucketTagging",
+      "s3:ListBucket",
+      "s3:GetObject",
       "ec2:DescribeVolumes",
       "ec2:DescribeSnapshots",
       "efs:DescribeFileSystems",

@@ -515,6 +515,9 @@ function AzureSetupGuide() {
                 <b>Key Vault Reader</b> <span className="opacity-70">(optional)</span> — only needed to enumerate Key Vault key/secret <i>metadata</i> (names/enabled state — never the values). <code>Reader</code> can&apos;t see Key Vault data-plane objects; without this role the Key Vault object checks are skipped silently.
               </li>
               <li>
+                <b>Storage Blob Data Reader</b> <span className="opacity-70">(optional — enables deep data classification)</span> — <code>Reader</code> can list storage accounts &amp; containers but <b>cannot read blob contents</b> (reading blob data is a data-plane action). Add this role to let Himaya sample blob contents and classify the <i>sensitive data inside</i> your storage (PII, PCI, credentials, secrets, etc.) with our AI classifier. Without it, Azure data classification is limited to resource metadata and never inspects file contents.
+              </li>
+              <li>
                 <b>Security Reader</b> <span className="opacity-70">(optional)</span> — not required for the current scan (<code>Reader</code> already covers the Defender plan/auto-provisioning checks). Add it only if you later enable ingestion of Defender for Cloud assessments and security alerts.
               </li>
             </ul>
@@ -542,7 +545,11 @@ az role assignment create --assignee "$SP_APP_ID" \
 
 # Optional (Key Vault metadata)
 az role assignment create --assignee "$SP_APP_ID" \
-  --role "Key Vault Reader" --scope "/subscriptions/$SUB"`}</pre>
+  --role "Key Vault Reader" --scope "/subscriptions/$SUB"
+
+# Optional (deep data classification — read blob CONTENTS)
+az role assignment create --assignee "$SP_APP_ID" \
+  --role "Storage Blob Data Reader" --scope "/subscriptions/$SUB"`}</pre>
           </div>
 
           <div className="pt-1 border-t border-[var(--border)]">
@@ -552,6 +559,7 @@ az role assignment create --assignee "$SP_APP_ID" \
               <li><a className="text-blue-400 underline" href="https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#reader" target="_blank" rel="noreferrer">Built-in role: Reader</a></li>
               <li><a className="text-blue-400 underline" href="https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#security-reader" target="_blank" rel="noreferrer">Built-in role: Security Reader</a></li>
               <li><a className="text-blue-400 underline" href="https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#key-vault-reader" target="_blank" rel="noreferrer">Built-in role: Key Vault Reader</a></li>
+              <li><a className="text-blue-400 underline" href="https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles#storage-blob-data-reader" target="_blank" rel="noreferrer">Built-in role: Storage Blob Data Reader</a></li>
               <li><a className="text-blue-400 underline" href="https://learn.microsoft.com/en-us/azure/azure-portal/get-subscription-tenant-id" target="_blank" rel="noreferrer">Find your Azure subscription &amp; tenant ID</a></li>
             </ul>
           </div>
