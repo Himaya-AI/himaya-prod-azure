@@ -524,7 +524,7 @@ export default function SettingsPage() {
         <div className="max-w-2xl space-y-4">
           <div className="flex items-start gap-3 px-4 py-3 bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl text-[12px] text-[#93b4fd]">
             <Info size={13} className="mt-0.5 flex-shrink-0" />
-            <span>Alert emails are sent from <strong>noreply@himaya.ai</strong> with Himaya branding. Make sure your inbox isn't filtering them. Changes save automatically.</span>
+            <span>Alert emails are sent from <strong>noreply@notify.himaya.ai</strong> with Himaya branding. Make sure your inbox isn't filtering them. Changes save automatically.</span>
           </div>
 
           {alertSaveError && (

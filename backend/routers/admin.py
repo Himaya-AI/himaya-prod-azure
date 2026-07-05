@@ -1531,7 +1531,7 @@ async def cleanup_loop_threats(
         _upd(_T)
         .where(
             _T.org_id == _oid,
-            _T.sender.in_(["noreply@himaya.ai", "no-reply@himaya.ai"]),
+            _T.sender.in_(["noreply@himaya.ai", "no-reply@himaya.ai", "noreply@notify.himaya.ai"]),
         )
         .values(
             status="resolved",
@@ -1628,12 +1628,12 @@ async def gmail_trash_loop_emails(
                 creds.refresh(_gtr.Request())
                 mb_token = creds.token
 
-                # Search for notification emails from noreply@himaya.ai
+                # Search for notification emails from any Himaya system sender
                 async with _httpx.AsyncClient(timeout=15) as client:
                     search = await client.get(
                         f"https://gmail.googleapis.com/gmail/v1/users/{mailbox}/messages",
                         headers={"Authorization": f"Bearer {mb_token}"},
-                        params={"q": "from:noreply@himaya.ai subject:Quarantined OR subject:Threat OR subject:Email Quarantined", "maxResults": 500},
+                        params={"q": "(from:noreply@himaya.ai OR from:noreply@notify.himaya.ai) subject:Quarantined OR subject:Threat OR subject:Email Quarantined", "maxResults": 500},
                     )
                     if search.status_code != 200:
                         results["errors"].append(f"{mailbox}: search failed {search.status_code}")

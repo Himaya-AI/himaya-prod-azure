@@ -327,7 +327,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
     8. WebSocket broadcast
     """
     # ── Guard: skip Himaya system notification emails to prevent alert loops ──
-    _HELIOS_SYSTEM_SENDERS = {"noreply@himaya.ai", "no-reply@himaya.ai"}
+    _HELIOS_SYSTEM_SENDERS = {"noreply@himaya.ai", "no-reply@himaya.ai", "noreply@notify.himaya.ai"}
     _raw_sender = (email_data.get("sender") or "").lower().strip()
     if _raw_sender in _HELIOS_SYSTEM_SENDERS:
         logger.debug(f"process_email: skipping Himaya system email from {_raw_sender} (loop guard)")
@@ -845,7 +845,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
 
         # Step 7d: Send threat alerts for high-confidence detections (risk >= 80, or >= 60 for VIPs)
         # Skip alerts when sender is a Himaya system address (loop guard)
-        _HELIOS_SYSTEM_SENDERS_7D = {"noreply@himaya.ai", "no-reply@himaya.ai"}
+        _HELIOS_SYSTEM_SENDERS_7D = {"noreply@himaya.ai", "no-reply@himaya.ai", "noreply@notify.himaya.ai"}
         alert_threshold = 60 if is_vip_recipient else 80
         if (risk_result["risk_score"] >= alert_threshold
                 and action in ("QUARANTINED", "FLAGGED_HIGH")

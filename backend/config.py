@@ -43,7 +43,8 @@ class Settings(BaseSettings):
     # Empty = admin API is fully disabled (fail-closed).
     ADMIN_IP_ALLOWLIST: str = ""
     # Sender address for transactional email (must be verified in ACS/SES)
-    EMAIL_FROM: str = "noreply@himaya.ai"
+    # Uses the notify.himaya.ai ACS-verified sending subdomain (SPF/DKIM verified).
+    EMAIL_FROM: str = "noreply@notify.himaya.ai"
 
     # Microservices (graph trust scoring + reputation threat intel)
     GRAPH_SERVICE_URL: str = "http://localhost:8001"

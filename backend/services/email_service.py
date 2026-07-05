@@ -26,7 +26,11 @@ logger = logging.getLogger(__name__)
 
 SES_CLIENT = boto3.client("ses", region_name=os.getenv("SES_REGION", "us-east-1"))
 AZURE_COMMUNICATION_CONNECTION_STRING = os.getenv("AZURE_COMMUNICATION_CONNECTION_STRING", "")
-FROM_EMAIL = os.getenv("EMAIL_FROM", "noreply@himaya.ai")
+FROM_EMAIL = os.getenv("EMAIL_FROM", "noreply@notify.himaya.ai")
+# SES fallback uses its own verified identity: notify.himaya.ai is verified in
+# ACS but not necessarily in SES, and send_raw_email rejects an unverified From.
+# Defaults to the SES-verified root-domain address; override with SES_FROM.
+SES_FROM = os.getenv("SES_FROM", "noreply@himaya.ai")
 FROM_NAME = "Himaya"
 REPLY_TO = "support@himaya.ai"
 
@@ -74,11 +78,12 @@ def _footer() -> str:
     """
 
 
-def _build_mime_message(to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bytes:
+def _build_mime_message(to: str, subject: str, html_body: str, text_body: Optional[str] = None,
+                        from_email: str = FROM_EMAIL) -> bytes:
     """Build the raw MIME message used by both Azure and SES."""
     root = MIMEMultipart("related")
     root["Subject"] = subject
-    root["From"] = f"{FROM_NAME} <{FROM_EMAIL}>"
+    root["From"] = f"{FROM_NAME} <{from_email}>"
     root["To"] = to
     root["Reply-To"] = REPLY_TO
 
@@ -99,8 +104,6 @@ def _build_mime_message(to: str, subject: str, html_body: str, text_body: Option
 
 def send_email(to: str, subject: str, html_body: str, text_body: Optional[str] = None) -> bool:
     """Send email via Azure Communication Email if configured, otherwise Amazon SES."""
-    raw = _build_mime_message(to, subject, html_body, text_body)
-
     # Try Azure Communication Email first
     if AZURE_COMMUNICATION_CONNECTION_STRING:
         try:
@@ -131,10 +134,12 @@ def send_email(to: str, subject: str, html_body: str, text_body: Optional[str] =
         except Exception as e:
             logger.warning(f"Azure Communication Email failed, falling back to SES: {e}")
 
-    # Fallback to SES
+    # Fallback to SES — build with the SES-verified sender so the From header
+    # and envelope Source both pass SES identity validation.
     try:
+        raw = _build_mime_message(to, subject, html_body, text_body, from_email=SES_FROM)
         response = SES_CLIENT.send_raw_email(
-            Source=f"{FROM_NAME} <{FROM_EMAIL}>",
+            Source=f"{FROM_NAME} <{SES_FROM}>",
             Destinations=[to],
             RawMessage={"Data": raw},
             ConfigurationSetName="himaya-helios-transactional",

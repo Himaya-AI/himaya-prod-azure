@@ -659,7 +659,7 @@ async def _send_policy_notifications(
     Recipient and sender both get full context: preview, attachments, links, AI explanation.
     """
     # ── Guard: never send notifications for Himaya system emails (breaks loops) ──
-    _HELIOS_SYSTEM = {"noreply@himaya.ai", "no-reply@himaya.ai"}
+    _HELIOS_SYSTEM = {"noreply@himaya.ai", "no-reply@himaya.ai", "noreply@notify.himaya.ai"}
     if (sender_email or "").lower() in _HELIOS_SYSTEM:
         logger.debug(f"_send_policy_notifications: skipping — sender is Himaya system ({sender_email})")
         return
