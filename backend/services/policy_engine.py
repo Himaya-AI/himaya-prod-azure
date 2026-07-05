@@ -301,6 +301,29 @@ async def evaluate_policies(
     elif "recipient_email" in email_data_norm and "recipient" not in email_data_norm:
         email_data_norm["recipient"] = email_data_norm["recipient_email"]
 
+    # Derive sender_domain from sender if the caller didn't supply it. The
+    # delta-sync path passes `sender` but not `sender_domain`, and threat-intel
+    # domain_match + OpenDBL domain->IP resolution both depend on it.
+    if not email_data_norm.get("sender_domain"):
+        _snd = str(email_data_norm.get("sender", ""))
+        if "@" in _snd:
+            email_data_norm["sender_domain"] = (
+                _snd.split("@")[-1].strip().lower().strip("<>").rstrip(".")
+            )
+
+    # Lift sender_ip to the top level so OpenDBL's extract_ips_from_email()
+    # (which reads top-level sender_ip / x_originating_ip) can match the sender
+    # IP against IP packs — the delta-sync path stores it inside auth_results.
+    if not email_data_norm.get("sender_ip"):
+        _ar = email_data_norm.get("auth_results") or {}
+        _sip = (
+            _ar.get("sender_ip")
+            or _ar.get("x_originating_ip")
+            or _ar.get("originating_ip")
+        )
+        if _sip:
+            email_data_norm["sender_ip"] = _sip
+
     threat_stub = {
         "sender": email_data_norm.get("sender", ""),
         "sender_domain": email_data_norm.get("sender_domain", ""),

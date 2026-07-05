@@ -1015,6 +1015,7 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         # Parse auth headers + Reply-To from M365 internetMessageHeaders
                         auth_results = {"spf": "none", "dkim": "none", "dmarc": "none"}
                         reply_to_m365 = ""
+                        _m365_received: list[str] = []
                         for hdr in msg.get("internetMessageHeaders", []):
                             _hn = hdr.get("name", "").lower()
                             _hv = hdr.get("value", "")
@@ -1026,6 +1027,22 @@ async def _delta_sync_integration_snap(db, redis, integration):
                                         auth_results[_proto] = "fail"
                             elif _hn == "reply-to":
                                 reply_to_m365 = _hv.strip()
+                            elif _hn == "received":
+                                _m365_received.append(_hv)
+
+                        # Extract originating sender IP from Received: headers so
+                        # threat-intel IP packs (OpenDBL / feeds) can match the
+                        # sender IP. M365 formats the IP as [1.2.3.4] or (1.2.3.4).
+                        import re as _m365_ipre
+                        for _rhdr in reversed(_m365_received):
+                            _ipm = _m365_ipre.search(
+                                r'[\[(](\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})[\])]', _rhdr
+                            )
+                            if _ipm:
+                                _ipc = _ipm.group(1)
+                                if not _ipc.startswith(("10.", "192.168.", "127.", "172.")):
+                                    auth_results["sender_ip"] = _ipc
+                                    break
 
                         sender_domain_val = sender.split("@")[-1] if "@" in sender else sender
 
