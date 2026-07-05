@@ -340,31 +340,41 @@ async def evaluate_policies(
 
     # ── Internal first-party mail guard ───────────────────────────────────────
     # External IP/domain threat-intel feeds (TOR exits, blocklist.de, OpenDBL,
-    # CERT-CN IPs, etc.) must NOT quarantine authenticated internal mail between
-    # the org's own users. For internal mail the parsed "sender IP" is the org's
-    # own outbound relay or the employee's client/VPN IP, which can transiently
-    # appear on broad abuse lists — quarantining first-party mail on those feeds
-    # is a false positive (e.g. adnan@himaya.ai -> sadia@himaya.ai hitting the
-    # TOR / blocklist.de packs). We require DKIM or DMARC "pass" so a spoofer
-    # cannot bypass threat-intel by forging an internal From address. Malicious
-    # URL-feed matches are still honoured (a bad link is dangerous regardless of
-    # who sent it), as are all non-threat-intel conditions.
+    # CERT-CN IPs, etc.) must NOT quarantine internal mail between the org's own
+    # users. For internal mail the parsed "sender IP" is the org's own outbound
+    # relay or the employee's client/VPN IP, which can transiently appear on
+    # broad abuse lists — quarantining first-party mail on those feeds is a false
+    # positive (e.g. adnan@himaya.ai -> sadia@himaya.ai hitting the TOR /
+    # blocklist.de / CERT-CN IP packs).
+    #
+    # We treat same-domain mail as trusted UNLESS authentication is actively
+    # FAILING. Legitimate internal Google Workspace / M365 mail frequently
+    # carries NO SPF/DKIM/DMARC verdict at all ("none") because it never leaves
+    # the tenant, so requiring an explicit "pass" is too strict and misses real
+    # internal mail. A spoofer forging an internal From address from outside
+    # cannot sign for the domain and would therefore FAIL DKIM/DMARC/SPF — so
+    # exempting only when auth is *not failing* still blocks spoofed lookalikes.
+    # Malicious URL-feed matches are still honoured (a bad link is dangerous
+    # regardless of who sent it), as are all non-threat-intel conditions.
     _sender_dom = str(email_data_norm.get("sender_domain") or "").lower().strip()
     _rcpt = str(email_data_norm.get("recipient_email") or "")
     _rcpt_dom = _rcpt.split("@")[-1].strip().lower().rstrip(".") if "@" in _rcpt else ""
     _ar = email_data_norm.get("auth_results") or {}
 
-    def _auth_passed(_v) -> bool:
-        return isinstance(_v, str) and _v.lower() in ("pass", "passed")
+    def _auth_failed(_v) -> bool:
+        return isinstance(_v, str) and _v.lower() in ("fail", "failed", "softfail")
 
     is_internal_trusted = bool(
         _sender_dom and _rcpt_dom and _sender_dom == _rcpt_dom
-        and (_auth_passed(_ar.get("dkim")) or _auth_passed(_ar.get("dmarc")))
+        and not _auth_failed(_ar.get("dkim"))
+        and not _auth_failed(_ar.get("dmarc"))
+        and not _auth_failed(_ar.get("spf"))
     )
     if is_internal_trusted:
         logger.info(
             f"Internal trusted sender {email_data_norm.get('sender', '?')} -> {_rcpt}: "
-            f"skipping external IP/domain threat-intel packs (dkim/dmarc pass, same domain)."
+            f"skipping external IP/domain threat-intel packs (same domain, auth not failing; "
+            f"spf={_ar.get('spf')} dkim={_ar.get('dkim')} dmarc={_ar.get('dmarc')})."
         )
 
     for policy in policies:
