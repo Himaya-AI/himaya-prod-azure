@@ -193,6 +193,7 @@ async def get_summary(
 
 
 @router.get("/threats/recent")
+@cached_endpoint("dash:recent", ttl=20)
 async def get_recent_threats(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -298,6 +299,7 @@ async def get_trends(
 
 
 @router.get("/at-risk-employees")
+@cached_endpoint("dash:at-risk-employees", ttl=60)
 async def get_at_risk_employees(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -362,6 +364,7 @@ async def get_at_risk_employees(
 
 
 @router.get("/at-risk-groups")
+@cached_endpoint("dash:at-risk-groups", ttl=60)
 async def get_at_risk_groups(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -395,6 +398,7 @@ async def get_at_risk_groups(
 
 
 @router.get("/threat-map")
+@cached_endpoint("dash:threat-map", ttl=60)
 async def get_threat_map(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -427,6 +431,7 @@ async def get_threat_map(
 # ─── Rule Usage & Top Hit Policies ───────────────────────────────────────────
 
 @router.get("/rule-usage")
+@cached_endpoint("dash:rule-usage", ttl=60)
 async def get_rule_usage(
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

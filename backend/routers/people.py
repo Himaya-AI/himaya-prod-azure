@@ -7,6 +7,7 @@ import uuid
 from backend.database import get_db
 from backend.models.db_models import User, Threat
 from backend.routers.auth import get_current_user
+from backend.utils.response_cache import cached_endpoint
 
 router = APIRouter(prefix="/api/people", tags=["people"])
 
@@ -82,6 +83,7 @@ def _is_vip_by_analysis(job_title: str | None, db_is_vip: bool, threats_30d: int
 
 
 @router.get("")
+@cached_endpoint("people:list", ttl=30)
 async def list_people(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),

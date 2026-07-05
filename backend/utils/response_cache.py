@@ -28,12 +28,30 @@ logger = logging.getLogger(__name__)
 _REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 _PREFIX = "rc:"  # response-cache prefix to keep keys segregated
 
+# Module-level singleton client. redis.asyncio.from_url() maintains its own
+# connection pool, so we create ONE client and reuse it across all requests.
+# Opening/closing a fresh connection per cache_get/cache_set (the previous
+# behaviour) added TCP-handshake latency on every cached call and partially
+# defeated the point of the cache under load.
+_redis_client = None
+
 
 async def _get_redis():
-    """Return an async Redis client, or None if unavailable."""
+    """Return a shared pooled async Redis client, or None if unavailable."""
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client
     try:
         import redis.asyncio as aioredis  # type: ignore
-        return aioredis.from_url(_REDIS_URL, decode_responses=True, socket_timeout=1.0)
+        _redis_client = aioredis.from_url(
+            _REDIS_URL,
+            decode_responses=True,
+            socket_timeout=1.0,
+            socket_connect_timeout=1.0,
+            max_connections=20,
+            health_check_interval=30,
+        )
+        return _redis_client
     except Exception as exc:
         logger.debug(f"response_cache: redis unavailable ({exc})")
         return None
@@ -61,11 +79,6 @@ async def cache_get(prefix: str, org_id: str, extra: Optional[dict] = None) -> O
     except Exception as exc:
         logger.debug(f"response_cache.get failed ({exc})")
         return None
-    finally:
-        try:
-            await r.aclose()
-        except Exception:
-            pass
 
 
 async def cache_set(
@@ -86,11 +99,6 @@ async def cache_set(
         logger.debug(f"response_cache.set skipped non-serialisable value for {prefix}: {exc}")
     except Exception as exc:
         logger.debug(f"response_cache.set failed ({exc})")
-    finally:
-        try:
-            await r.aclose()
-        except Exception:
-            pass
 
 
 async def cache_invalidate(prefix: str, org_id: str, extra: Optional[dict] = None) -> None:
@@ -102,11 +110,6 @@ async def cache_invalidate(prefix: str, org_id: str, extra: Optional[dict] = Non
         await r.delete(_key(prefix, org_id, extra))
     except Exception as exc:
         logger.debug(f"response_cache.invalidate failed ({exc})")
-    finally:
-        try:
-            await r.aclose()
-        except Exception:
-            pass
 
 
 def cached_endpoint(prefix: str, ttl: int = 30):
