@@ -146,8 +146,10 @@ def send_email(to: str, subject: str, html_body: str, text_body: Optional[str] =
         )
         logger.info(f"Email sent to {to} via SES: {response['MessageId']}")
         return True
-    except ClientError as e:
-        logger.error(f"SES error sending to {to}: {e}")
+    except Exception as e:
+        # Catch broadly (ClientError, NoCredentialsError, etc.) so a failed
+        # notification never bubbles up as a 500 into callers like provisioning.
+        logger.error(f"SES fallback failed sending to {to}: {e}")
         print(f"\n[EMAIL FALLBACK - SES failed]\nTo: {to}\nSubject: {subject}\n")
         return False
 
