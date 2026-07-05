@@ -5,7 +5,7 @@ import Button from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
 import api from '@/lib/api'
-import { Plus, Layers, Play, Pause, Zap, CheckCircle2, AlertTriangle, Info, Pencil, Trash2, Globe, ShieldCheck, Scale, Building2 } from 'lucide-react'
+import { Plus, Layers, Play, Pause, Zap, CheckCircle2, AlertTriangle, Info, Pencil, Trash2, Globe, ShieldCheck, Scale, Building2, ClipboardList } from 'lucide-react'
 import { toast } from '@/components/ui/Toast'
 
 // ─── Shared style constants (module-level — no re-creation on render) ─────────
@@ -881,8 +881,8 @@ export default function PoliciesPage() {
             {[...Array(3)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-white/[0.04] rounded" />)}
           </div>
         ) : policies.length === 0 ? (
-          <div className="text-center py-16 text-[#52525b]">
-            <div className="text-3xl mb-3">📋</div>
+          <div className="flex flex-col items-center justify-center py-16 text-[#52525b]">
+            <ClipboardList size={32} className="mb-3" />
             <p className="text-[13px]">No policies yet. Install a template or create your own.</p>
           </div>
         ) : (

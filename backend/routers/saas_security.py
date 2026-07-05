@@ -621,11 +621,20 @@ async def auto_connect_from_m365(
             detail="Could not extract tenant_id from M365 token. Please reconnect M365."
         )
 
-    # Get app token for Teams/SharePoint using client_credentials
-    if not SAAS_M365_CLIENT_ID or not SAAS_M365_CLIENT_SECRET:
+    # Get app token for Teams/SharePoint using client_credentials.
+    # Prefer the MAIN Himaya M365 app (M365_CLIENT_ID/SECRET): the customer has
+    # already consented to it for email security, and Step 1 "Grant Consent"
+    # adds the SaaS Graph application permissions (ChannelMessage.Read.All,
+    # Sites.Read.All, Files.Read.All, ...) to that same app. Fall back to a
+    # dedicated SaaS connector app only if one is configured. This mirrors
+    # _get_valid_token()'s strategy so auto-connect no longer hard-fails when
+    # SAAS_M365_* is unset.
+    _cc_client_id = os.getenv("M365_CLIENT_ID", "") or SAAS_M365_CLIENT_ID
+    _cc_client_secret = os.getenv("M365_CLIENT_SECRET", "") or SAAS_M365_CLIENT_SECRET
+    if not _cc_client_id or not _cc_client_secret:
         raise HTTPException(
             status_code=500,
-            detail="SAAS_M365_CLIENT_ID/SECRET not configured on server."
+            detail="M365 app credentials not configured on server (M365_CLIENT_ID/SECRET)."
         )
 
     try:
@@ -633,8 +642,8 @@ async def auto_connect_from_m365(
             resp = await client.post(
                 f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token",
                 data={
-                    "client_id": SAAS_M365_CLIENT_ID,
-                    "client_secret": SAAS_M365_CLIENT_SECRET,
+                    "client_id": _cc_client_id,
+                    "client_secret": _cc_client_secret,
                     "scope": "https://graph.microsoft.com/.default",
                     "grant_type": "client_credentials",
                 },
@@ -647,7 +656,7 @@ async def auto_connect_from_m365(
         err = resp.json().get("error_description", resp.text[:200])
         raise HTTPException(
             status_code=400,
-            detail=f"Could not obtain SaaS token for tenant {tenant_id}. Ensure admin consent was granted for Himaya SaaS Security app. Error: {err[:200]}"
+            detail=f"Could not obtain SaaS token for tenant {tenant_id}. Grant admin consent (Step 1) for the Himaya app first. Error: {err[:200]}"
         )
 
     access_token = resp.json().get("access_token", "")

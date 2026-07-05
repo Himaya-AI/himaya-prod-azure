@@ -46,6 +46,10 @@ def _compute_risk_score(threats: list) -> int:
     score = 0.0
     for t in threats:
         detected = t.get("detected_at")
+        # Azure PostgreSQL returns detected_at as tz-aware (TIMESTAMPTZ); normalise to
+        # naive UTC so comparisons with datetime.utcnow() don't raise TypeError.
+        if detected is not None and getattr(detected, "tzinfo", None) is not None:
+            detected = detected.replace(tzinfo=None)
         if detected and detected < cutoff_90d:
             continue
         type_pts = TYPE_WEIGHT.get((t.get("threat_type") or "").lower(), 8)
