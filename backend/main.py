@@ -1087,53 +1087,81 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Auto-triage startup restore failed: {e}")
 
-    # ── Sandbox orphan reaper (runs once on startup + periodic) ──────────────
-    # Kills any helios-sandbox ECS tasks older than SESSION_TIMEOUT minutes
-    # that were orphaned by a prior backend restart (their asyncio.sleep timer died).
+    # ── Sandbox orphan reaper (runs periodically) ────────────────────────────
+    # Azure-native: deletes orphaned "himaya-sandbox-*" Azure Container Instances
+    # container groups left behind if the backend restarts mid-detonation (the
+    # aci_sandbox_service normally deletes its own group in a finally block).
+    # Reaps groups that are fully Terminated or older than SESSION_TIMEOUT minutes.
     async def _sandbox_reaper():
-        import boto3 as _boto3, os as _os
+        import os as _os
         from datetime import timezone as _tz
+        try:
+            from azure.identity import DefaultAzureCredential as _Cred
+            from azure.mgmt.containerinstance import ContainerInstanceManagementClient as _ACIClient
+        except ImportError:
+            logger.info("sandbox_reaper: azure-mgmt-containerinstance unavailable — reaper disabled")
+            return
+        if not settings.AZURE_SUBSCRIPTION_ID:
+            logger.info("sandbox_reaper: AZURE_SUBSCRIPTION_ID not set — reaper disabled")
+            return
+
         _timeout_min = int(_os.getenv("SANDBOX_SESSION_TIMEOUT_MINUTES", "30"))
-        _cluster = _os.getenv("SANDBOX_ECS_CLUSTER", "himaya")
-        _region  = _os.getenv("AWS_REGION", "us-west-2")
+        _rg = settings.AZURE_RESOURCE_GROUP
+
+        def _make_client():
+            _cred = _Cred(managed_identity_client_id=settings.AZURE_CLIENT_ID or None)
+            return _ACIClient(_cred, settings.AZURE_SUBSCRIPTION_ID)
+
         while True:
             try:
-                _ecs = _boto3.client("ecs", region_name=_region)
-                _arns_resp = _ecs.list_tasks(cluster=_cluster)
-                _arns = _arns_resp.get("taskArns", [])
-                if _arns:
-                    _tasks = _ecs.describe_tasks(cluster=_cluster, tasks=_arns).get("tasks", [])
-                    _now = datetime.now(_tz.utc)
-                    _killed = 0
-                    for _t in _tasks:
-                        if "helios-sandbox" not in (_t.get("taskDefinitionArn") or ""):
-                            continue
-                        _started = _t.get("startedAt")
-                        if not _started:
-                            continue
-                        if _started.tzinfo is None:
-                            _started = _started.replace(tzinfo=_tz.utc)
-                        _age_min = (_now - _started).total_seconds() / 60
-                        if _age_min > _timeout_min:
-                            try:
-                                _ecs.stop_task(
-                                    cluster=_cluster,
-                                    task=_t["taskArn"],
-                                    reason=f"Sandbox timeout reaper: age={int(_age_min)}min > {_timeout_min}min",
-                                )
-                                _killed += 1
-                                logger.info(f"sandbox_reaper: stopped orphaned task {_t['taskArn'][-12:]} (age={int(_age_min)}min)")
-                            except Exception as _ke:
-                                logger.debug(f"sandbox_reaper: stop failed for {_t.get('taskArn','?')}: {_ke}")
-                    if _killed:
-                        logger.info(f"sandbox_reaper: killed {_killed} orphaned sandbox task(s)")
+                _client = await asyncio.to_thread(_make_client)
+                _groups = await asyncio.to_thread(
+                    lambda: list(_client.container_groups.list_by_resource_group(_rg))
+                )
+                _now = datetime.now(_tz.utc)
+                _killed = 0
+                for _g in _groups:
+                    if not (_g.name or "").startswith("himaya-sandbox-"):
+                        continue
+                    _reap = False
+                    try:
+                        _full = await asyncio.to_thread(_client.container_groups.get, _rg, _g.name)
+                        _states, _starts = [], []
+                        for _c in (_full.containers or []):
+                            _cs = getattr(getattr(_c, "instance_view", None), "current_state", None)
+                            if _cs:
+                                if _cs.state:
+                                    _states.append(_cs.state)
+                                if getattr(_cs, "start_time", None):
+                                    _starts.append(_cs.start_time)
+                        # Reap if every container has Terminated…
+                        if _states and all(_s == "Terminated" for _s in _states):
+                            _reap = True
+                        # …or the group is older than the session timeout.
+                        if _starts:
+                            _start = min(_starts)
+                            if _start.tzinfo is None:
+                                _start = _start.replace(tzinfo=_tz.utc)
+                            if (_now - _start).total_seconds() / 60 > _timeout_min:
+                                _reap = True
+                    except Exception as _ge:
+                        logger.debug(f"sandbox_reaper: inspect failed for {_g.name}: {_ge}")
+                    if _reap:
+                        try:
+                            await asyncio.to_thread(_client.container_groups.begin_delete, _rg, _g.name)
+                            _killed += 1
+                            logger.info(f"sandbox_reaper: deleted orphaned ACI group {_g.name}")
+                        except Exception as _ke:
+                            logger.debug(f"sandbox_reaper: delete failed for {_g.name}: {_ke}")
+                if _killed:
+                    logger.info(f"sandbox_reaper: reaped {_killed} orphaned sandbox group(s)")
             except Exception as _re:
                 logger.debug(f"sandbox_reaper: cycle error (non-fatal): {_re}")
             await asyncio.sleep(300)  # check every 5 min
 
     try:
         asyncio.create_task(_sandbox_reaper())
-        logger.info("Sandbox orphan reaper started (5min interval, 30min timeout)")
+        logger.info("Sandbox orphan reaper started (ACI, 5min interval, 30min timeout)")
     except Exception as _sre:
         logger.warning(f"Sandbox reaper start failed: {_sre}")
 
