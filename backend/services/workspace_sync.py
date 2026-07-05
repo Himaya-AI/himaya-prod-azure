@@ -615,95 +615,81 @@ async def get_workspace_stats(db: AsyncSession, org_id: str) -> dict:
         "recent_findings": [],
     }
     
-    # AWS stats
-    try:
-        result = await db.execute(text("""
-            SELECT COUNT(*) as count FROM aws_connections WHERE org_id = :org_id AND status = 'active'
-        """), {"org_id": org_id})
-        stats["connections"]["aws"] = result.scalar() or 0
-        
-        result = await db.execute(text("""
-            SELECT COUNT(*) as count FROM aws_resources WHERE org_id = :org_id
-        """), {"org_id": org_id})
-        aws_resources = result.scalar() or 0
-        stats["total_resources"] += aws_resources
-        stats["by_provider"]["aws"] = {"resources": aws_resources, "findings": 0}
-        
-        result = await db.execute(text("""
-            SELECT severity, COUNT(*) as count FROM aws_findings 
-            WHERE org_id = :org_id AND status = 'open'
-            GROUP BY severity
-        """), {"org_id": org_id})
-        for row in result.mappings():
-            sev = row["severity"].lower() if row["severity"] else "low"
-            count = row["count"]
-            stats["total_findings"] += count
-            if "by_provider" in stats and "aws" in stats["by_provider"]:
-                stats["by_provider"]["aws"]["findings"] += count
-            if sev == "critical":
-                stats["critical_findings"] += count
-            elif sev == "high":
-                stats["high_findings"] += count
-            elif sev == "medium":
-                stats["medium_findings"] += count
-            else:
-                stats["low_findings"] += count
-        
-        # Get AWS regions for data residency
-        result = await db.execute(text("""
-            SELECT DISTINCT region FROM aws_resources WHERE org_id = :org_id AND region IS NOT NULL
-        """), {"org_id": org_id})
-        for row in result:
-            if row[0]:
-                stats["data_regions"].append({"provider": "aws", "region": row[0]})
-                
-    except Exception as e:
-        logger.debug(f"AWS stats error: {e}")
-    
-    # GCP stats
-    try:
-        result = await db.execute(text("""
-            SELECT COUNT(*) as count FROM gcp_connections WHERE org_id = :org_id AND status = 'active'
-        """), {"org_id": org_id})
-        stats["connections"]["gcp"] = result.scalar() or 0
-        
-        result = await db.execute(text("""
-            SELECT COUNT(*) as count FROM gcp_resources WHERE org_id = :org_id
-        """), {"org_id": org_id})
-        gcp_resources = result.scalar() or 0
-        stats["total_resources"] += gcp_resources
-        stats["by_provider"]["gcp"] = {"resources": gcp_resources, "findings": 0}
-        
-        result = await db.execute(text("""
-            SELECT severity, COUNT(*) as count FROM gcp_findings 
-            WHERE org_id = :org_id AND status = 'open'
-            GROUP BY severity
-        """), {"org_id": org_id})
-        for row in result.mappings():
-            sev = row["severity"].lower() if row["severity"] else "low"
-            count = row["count"]
-            stats["total_findings"] += count
-            if "by_provider" in stats and "gcp" in stats["by_provider"]:
-                stats["by_provider"]["gcp"]["findings"] += count
-            if sev == "critical":
-                stats["critical_findings"] += count
-            elif sev == "high":
-                stats["high_findings"] += count
-            elif sev == "medium":
-                stats["medium_findings"] += count
-            else:
-                stats["low_findings"] += count
-                
-        # GCP regions
-        result = await db.execute(text("""
-            SELECT DISTINCT location FROM gcp_resources WHERE org_id = :org_id AND location IS NOT NULL
-        """), {"org_id": org_id})
-        for row in result:
-            if row[0]:
-                stats["data_regions"].append({"provider": "gcp", "region": row[0]})
-                
-    except Exception as e:
-        logger.debug(f"GCP stats error: {e}")
+    # Per-provider cloud stats.
+    # A provider is surfaced in by_provider ONLY when it is actually connected
+    # (>=1 active connection) OR has inventoried resources. This prevents a
+    # provider the customer never connected (e.g. GCP) from appearing as an
+    # empty "0 resources / 0 findings" card, and ensures every connected cloud
+    # (AWS/GCP/Azure/Oracle/Databricks) shows up — the previous code only ever
+    # queried AWS + GCP and added them unconditionally, so Azure/Oracle/
+    # Databricks resources were invisible in the funnel + data inventory.
+    #   (provider, conn_table, resource_table, findings_table, region_col)
+    _PROVIDER_TABLES = [
+        ("aws", "aws_connections", "aws_resources", "aws_findings", "region"),
+        ("gcp", "gcp_connections", "gcp_resources", "gcp_findings", "location"),
+        ("azure", "azure_connections", "azure_resources", "azure_findings", "region"),
+        ("oracle", "oracle_connections", "oracle_resources", "oracle_findings", "region"),
+        ("databricks", "databricks_connections", "databricks_resources", "databricks_findings", "region"),
+    ]
+    for prov, conn_tbl, res_tbl, find_tbl, region_col in _PROVIDER_TABLES:
+        try:
+            conn_n = (await db.execute(
+                text(f"SELECT COUNT(*) FROM {conn_tbl} WHERE org_id = :org_id AND status = 'active'"),
+                {"org_id": org_id},
+            )).scalar() or 0
+            stats["connections"][prov] = conn_n
+
+            res_n = (await db.execute(
+                text(f"SELECT COUNT(*) FROM {res_tbl} WHERE org_id = :org_id"),
+                {"org_id": org_id},
+            )).scalar() or 0
+
+            # Not connected and no data → do not surface this provider at all.
+            if conn_n == 0 and res_n == 0:
+                continue
+
+            stats["total_resources"] += res_n
+            stats["by_provider"][prov] = {"resources": res_n, "findings": 0}
+
+            # Open findings by severity (best-effort — table may not exist for
+            # every provider on older deployments).
+            try:
+                fr = await db.execute(
+                    text(f"SELECT severity, COUNT(*) as count FROM {find_tbl} "
+                         f"WHERE org_id = :org_id AND status = 'open' GROUP BY severity"),
+                    {"org_id": org_id},
+                )
+                for row in fr.mappings():
+                    sev = row["severity"].lower() if row["severity"] else "low"
+                    count = row["count"]
+                    stats["total_findings"] += count
+                    stats["by_provider"][prov]["findings"] += count
+                    if sev == "critical":
+                        stats["critical_findings"] += count
+                    elif sev == "high":
+                        stats["high_findings"] += count
+                    elif sev == "medium":
+                        stats["medium_findings"] += count
+                    else:
+                        stats["low_findings"] += count
+            except Exception as _fe:
+                logger.debug(f"{prov} findings query skipped: {_fe}")
+
+            # Data-residency regions (best-effort — column name varies).
+            try:
+                rr = await db.execute(
+                    text(f"SELECT DISTINCT {region_col} FROM {res_tbl} "
+                         f"WHERE org_id = :org_id AND {region_col} IS NOT NULL"),
+                    {"org_id": org_id},
+                )
+                for row in rr:
+                    if row[0]:
+                        stats["data_regions"].append({"provider": prov, "region": row[0]})
+            except Exception as _re:
+                logger.debug(f"{prov} regions query skipped: {_re}")
+
+        except Exception as e:
+            logger.debug(f"{prov} stats error: {e}")
     
     # M365/Google stats from org_integrations
     try:

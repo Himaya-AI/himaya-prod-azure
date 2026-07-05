@@ -55,11 +55,14 @@ async def _assess_all_orgs():
 
         orgs = (await db.execute(select(Organization))).scalars().all()
         for org in orgs:
+            # Commit (or roll back) PER ORG so one org's failure can never
+            # discard another org's freshly-written ComplianceStatus rows.
             try:
                 await _assess_org(db, str(org.id))
+                await db.commit()
             except Exception as exc:
+                await db.rollback()
                 logger.warning(f"Compliance assessment failed for org {org.id}: {exc}")
-        await db.commit()
     logger.info(f"Compliance auto-assessment completed for all orgs")
 
 
@@ -147,9 +150,18 @@ async def _assess_org(db, org_id: str):
     # gives credit for monitoring/data_protection/risk_management and
     # an open toxic combination demotes the relevant control to partial.
     async def _safe_scalar(sql: str) -> int:
+        # Wrap each best-effort read in a SAVEPOINT. Some optional tables
+        # (oracle_resources, toxic_combinations, posture_*, etc.) may not exist
+        # for every deployment/org; without a savepoint the FIRST missing-table
+        # error aborts the WHOLE transaction (asyncpg InFailedSQLTransactionError),
+        # so every later read returns 0 AND the final ComplianceStatus writes
+        # fail — leaving the compliance panel permanently empty ("No data").
+        # begin_nested() rolls back only this query on failure, keeping the
+        # outer transaction usable.
         try:
-            r = await db.execute(_sql(sql), {"oid": str(org_uuid)})
-            return int(r.scalar() or 0)
+            async with db.begin_nested():
+                r = await db.execute(_sql(sql), {"oid": str(org_uuid)})
+                return int(r.scalar() or 0)
         except Exception:
             return 0
 
@@ -352,21 +364,24 @@ async def _assess_org(db, org_id: str):
             # Inbox posture management — assess from posture tables
             try:
                 from sqlalchemy import text as _ptxt
-                _pa_r = await db.execute(_ptxt(
-                    "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE risk='high') as high "
-                    "FROM posture_apps WHERE org_id=:oid"
-                ), {"oid": org_id})
-                _pr_r = await db.execute(_ptxt(
-                    "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE risk='high') as high "
-                    "FROM posture_rules WHERE org_id=:oid"
-                ), {"oid": org_id})
-                _pf_r = await db.execute(_ptxt(
-                    "SELECT COUNT(*) FILTER (WHERE is_external=true) as ext "
-                    "FROM posture_forwards WHERE org_id=:oid"
-                ), {"oid": org_id})
-                _scan_r = await db.execute(_ptxt(
-                    "SELECT last_scanned_at FROM posture_scan_log WHERE org_id=:oid"
-                ), {"oid": org_id})
+                # SAVEPOINT: posture_* tables may not exist for every org; a
+                # failure here must not abort the outer assessment transaction.
+                async with db.begin_nested():
+                    _pa_r = await db.execute(_ptxt(
+                        "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE risk='high') as high "
+                        "FROM posture_apps WHERE org_id=:oid"
+                    ), {"oid": org_id})
+                    _pr_r = await db.execute(_ptxt(
+                        "SELECT COUNT(*) as total, COUNT(*) FILTER (WHERE risk='high') as high "
+                        "FROM posture_rules WHERE org_id=:oid"
+                    ), {"oid": org_id})
+                    _pf_r = await db.execute(_ptxt(
+                        "SELECT COUNT(*) FILTER (WHERE is_external=true) as ext "
+                        "FROM posture_forwards WHERE org_id=:oid"
+                    ), {"oid": org_id})
+                    _scan_r = await db.execute(_ptxt(
+                        "SELECT last_scanned_at FROM posture_scan_log WHERE org_id=:oid"
+                    ), {"oid": org_id})
                 _pa = _pa_r.fetchone()
                 _pr = _pr_r.fetchone()
                 _pf = _pf_r.fetchone()
