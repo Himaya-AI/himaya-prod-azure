@@ -199,13 +199,73 @@ class UpdateOrgRequest(BaseModel):
 # Org endpoints
 # ---------------------------------------------------------------------------
 
+async def _purge_org(db: AsyncSession, oid: str) -> None:
+    """
+    Hard-delete an org and ALL its data in FK-safe order.
+
+    Most child tables use ON DELETE CASCADE, but a few FKs do not, so they are
+    removed explicitly before their parents:
+      - audit_logs.org_id / audit_logs.user_id (no cascade)
+      - compliance_evidence.threat_id -> threats.id (no cascade)
+      - threats.recipient_user_id -> users.id (no cascade)
+    """
+    # 1. audit_logs references org + users with no cascade
+    await db.execute(
+        text(
+            "DELETE FROM audit_logs WHERE org_id = :oid "
+            "OR user_id IN (SELECT id FROM users WHERE org_id = :oid)"
+        ),
+        {"oid": oid},
+    )
+    # 2. compliance_evidence -> threats (no cascade): delete before threats
+    await db.execute(text("DELETE FROM compliance_evidence WHERE org_id = :oid"), {"oid": oid})
+    # 3. threats -> users.recipient_user_id (no cascade): delete before users
+    await db.execute(text("DELETE FROM threats WHERE org_id = :oid"), {"oid": oid})
+    # 4. Every other table carrying an org_id column (saas_*, policies, reports,
+    #    org_integrations, billing, usage, settings, compliance_status, ...).
+    others = await db.execute(
+        text(
+            "SELECT table_name FROM information_schema.columns "
+            "WHERE column_name = 'org_id' AND table_schema = 'public' "
+            "AND table_name NOT IN "
+            "('users','audit_logs','threats','compliance_evidence','organizations')"
+        )
+    )
+    for (tbl,) in others.fetchall():
+        await db.execute(text(f'DELETE FROM "{tbl}" WHERE org_id = :oid'), {"oid": oid})
+    # 5. users (after threats + audit_logs so their FKs are clear)
+    await db.execute(text("DELETE FROM users WHERE org_id = :oid"), {"oid": oid})
+    # 6. the org itself
+    await db.execute(text("DELETE FROM organizations WHERE id = :oid"), {"oid": oid})
+
+
 @router.post("/orgs", dependencies=[Depends(verify_admin_key)])
 async def provision_org(req: ProvisionOrgRequest, db: AsyncSession = Depends(get_db)):
     """Provision a new customer tenant."""
-    # Check domain uniqueness
+    # Domain uniqueness — auto-reclaim domains from offboarded orgs so admins can
+    # delete + re-provision the same domain without a leftover soft-deleted row.
     existing = await db.execute(select(Organization).where(Organization.domain == req.domain))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Domain already registered")
+    existing_org = existing.scalar_one_or_none()
+    if existing_org:
+        current_status = (getattr(existing_org, "status", None) or "active")
+        if current_status == "offboarded":
+            await _purge_org(db, str(existing_org.id))
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Domain '{req.domain}' is already registered to an {current_status} "
+                    f"org ({existing_org.id}). Offboard it first, or delete it with ?hard=true."
+                ),
+            )
+
+    # The admin login email is globally unique — block if it belongs elsewhere.
+    dup_user = await db.execute(select(User).where(User.email == req.contact_email))
+    if dup_user.scalar_one_or_none():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email '{req.contact_email}' already belongs to another account.",
+        )
 
     org = Organization(
         name=req.org_name,
@@ -565,8 +625,17 @@ async def reactivate_org(org_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.delete("/orgs/{org_id}", dependencies=[Depends(verify_admin_key)])
-async def offboard_org(org_id: str, db: AsyncSession = Depends(get_db)):
-    """Soft delete — marks org as offboarded, keeps data for 90 days."""
+async def offboard_org(org_id: str, hard: bool = False, db: AsyncSession = Depends(get_db)):
+    """
+    Delete an org. Default is a soft delete (status='offboarded', data retained
+    90 days). Pass ?hard=true to permanently purge the org and ALL its data,
+    freeing the domain + admin email for immediate re-provisioning.
+    """
+    if hard:
+        await _purge_org(db, org_id)
+        await db.commit()
+        return {"purged": True, "org_id": org_id}
+
     await db.execute(
         text("UPDATE organizations SET status = 'offboarded', suspended_at = NOW() WHERE id = :oid"),
         {"oid": org_id},
@@ -1865,10 +1934,21 @@ async def setup_new_org(req: NewOrgRequest, db: AsyncSession = Depends(get_db)):
     """
     import string as _string
 
-    # Check domain uniqueness
+    # Domain uniqueness — auto-reclaim domains from offboarded orgs.
     existing = await db.execute(select(Organization).where(Organization.domain == req.domain))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail=f"Domain '{req.domain}' is already registered")
+    existing_org = existing.scalar_one_or_none()
+    if existing_org:
+        current_status = (getattr(existing_org, "status", None) or "active")
+        if current_status == "offboarded":
+            await _purge_org(db, str(existing_org.id))
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Domain '{req.domain}' is already registered to an {current_status} "
+                    f"org ({existing_org.id}). Offboard it first, or delete it with ?hard=true."
+                ),
+            )
 
     # Create org
     org = Organization(
