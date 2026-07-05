@@ -261,6 +261,7 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
                 "subject": threat.subject or "",
                 "threat_type": threat.threat_type or "UNKNOWN",
                 "risk_score": threat.risk_score or 0,
+                "reputation_score": getattr(threat, "reputation_score", 0) or 0,
                 "llm_classification": getattr(threat, "llm_classification", None),
                 "llm_confidence": getattr(threat, "llm_confidence", None),
                 "ai_explanation_en": threat.ai_explanation_en or "",
@@ -304,6 +305,36 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
         for url in all_urls:
             vt_r = await vt_lookup_url(url)
             vt_url_results.append({"url": url, **vt_r})
+
+        # ── 2b. Reputation service (same prod service the main pipeline uses) ────
+        # Direct VT above is only a supplementary signal (and no-ops without a VT
+        # key). The authoritative reputation comes from our reputation service.
+        # Re-run it live so triage reflects the latest domain-age / feed data,
+        # falling back to the reputation the main pipeline already stored on the
+        # threat if the live call is unavailable.
+        reputation_result: dict = {}
+        try:
+            from backend.services.reputation_client import analyze_email_reputation
+            _rep_body = body_preview or ""
+            if all_urls:
+                _rep_body += "\n" + "\n".join(all_urls)
+            _rep_email = {
+                "sender": threat_data["sender"],
+                "body": _rep_body,
+                "html_body": "",
+                "attachments": [{"filename": n} for n in all_attachments],
+            }
+            _link_r, reputation_result = await analyze_email_reputation(_rep_email, auth_results or {})
+            logger.info(
+                f"auto_triage: reputation sender={threat_data['sender']} "
+                f"score={reputation_result.get('reputation_score')} "
+                f"indicators={reputation_result.get('indicators', [])}"
+            )
+        except Exception as _rep_e:
+            logger.debug(f"auto_triage: reputation lookup failed (non-fatal): {_rep_e}")
+        # Prefer the live score; fall back to the score stored at ingestion time.
+        _stored_rep = int(threat_data.get("reputation_score") or 0)
+        reputation_score_val = int(reputation_result.get("reputation_score") or 0) or _stored_rep
 
         # ── 3. Threat feed checks ──────────────────────────────────────────────
         feed_url_matches: list[str] = []
@@ -420,6 +451,14 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
             "threat_feed_url_matches": feed_url_matches,
             "threat_feed_ip_matches": feed_ip_matches,
             "graph_history": graph_history,
+            "reputation": {
+                "score": reputation_score_val,
+                "verdict": reputation_result.get("verdict"),
+                "indicators": reputation_result.get("indicators", []),
+                "spf_pass": reputation_result.get("spf_pass"),
+                "dkim_pass": reputation_result.get("dkim_pass"),
+                "dmarc_pass": reputation_result.get("dmarc_pass"),
+            },
             "attachments": attachment_findings,
             "body_preview": body_preview[:1000] if body_preview else "",
             # User-reported signal — employees rarely report legitimate emails
@@ -462,7 +501,10 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
             attachment_risk * 15 + ec2_malicious * 30 +
             claude_content_boost  # LLM body analysis score
         ))
-        reputation_s = min(100, graph_s + vt_domain_malicious * 20 + feed_hits * 10)
+        reputation_s = min(100, max(
+            reputation_score_val,
+            graph_s + vt_domain_malicious * 20 + feed_hits * 10,
+        ))
         computed_risk = min(100, max(
             threat_data.get("risk_score", 50),
             int((content_s * 0.4) + (reputation_s * 0.2) + (graph_s * 0.2) +
