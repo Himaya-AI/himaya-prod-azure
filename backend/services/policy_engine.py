@@ -207,7 +207,7 @@ async def _check_threat_feed_condition(email_data: dict, sub_conditions: dict) -
                 for url in urls:
                     hit, matches = await check_url_in_feeds(url, redis=_redis)
                     if hit and any(m in feed_ids for m in matches):
-                        logger.debug(f"threat_feed_match url_match: url={url} feeds={matches}")
+                        logger.info(f"threat_feed_match url_match: url={url} feeds={matches} sender={email_data.get('sender', '?')}")
                         return True
 
             # IP match
@@ -218,7 +218,7 @@ async def _check_threat_feed_condition(email_data: dict, sub_conditions: dict) -
                 if sender_ip:
                     hit, matches = await check_ip_in_feeds(sender_ip, redis=_redis)
                     if hit and any(m in feed_ids for m in matches):
-                        logger.debug(f"threat_feed_match ip_match: ip={sender_ip} feeds={matches}")
+                        logger.info(f"threat_feed_match ip_match: ip={sender_ip} feeds={matches} sender={email_data.get('sender', '?')}")
                         return True
 
             # Domain match
@@ -228,7 +228,7 @@ async def _check_threat_feed_condition(email_data: dict, sub_conditions: dict) -
                 if sender_domain:
                     hit, matches = await check_domain_in_feeds(sender_domain, redis=_redis)
                     if hit and any(m in feed_ids for m in matches):
-                        logger.debug(f"threat_feed_match domain_match: domain={sender_domain} feeds={matches}")
+                        logger.info(f"threat_feed_match domain_match: domain={sender_domain} feeds={matches} sender={email_data.get('sender', '?')}")
                         return True
         finally:
             await _redis.aclose()

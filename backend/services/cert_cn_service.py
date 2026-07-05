@@ -60,6 +60,26 @@ def _is_public_ip(ip: str) -> bool:
     return not any(p.match(ip) for p in _PRIVATE_RANGES)
 
 
+# Defang markers — security bulletins render malicious indicators "defanged"
+# (non-clickable): hxxp://, evil[.]com, 1[.]2[.]3[.]4, host[:]port, etc.
+# Legitimate domains cited in a report (and the report page's own navigation,
+# CDN, analytics and social links) are NEVER defanged, so requiring a defang
+# marker is a high-precision signal that avoids harvesting legit domains.
+_DEFANG_MARKERS = ("[.]", "(.)", "{.}", "[dot]", "(dot)", "hxxp", "[:]", "[//]")
+
+_SAFE_DOMAIN_SUBSTR = ["cert.org.cn", "cctga.org.cn", "gov.cn", "w3.org", "schema.org"]
+
+
+def _refang(s: str) -> str:
+    """Convert a defanged indicator back to its real form for storage/matching."""
+    s = re.sub(r"h[xX]{2}ps", "https", s)
+    s = re.sub(r"h[xX]{2}p", "http", s)
+    s = s.replace("[.]", ".").replace("(.)", ".").replace("{.}", ".")
+    s = re.sub(r"\[dot\]|\(dot\)", ".", s, flags=re.IGNORECASE)
+    s = s.replace("[:]", ":").replace("[//]", "//").replace("[/]", "/")
+    return s
+
+
 async def _fetch_page(url: str, client: httpx.AsyncClient) -> str:
     try:
         r = await client.get(url, headers=HEADERS, timeout=20, follow_redirects=True)
@@ -117,35 +137,54 @@ def _parse_index_links(html: str) -> list[dict]:
 
 
 def _extract_iocs_from_html(html: str) -> tuple[set[str], set[str]]:
-    """Extract IPs and URLs/domains from a report page."""
+    """Extract IOCs (malicious IPs and URLs/domains) from a CERT-CN report page.
+
+    Precision guard against false positives: we only harvest indicators that are
+    genuinely *reported* as malicious, not every domain/URL that happens to
+    appear on the page. Previously this scraped every ``http(s)://`` link and
+    every dotted word from the page text — which swept in the report page's own
+    navigation/CDN/social links, cited legitimate vendors, and even filenames
+    like ``index.html`` — polluting the feed and causing legitimate mail (e.g.
+    Sentry/SendGrid) to be flagged as phishing.
+
+    We now extract from the *visible text only* (dropping HTML tags removes
+    href/src chrome links) and require one of:
+      * a public IPv4 address (IOCs are listed as plain text; the page chrome
+        does not contain bare public IPs), or
+      * a **defanged** URL/domain (hxxp://, evil[.]com). Security bulletins
+        defang malicious indicators so they aren't clickable; legitimate cited
+        domains are never defanged.
+    """
     ips: set[str] = set()
     urls: set[str] = set()
 
-    # Extract IPs
-    for ip in IP_RE.findall(html):
+    # Visible text only — stripping tags drops navigation/asset/social links.
+    text = re.sub(r'<[^>]+>', ' ', html)
+
+    # Public IPs listed in the report body.
+    for ip in IP_RE.findall(text):
         if _is_public_ip(ip):
             ips.add(ip)
 
-    # Extract URLs
-    for url in URL_RE.findall(html):
-        # Clean up URL
-        url = url.rstrip(".,;)\"'>")
+    # Defanged URLs / domains only.
+    for raw in text.split():
+        low = raw.lower()
+        if not any(marker in low for marker in _DEFANG_MARKERS):
+            continue
+        token = _refang(raw).strip(".,;()<>\"'[]").lower()
+        if not token or len(token) > 100:
+            continue
         try:
-            parsed = urlparse(url)
-            if parsed.netloc:
-                urls.add(url.lower())
+            if token.startswith(("http://", "https://")):
+                if urlparse(token).netloc:
+                    urls.add(token)
+            elif DOMAIN_RE.fullmatch(token) and "." in token:
+                urls.add(token)
         except Exception:
             pass
 
-    # Extract bare domains from text (common in Chinese threat reports)
-    # Strip HTML tags first
-    text = re.sub(r'<[^>]+>', ' ', html)
-    for word in text.split():
-        word = word.strip(".,;()'\"")
-        if DOMAIN_RE.fullmatch(word) and '.' in word and len(word) < 100:
-            # Exclude common non-threat domains
-            if not any(safe in word for safe in ['cert.org.cn', 'cctga.org.cn', 'gov.cn', 'w3.org', 'schema.org']):
-                urls.add(word.lower())
+    # Drop known-safe / infrastructure domains that may still appear defanged.
+    urls = {u for u in urls if not any(safe in u for safe in _SAFE_DOMAIN_SUBSTR)}
 
     return ips, urls
 
@@ -191,16 +230,18 @@ async def refresh_cert_cn_feeds(redis=None) -> dict:
                 # Small delay to be polite
                 await asyncio.sleep(0.5)
 
-        # Store in Redis
-        if all_ips:
+        # Store in Redis. Always clear the previous sets first so stale/over-
+        # harvested IOCs from an earlier (less precise) scrape are purged even
+        # when the new scrape yields fewer or zero indicators.
+        if reports_scraped > 0:
             await redis.delete(REDIS_KEY_IPS)
-            await redis.sadd(REDIS_KEY_IPS, *list(all_ips))
-            await redis.expire(REDIS_KEY_IPS, TTL_SECONDS)
-
-        if all_urls:
             await redis.delete(REDIS_KEY_URLS)
-            await redis.sadd(REDIS_KEY_URLS, *list(all_urls))
-            await redis.expire(REDIS_KEY_URLS, TTL_SECONDS)
+            if all_ips:
+                await redis.sadd(REDIS_KEY_IPS, *list(all_ips))
+                await redis.expire(REDIS_KEY_IPS, TTL_SECONDS)
+            if all_urls:
+                await redis.sadd(REDIS_KEY_URLS, *list(all_urls))
+                await redis.expire(REDIS_KEY_URLS, TTL_SECONDS)
 
         meta = {
             "last_refresh": time.time(),
