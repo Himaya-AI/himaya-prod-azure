@@ -194,18 +194,29 @@ async def write_findings(
         # Mirror high+critical into saas_alerts (best effort)
         if mirror_to_saas_alerts and f.severity in (Severity.HIGH, Severity.CRITICAL):
             try:
+                # Dedup at insert time: saas_alerts has no UNIQUE constraint
+                # (too many insert sites for ON CONFLICT), so guard with
+                # WHERE NOT EXISTS on the natural key (org, provider, alert_type,
+                # resource_id) so re-scanning the same misconfiguration every
+                # cycle never surfaces a duplicate alert.
                 await db.execute(
                     text("""
                         INSERT INTO saas_alerts (
                             id, org_id, provider, alert_type, severity, title,
                             description, resource_id, resource_name,
                             status, created_at, classification_result
-                        ) VALUES (
+                        )
+                        SELECT
                             gen_random_uuid(), CAST(:org_id AS UUID), :provider, :alert_type, :severity, :title,
                             :description, :resource_id, :resource_name,
                             'open', NOW(), CAST(:classification AS jsonb)
+                        WHERE NOT EXISTS (
+                            SELECT 1 FROM saas_alerts
+                             WHERE org_id = CAST(:org_id AS UUID)
+                               AND provider = :provider
+                               AND alert_type = :alert_type
+                               AND COALESCE(resource_id, '') = COALESCE(:resource_id, '')
                         )
-                        ON CONFLICT DO NOTHING
                     """),
                     {
                         "org_id": org_id,
