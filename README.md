@@ -132,38 +132,56 @@ Real-time sender intelligence — updated on every email processed:
 
 ## Architecture
 
+Helios runs **natively on Microsoft Azure** in the **UAE North (`uaenorth`)** region, inside the resource group **`rg-himaya-prod`**. Traffic enters through **Azure Front Door** and is served by **Azure Container Apps**. The only non-Azure dependency is the self-hosted **DeepSeek GPU inference** server (DLP / SaaS content classification), which remains on AWS and is reached over HTTPS by FQDN.
+
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    app.himaya.ai                      │
-│              (CloudFront + ECS Frontend)                 │
-│                    Next.js 16 / React                    │
-└──────────────────────┬──────────────────────────────────┘
-                       │ HTTPS API
-┌──────────────────────▼──────────────────────────────────┐
-│                  ECS Backend (FastAPI)                   │
-│                  Python 3.12 / asyncpg                   │
-├─────────┬──────────┬──────────┬───────────┬─────────────┤
-│  Auth   │ Threats  │ People   │ Policies  │ Compliance  │
-│  JWT    │ Auto-    │ Directory│ Engine    │ Reports     │
-│         │ Triage   │ Sync     │           │             │
-└────┬────┴────┬─────┴────┬─────┴─────┬─────┴──────┬──────┘
-     │         │          │           │            │
-  RDS/PG   Neo4j      Redis       S3 Evidence  EC2 Sandbox
-  (main    (graph     (cache,     (artifacts)  (detonation)
-   store)   intel)    queues)
+                         https://app.himaya.ai
+                                  │
+                    ┌─────────────▼──────────────┐
+                    │      Azure Front Door       │   himaya-prod-fd
+                    │   (WAF, TLS, global edge)   │
+                    └─────────────┬──────────────┘
+                                  │
+        ┌─────────────────────────┴─────────────────────────┐
+        │            Azure Container Apps Environment         │  himaya-prod-env
+        │  ┌───────────────┐  ┌──────────────┐  ┌──────────┐ │
+        │  │   frontend    │  │   backend    │  │  worker  │ │
+        │  │  Next.js 16   │  │  FastAPI /   │  │ always-  │ │
+        │  │  (React)      │  │  Python 3.12 │  │ on jobs  │ │
+        │  └───────────────┘  └──────┬───────┘  └────┬─────┘ │
+        └────────────────────────────┼───────────────┼───────┘
+                                      │               │
+   ┌──────────────┬──────────────┬────┴─────┬─────────┴────────┬──────────────┐
+   │              │              │          │                  │              │
+ PostgreSQL   Azure Cache    Blob Storage  Service Bus   Azure Comm.     DeepSeek GPU
+ Flexible      for Redis     (evidence,    (email +      Services        (DLP infer.)
+ Server        himaya-prod-  reports,      job queues)   Email +         *on AWS,
+ himaya-prod-  redis         screenshots)  himaya-prod-  ACS domains     via FQDN*
+ db            (SSL:6380)    himayaprodsa  bus           himaya-prod-comm
 ```
 
-### Infrastructure (AWS, uaenorth)
+### Azure resources (`rg-himaya-prod`, `uaenorth`)
 
-- **Compute:** ECS Fargate (frontend + backend services)
-- **Database:** RDS PostgreSQL (multi-tenant, asyncpg)
-- **Graph:** Neo4j EC2 (`10.0.3.166:7687`, `neo4j / HeliosGraph2026!`)
-- **Cache/Queue:** Redis ElastiCache (`himaya-redis.yuvxb0.0001.usw2.cache.amazonaws.com:6379`)
-- **Storage:** S3 (`himaya-evidence` — threat artifacts, sandbox results, reports)
-- **CDN:** CloudFront (`__AZURE_FD_PROFILE__`) → `app.himaya.ai`
-- **Email:** AWS SES (us-east-1, admin notifications, daily/weekly digests)
-- **Sandbox:** EC2 `t3.micro` ephemeral instances (outbound-only SG) + ECS Fargate sandbox tasks
-- **Container Registry:** ECR (`himaya-frontend`, `himaya-backend`)
+| Resource | Name | Type | Purpose |
+|---|---|---|---|
+| **Front Door** | `himaya-prod-fd` | `Microsoft.Cdn/profiles` | Global edge, WAF, TLS, routes to `app.himaya.ai` |
+| **Container Apps env** | `himaya-prod-env` | `Microsoft.App/managedEnvironments` | Serverless container hosting + autoscale |
+| **Frontend app** | `himaya-prod-frontend` | `Microsoft.App/containerApps` | Next.js 16 / React UI |
+| **Backend app** | `himaya-prod-backend` | `Microsoft.App/containerApps` | FastAPI API (Python 3.12, asyncpg) |
+| **Worker app** | `himaya-prod-worker` | `Microsoft.App/containerApps` | Always-on background workers (delta sync, auto-triage, digests) |
+| **PostgreSQL** | `himaya-prod-db` | `.../flexibleServers` | Multi-tenant primary store (SSL required) |
+| **Redis** | `himaya-prod-redis` | `Microsoft.Cache/redis` | Cache + queues (SSL port `6380`) |
+| **Storage** | `himayaprodsa` | `Microsoft.Storage/storageAccounts` | Blob containers: threat artifacts, sandbox screenshots, PDF reports |
+| **Service Bus** | `himaya-prod-bus` | `Microsoft.ServiceBus/namespaces` | Email + background job queues |
+| **Comm. Services** | `himaya-prod-comm` | `Microsoft.Communication/communicationServices` | Transactional email send (ACS) |
+| **Email domains** | `himaya-prod-email` | `.../emailServices` | Verified domains: `notify.himaya.ai` (primary sender), `himaya.ai`, `AzureManagedDomain` |
+| **Container Registry** | `himayaprodacr` | `Microsoft.ContainerRegistry/registries` | Frontend/backend/worker images (pulled via managed identity) |
+| **Managed Identity** | `himaya-prod-identity` | `.../userAssignedIdentities` | ACR pull, Blob, Service Bus RBAC (no secrets/passwords) |
+| **Log Analytics** | `himaya-prod-logs` | `.../workspaces` | Container Apps console/system logs |
+
+**Email:** primary sends go through **Azure Communication Services** as `noreply@notify.himaya.ai` (SPF/DKIM verified subdomain). **Amazon SES** (`noreply@himaya.ai`, a verified SES domain identity) is the fallback if ACS is unavailable — configured via `SES_FROM`.
+
+**Neo4j graph intelligence** is optional in Azure; without it the backend falls back to Postgres-based sender heuristics.
 
 ---
 
@@ -178,25 +196,35 @@ A new engineer can run the full stack locally in prod-like mode. Here's exactly 
 brew install python@3.12 node@22 docker
 # or apt/dnf equivalents
 
-# AWS CLI (for ECR image pulls and ECS task inspection)
-pip install awscli
-aws configure  # use uaenorth, credentials from Adnan
+# Azure CLI (for ACR image pulls, Container App logs, resource inspection)
+brew install azure-cli   # or: https://learn.microsoft.com/cli/azure/install
+az login
+az account set --subscription <SUBSCRIPTION_ID>
+az acr login --name himayaprodacr
 ```
 
 ### 1. Clone & configure
 
 ```bash
-git clone https://github.com/AdnanAhmed-repo/helios-mail.git
-cd helios-mail
+git clone https://github.com/Himaya-AI/himaya-prod-azure.git
+cd himaya-prod-azure
 
 # Copy and fill in env vars
 cp .env.example .env
-# Edit .env — minimum required:
-#   DATABASE_URL — point to local Postgres or the prod RDS (for read-only dev)
-#   ANTHROPIC_API_KEY — get from Adnan
-#   VIRUSTOTAL_API_KEY — get from Adnan (0ccb9eae...)
-#   JWT_SECRET — any 32+ char string for local
-#   VENDOR_ADMIN_API_KEY — any string for local
+# Edit .env — minimum required for local dev:
+#   DATABASE_URL          — local Postgres (step 2) or Azure Flexible Server (sslmode=require)
+#   REDIS_URL             — local Redis, or the Azure Cache endpoint on port 6380 (SSL)
+#   ANTHROPIC_API_KEY     — get from Adnan
+#   VIRUSTOTAL_API_KEY    — get from Adnan
+#   JWT_SECRET            — any 32+ char string for local
+#   VENDOR_ADMIN_API_KEY  — any string for local
+#
+# Azure-specific (optional locally — code falls back cleanly if unset):
+#   AZURE_COMMUNICATION_CONNECTION_STRING — ACS email; unset ⇒ SES fallback / console print
+#   AZURE_STORAGE_CONNECTION_STRING       — Blob; unset ⇒ local filesystem / S3 abstraction
+#   AZURE_SERVICE_BUS_NAMESPACE           — queues; unset ⇒ in-process / SQS fallback
+#   EMAIL_FROM=noreply@notify.himaya.ai   — SES_FROM=noreply@himaya.ai for the fallback path
+#   DEEPSEEK_ENDPOINT                     — AWS DLP inference FQDN (DLP / SaaS features only)
 ```
 
 ### 2. Start local dependencies
@@ -250,41 +278,44 @@ HELIOS_ADMIN_KEY=your-local-admin-key \
 # Returns: org_id, temp_password, login_url
 ```
 
-### 6. Deploy to production
+### 6. Deploy to production (Azure)
+
+Production deploys run through **GitHub Actions** — push to `main` and the
+`Deploy — Azure Production (main branch)` workflow builds and rolls out all three apps:
 
 ```bash
-# Both frontend + backend (ARM64, ECS, CloudFront invalidation)
-./deploy.sh both
-
-# Backend only
-./deploy.sh backend
-
-# Frontend only
-./deploy.sh frontend
+git push origin main
+# → builds frontend + backend + worker images (linux/amd64)
+# → pushes to ACR (himayaprodacr)
+# → updates the three Azure Container Apps (new revisions)
+# → health-checks https://app.himaya.ai/health
 ```
 
-The deploy script:
-1. Builds Docker image (`linux/arm64` for Fargate Graviton)
-2. Pushes to ECR
-3. Registers new ECS task definition
-4. Forces ECS service redeployment
-5. Runs 21-check production readiness test suite
-6. Invalidates CloudFront cache (frontend only)
+To build and deploy from your machine instead:
+
+```bash
+az login
+bash deploy-azure.sh          # build → push to ACR → update Container Apps
+```
+
+Infrastructure is defined as code in `infra/azure/main.bicep`; re-provision with
+`bash infra/azure/provision.sh`. See **`README-AZURE.md`** for the full Azure runbook.
 
 ### 7. Production access
 
 ```
 Production URL:    https://app.himaya.ai
-Admin login:       adnan@himaya.ai / <set VENDOR_ADMIN_PASSWORD env var>
-Admin API key:     <set VENDOR_ADMIN_API_KEY env var> (X-Admin-API-Key header)
-Neo4j:             bolt://10.0.3.166:7687 (VPC private, use SSH tunnel or /api/admin/neo4j/* endpoints)
+Admin portal:      https://app.himaya.ai/admin   (vendor portal — OTP login)
+Admin API key:     <VENDOR_ADMIN_API_KEY>  (sent as X-Admin-API-Key header)
+Health check:      https://app.himaya.ai/health
+Live logs:         az containerapp logs show -n himaya-prod-backend -g rg-himaya-prod --follow
 ```
 
 ---
 
-## Background Workers (always-on in ECS)
+## Background Workers (always-on — `himaya-prod-worker` Container App)
 
-These run automatically on ECS startup and restore on restart:
+These run automatically on Container App startup and restore on restart:
 
 | Worker | Interval | Description |
 |---|---|---|
@@ -439,7 +470,7 @@ Interactive docs: [app.himaya.ai/docs](https://app.himaya.ai/docs)
 - All phish report submissions are keyed (no unauthenticated ingestion)
 - EC2 sandbox instances use outbound-only security groups, terminated immediately after analysis
 - Sandbox results stored in S3 + Postgres — not just ephemeral Redis
-- JWT secrets and API keys managed via ECS task definition environment variables
+- JWT secrets and API keys managed via Azure Container Apps env vars (move to Container Apps *secrets* / Key Vault for at-rest protection); ACR pull and Blob/Service Bus access use the `himaya-prod-identity` managed identity (no static credentials)
 - Multi-tenant isolation enforced at every query layer (all queries scoped to `org_id`)
 - Reports scoped to `current_user.org_id` — cross-tenant access impossible
 - Neo4j intelligence is global (cross-org sender reputation) — not tenant-isolated by design
