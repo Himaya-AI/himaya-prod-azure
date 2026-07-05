@@ -260,12 +260,16 @@ async def provision_org(req: ProvisionOrgRequest, db: AsyncSession = Depends(get
                 ),
             )
 
+    # Normalize the admin login email to lowercase so login lookups always
+    # match (login matches case-insensitively). Store the normalized form.
+    _contact_email = (req.contact_email or "").strip().lower()
+
     # The admin login email is globally unique — block if it belongs elsewhere.
-    dup_user = await db.execute(select(User).where(User.email == req.contact_email))
+    dup_user = await db.execute(select(User).where(func.lower(User.email) == _contact_email))
     if dup_user.scalar_one_or_none():
         raise HTTPException(
             status_code=400,
-            detail=f"Email '{req.contact_email}' already belongs to another account.",
+            detail=f"Email '{_contact_email}' already belongs to another account.",
         )
 
     org = Organization(
@@ -300,7 +304,7 @@ async def provision_org(req: ProvisionOrgRequest, db: AsyncSession = Depends(get
 
     # Create first admin user — no temp password, activation token flow
     import redis as sync_redis
-    admin_email = req.contact_email  # use their real email as login
+    admin_email = _contact_email  # normalized (lowercased) real email as login
     user = User(
         org_id=org.id,
         email=admin_email,

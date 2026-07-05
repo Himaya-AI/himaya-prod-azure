@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
 
+from sqlalchemy import func
 from backend.database import get_db
 from backend.config import settings
 from backend.models.db_models import User, Organization
@@ -111,8 +112,11 @@ async def register(
     if existing_org.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Domain already registered")
 
-    # Check if user email exists
-    existing_user = await db.execute(select(User).where(User.email == req.email))
+    # Normalize email to lowercase so login lookups always match.
+    reg_email = (req.email or "").strip().lower()
+
+    # Check if user email exists (case-insensitive)
+    existing_user = await db.execute(select(User).where(func.lower(User.email) == reg_email))
     if existing_user.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Email already registered")
 
@@ -129,8 +133,8 @@ async def register(
     # Create admin user
     user = User(
         org_id=org.id,
-        email=req.email,
-        name=req.name or req.email.split("@")[0],
+        email=reg_email,
+        name=req.name or reg_email.split("@")[0],
         role="admin",
         password_hash=await hash_password_async(req.password),
         is_active=True,
@@ -150,14 +154,23 @@ async def register(
 
 @router.post("/login", response_model=TokenResponse)
 async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == req.email))
+    # Email is matched case-insensitively so a customer typing "Admin@Acme.com"
+    # can still log into the account stored as "admin@acme.com".
+    email = (req.email or "").strip().lower()
+    result = await db.execute(select(User).where(func.lower(User.email) == email))
     user = result.scalar_one_or_none()
-    if not user or not user.password_hash:
+    if not user:
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not await verify_password_async(req.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+    # A freshly-provisioned admin is created inactive with a random unusable
+    # password until they set one via the activation link. Surface a clear,
+    # actionable message instead of a confusing "Invalid credentials".
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account disabled")
+        raise HTTPException(
+            status_code=403,
+            detail="Your account isn't activated yet. Check your email for the setup link, or use 'Forgot password' to set a new one.",
+        )
+    if not user.password_hash or not await verify_password_async(req.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
     user.last_login = datetime.utcnow()
     await db.flush()
