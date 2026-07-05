@@ -364,16 +364,37 @@ async def evaluate_policies(
     def _auth_failed(_v) -> bool:
         return isinstance(_v, str) and _v.lower() in ("fail", "failed", "softfail")
 
+    def _auth_passed(_v) -> bool:
+        return isinstance(_v, str) and _v.lower() in ("pass", "passed")
+
     is_internal_trusted = bool(
         _sender_dom and _rcpt_dom and _sender_dom == _rcpt_dom
         and not _auth_failed(_ar.get("dkim"))
         and not _auth_failed(_ar.get("dmarc"))
         and not _auth_failed(_ar.get("spf"))
     )
-    if is_internal_trusted:
+
+    # Authenticated external sender: DMARC pass, or DKIM+SPF both pass. IP-
+    # reputation threat-intel packs (OpenDBL, CERT-CN IPs, TOR, blocklist.de)
+    # quarantine on the sending *relay* IP and are meant for spoofed /
+    # unauthenticated / botnet senders. When a message is authenticated the
+    # domain owner has authorised that sending path, so an IP-feed hit is a
+    # false positive — e.g. Sentry/SendGrid/Mailchimp transactional mail whose
+    # shared ESP relay IP happens to appear in a feed. We therefore skip the
+    # IP-based packs for authenticated mail, but STILL evaluate domain/URL feed
+    # matches (those target genuinely malicious infrastructure regardless of the
+    # relay IP or authentication state).
+    is_authenticated = (
+        _auth_passed(_ar.get("dmarc"))
+        or (_auth_passed(_ar.get("dkim")) and _auth_passed(_ar.get("spf")))
+    )
+    skip_ip_packs = is_internal_trusted or is_authenticated
+
+    if skip_ip_packs:
         logger.info(
-            f"Internal trusted sender {email_data_norm.get('sender', '?')} -> {_rcpt}: "
-            f"skipping external IP/domain threat-intel packs (same domain, auth not failing; "
+            f"Trusted sender {email_data_norm.get('sender', '?')} -> {_rcpt}: "
+            f"skipping IP-reputation threat-intel packs "
+            f"({'internal' if is_internal_trusted else 'authenticated'}; "
             f"spf={_ar.get('spf')} dkim={_ar.get('dkim')} dmarc={_ar.get('dmarc')})."
         )
 
@@ -392,9 +413,9 @@ async def evaluate_policies(
         skip_keys = set()
 
         if "opendbl_pack" in conds:
-            # OpenDBL packs are purely sender-IP reputation — never applicable to
-            # authenticated internal first-party mail.
-            if is_internal_trusted:
+            # OpenDBL packs are purely sender-IP reputation — not applicable to
+            # internal first-party mail or authenticated external senders.
+            if skip_ip_packs:
                 continue
             pack_ids = conds["opendbl_pack"]
             opendbl_matched = await _check_opendbl_condition(email_data_norm, pack_ids)
@@ -405,11 +426,15 @@ async def evaluate_policies(
         if "threat_feed_match" in conds:
             sub_conds = conds["threat_feed_match"]
             if is_internal_trusted:
-                # Drop sender-based (IP/domain) sub-conditions for internal mail;
-                # keep only malicious-URL feed checks.
+                # Internal first-party mail: keep only malicious-URL feed checks
+                # (drop sender IP + sender-domain matching).
                 sub_conds = {k: v for k, v in sub_conds.items() if k == "url_match"}
-                if not sub_conds:
-                    continue
+            elif is_authenticated:
+                # Authenticated external mail: drop only the sender-IP match;
+                # still honour sender-domain and URL feed matches.
+                sub_conds = {k: v for k, v in sub_conds.items() if k in ("url_match", "domain_match")}
+            if not sub_conds:
+                continue
             feed_matched = await _check_threat_feed_condition(email_data_norm, sub_conds)
             if not feed_matched:
                 continue
