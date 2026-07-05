@@ -191,43 +191,37 @@ def resolve_domain_to_ip(domain: str) -> Optional[str]:
 
 def extract_ips_from_email(email_data: dict) -> list[str]:
     """
-    Extract candidate IPs from an email for OpenDBL checking:
-    1. Sender IP from Received headers (X-Originating-IP, etc.)
-    2. Resolved IPs of domains found in email links
+    Extract candidate IPs from an email for IP-blocklist (OpenDBL) checking.
+
+    IMPORTANT — false-positive guard: we deliberately do NOT DNS-resolve the
+    sender domain or link domains to IPs. IP-reputation feeds (blocklist.de,
+    brute_force, tor, emerging-threats) are host-abuse lists. Resolving a
+    legitimate sender/link domain (e.g. Sentry, SendGrid, marketing/CDN links)
+    to its shared hosting IP and matching that against a 20k+ entry abuse list
+    quarantined large amounts of legitimate mail. IP feeds must only match
+    actual IPs, i.e.:
+      1. The true originating sender IP (parsed from Received headers), and
+      2. Literal IPv4 addresses embedded directly in URLs (a genuine IOC —
+         legitimate senders don't link to bare IPs).
+    Domain-based reputation is handled separately via the domain/URL threat
+    feeds (OpenPhish / URLhaus / ANVA / CERT-CN), which store domains, not
+    resolved IPs.
     """
     ips: list[str] = []
 
-    # 1. Try X-Originating-IP or similar headers stored in email_data
+    # 1. True originating sender IP (from Received headers / X-Originating-IP)
     for field in ("sender_ip", "x_originating_ip", "originating_ip"):
         ip = email_data.get(field, "")
         if ip and _IP_RE.match(str(ip)):
             ips.append(str(ip).strip())
 
-    # 2. Resolve sender domain → IP
-    sender_domain = email_data.get("sender_domain") or ""
-    if sender_domain:
-        resolved = resolve_domain_to_ip(sender_domain)
-        if resolved:
-            ips.append(resolved)
-
-    # 3. Extract links from body and resolve their domains
+    # 2. Literal IPv4 addresses appearing directly as a URL host in the body
     body = email_data.get("body") or ""
     if body:
-        urls = re.findall(r'https?://([^/\s"\'<>]+)', body)
-        seen_domains: set[str] = set()
-        for url_host in urls[:20]:  # cap at 20 links per email
-            # Strip port if present
-            host = url_host.split(":")[0].lower()
-            if host in seen_domains:
-                continue
-            seen_domains.add(host)
-            # If it's already an IP
+        for url_host in re.findall(r'https?://([^/\s"\'<>]+)', body)[:20]:
+            host = url_host.split(":")[0].strip()
             if _IP_RE.match(host):
                 ips.append(host)
-            else:
-                resolved = resolve_domain_to_ip(host)
-                if resolved:
-                    ips.append(resolved)
 
     # Deduplicate
     return list(dict.fromkeys(ips))

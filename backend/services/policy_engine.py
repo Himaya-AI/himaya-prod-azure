@@ -259,7 +259,10 @@ async def _check_opendbl_condition(email_data: dict, pack_ids) -> bool:
             for ip in ips:
                 hit = await check_ip_in_any_pack(_redis, ip, packs)
                 if hit:
-                    logger.debug(f"OpenDBL hit: ip={ip} pack={hit}")
+                    logger.info(
+                        f"OpenDBL hit: ip={ip} pack={hit} sender={email_data.get('sender', '?')} "
+                        f"(candidate IPs checked: {ips})"
+                    )
                     return True
         finally:
             await _redis.aclose()
