@@ -12,6 +12,16 @@ RG="rg-himaya-prod"               # Resource group name
 POSTGRES_ADMIN_USER="himayaadmin" # PostgreSQL admin username
 POSTGRES_ADMIN_PASSWORD=""        # Set this or pass as env var
 DEEPSEEK_ENDPOINT=""              # Existing AWS DeepSeek FQDN
+ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"   # Enables Claude LLM classification + fallback
+
+# ── OAuth (M365 / Google Workspace onboarding) — set these or pass as env vars ─
+M365_CLIENT_ID="${M365_CLIENT_ID:-}"
+M365_CLIENT_SECRET="${M365_CLIENT_SECRET:-}"
+M365_TENANT_ID="${M365_TENANT_ID:-common}"
+GOOGLE_CLIENT_ID="${GOOGLE_CLIENT_ID:-}"
+GOOGLE_CLIENT_SECRET="${GOOGLE_CLIENT_SECRET:-}"
+SAAS_M365_CLIENT_ID="${SAAS_M365_CLIENT_ID:-}"
+SAAS_M365_CLIENT_SECRET="${SAAS_M365_CLIENT_SECRET:-}"
 
 # ── Derived names ──────────────────────────────────────────────────────────
 PREFIX="${BASE_NAME}-${ENV_NAME}"
@@ -52,7 +62,15 @@ az deployment group create \
         environmentName="${ENV_NAME}" \
         postgresAdminUser="${POSTGRES_ADMIN_USER}" \
         postgresAdminPassword="${POSTGRES_ADMIN_PASSWORD}" \
-        deepseekEndpoint="${DEEPSEEK_ENDPOINT}"
+        deepseekEndpoint="${DEEPSEEK_ENDPOINT}" \
+        anthropicApiKey="${ANTHROPIC_API_KEY}" \
+        m365ClientId="${M365_CLIENT_ID}" \
+        m365ClientSecret="${M365_CLIENT_SECRET}" \
+        m365TenantId="${M365_TENANT_ID}" \
+        googleClientId="${GOOGLE_CLIENT_ID}" \
+        googleClientSecret="${GOOGLE_CLIENT_SECRET}" \
+        saasM365ClientId="${SAAS_M365_CLIENT_ID}" \
+        saasM365ClientSecret="${SAAS_M365_CLIENT_SECRET}"
 
 # ── Output important endpoints ─────────────────────────────────────────────
 echo ""

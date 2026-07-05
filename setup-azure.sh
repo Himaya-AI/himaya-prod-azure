@@ -44,6 +44,18 @@ prompt AZURE_SUBSCRIPTION_ID "Azure subscription ID: "
 prompt AZURE_TENANT_ID "Azure tenant ID: "
 prompt POSTGRES_ADMIN_PASSWORD "PostgreSQL admin password (hidden): " secret
 prompt DEEPSEEK_ENDPOINT "DeepSeek AWS endpoint (e.g. https://1.2.3.4:8001): "
+prompt ANTHROPIC_API_KEY "Anthropic API key (Claude LLM classification + fallback, hidden): " secret
+
+# ── OAuth (M365 / Google Workspace onboarding) ──────────────────────────────
+# Required so onboarding/callback redirect URIs resolve to https://app.himaya.ai
+# instead of the localhost defaults. Leave blank to skip a provider.
+prompt M365_CLIENT_ID "Microsoft 365 OAuth client (application) ID: "
+prompt M365_CLIENT_SECRET "Microsoft 365 OAuth client secret (hidden): " secret
+prompt M365_TENANT_ID "Microsoft 365 tenant ID (or 'common'): "
+prompt GOOGLE_CLIENT_ID "Google Workspace OAuth client ID: "
+prompt GOOGLE_CLIENT_SECRET "Google Workspace OAuth client secret (hidden): " secret
+prompt SAAS_M365_CLIENT_ID "SaaS Security M365 OAuth client ID (optional): "
+prompt SAAS_M365_CLIENT_SECRET "SaaS Security M365 OAuth client secret (optional, hidden): " secret
 
 # ── Validate prerequisites ──────────────────────────────────────────────────
 for cmd in az git docker; do
@@ -111,7 +123,15 @@ az deployment group create \
         environmentName="$ENV_NAME" \
         postgresAdminUser="$POSTGRES_ADMIN_USER" \
         postgresAdminPassword="$POSTGRES_ADMIN_PASSWORD" \
-        deepseekEndpoint="$DEEPSEEK_ENDPOINT"
+        deepseekEndpoint="$DEEPSEEK_ENDPOINT" \
+        anthropicApiKey="${ANTHROPIC_API_KEY:-}" \
+        m365ClientId="${M365_CLIENT_ID:-}" \
+        m365ClientSecret="${M365_CLIENT_SECRET:-}" \
+        m365TenantId="${M365_TENANT_ID:-common}" \
+        googleClientId="${GOOGLE_CLIENT_ID:-}" \
+        googleClientSecret="${GOOGLE_CLIENT_SECRET:-}" \
+        saasM365ClientId="${SAAS_M365_CLIENT_ID:-}" \
+        saasM365ClientSecret="${SAAS_M365_CLIENT_SECRET:-}"
 
 # ── Capture outputs ────────────────────────────────────────────────────────
 echo "Capturing deployment outputs..."

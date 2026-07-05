@@ -35,6 +35,43 @@ param customDomain string = 'app.himaya.ai'
 @description('DeepSeek endpoint FQDN (remains on AWS)')
 param deepseekEndpoint string = ''
 
+@description('Reputation microservice base URL (AWS ALB, us-east-1)')
+param reputationServiceUrl string = 'http://helios-reputation-alb-1053507845.us-east-1.elb.amazonaws.com'
+
+@description('Graph (Neo4j trust) microservice base URL (AWS ALB, us-east-1) — routes are prefixed with /graph')
+param graphServiceUrl string = 'http://graph-lb-926798979.us-east-1.elb.amazonaws.com'
+
+@description('Content classifier (Kimi K2.5) microservice base URL (AWS ALB, us-east-1)')
+param classifierServiceUrl string = 'http://classify-lb-556047835.us-east-1.elb.amazonaws.com'
+
+@description('Anthropic API key — enables Claude LLM classification + fallback')
+@secure()
+param anthropicApiKey string = ''
+
+@description('Microsoft 365 OAuth application (client) ID')
+param m365ClientId string = ''
+
+@description('Microsoft 365 OAuth client secret')
+@secure()
+param m365ClientSecret string = ''
+
+@description('Microsoft 365 directory (tenant) ID, or "common"')
+param m365TenantId string = 'common'
+
+@description('Google Workspace OAuth client ID')
+param googleClientId string = ''
+
+@description('Google Workspace OAuth client secret')
+@secure()
+param googleClientSecret string = ''
+
+@description('SaaS Security M365 OAuth application (client) ID')
+param saasM365ClientId string = ''
+
+@description('SaaS Security M365 OAuth client secret')
+@secure()
+param saasM365ClientSecret string = ''
+
 @description('Image tags to deploy')
 param frontendImage string = ''
 param backendImage string = ''
@@ -157,7 +194,12 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
           identity: identity.id
         }
       ]
-      secrets: []
+      secrets: [
+        { name: 'anthropic-api-key', value: anthropicApiKey }
+        { name: 'm365-client-secret', value: m365ClientSecret }
+        { name: 'google-client-secret', value: googleClientSecret }
+        { name: 'saas-m365-client-secret', value: saasM365ClientSecret }
+      ]
     }
     template: {
       containers: [
@@ -176,6 +218,25 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'DEEPSEEK_ENDPOINT', value: deepseekEndpoint }
             { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
             { name: 'AZURE_REGION', value: location }
+            // ── Threat-detection microservices (remain on AWS ALBs, us-east-1) ──
+            { name: 'REPUTATION_SERVICE_URL', value: reputationServiceUrl }
+            { name: 'GRAPH_SERVICE_URL', value: graphServiceUrl }
+            { name: 'CLASSIFIER_SERVICE_URL', value: classifierServiceUrl }
+            { name: 'ANTHROPIC_API_KEY', secretRef: 'anthropic-api-key' }
+            // ── App base URL (CORS, invite links, OAuth post-callback redirects) ──
+            { name: 'FRONTEND_URL', value: 'https://${customDomain}' }
+            // ── Microsoft 365 OAuth (onboarding) ──
+            { name: 'M365_CLIENT_ID', value: m365ClientId }
+            { name: 'M365_CLIENT_SECRET', secretRef: 'm365-client-secret' }
+            { name: 'M365_TENANT_ID', value: m365TenantId }
+            { name: 'M365_REDIRECT_URI', value: 'https://${customDomain}/api/onboarding/callback/m365' }
+            // ── Google Workspace OAuth (onboarding) ──
+            { name: 'GOOGLE_CLIENT_ID', value: googleClientId }
+            { name: 'GOOGLE_CLIENT_SECRET', secretRef: 'google-client-secret' }
+            { name: 'GOOGLE_REDIRECT_URI', value: 'https://${customDomain}/api/onboarding/callback/google' }
+            // ── SaaS Security M365 OAuth ──
+            { name: 'SAAS_M365_CLIENT_ID', value: saasM365ClientId }
+            { name: 'SAAS_M365_CLIENT_SECRET', secretRef: 'saas-m365-client-secret' }
           ]
         }
       ]
