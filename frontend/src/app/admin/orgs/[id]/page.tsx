@@ -566,7 +566,10 @@ function AccountTab({ org, onRefresh }: { org: OrgDetail; onRefresh: () => void 
       {/* Plan selector */}
       <div className="bg-[#111118] border border-[#2a2a3a] rounded-xl p-5">
         <h3 className="text-white font-semibold mb-1">Plan</h3>
-        <p className="text-[#a0a0c0] text-sm mb-4">Change the subscription plan for this organization.</p>
+        <p className="text-[#a0a0c0] text-sm mb-4">
+          Change the subscription plan for this organization.
+          <span className="text-[#c0c0e0]"> Selecting <strong>Enterprise</strong> unlocks Workspace Security, DLP, and Posture for the customer.</span>
+        </p>
         <div className="flex items-center gap-3">
           <select
             value={planValue}

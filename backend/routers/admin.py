@@ -189,6 +189,7 @@ class ProvisionOrgRequest(BaseModel):
 
 class UpdateOrgRequest(BaseModel):
     plan: Optional[str] = None
+    tier: Optional[str] = None  # "Launch" | "Enterprise" | "Enterprise Trial"
     mailbox_limit: Optional[int] = None
     billing_rate_usd: Optional[float] = None
     contact_email: Optional[str] = None
@@ -276,6 +277,10 @@ async def provision_org(req: ProvisionOrgRequest, db: AsyncSession = Depends(get
     db.add(org)
     await db.flush()
 
+    # Enterprise plan unlocks the enterprise feature tier (DLP, Workspace
+    # Security, Posture, etc.); everything else stays on Launch.
+    tier = "Enterprise" if (req.plan or "").strip().lower() == "enterprise" else "Launch"
+
     # Set new columns via raw SQL (they may not be in the ORM model yet)
     await db.execute(
         text("""
@@ -284,11 +289,13 @@ async def provision_org(req: ProvisionOrgRequest, db: AsyncSession = Depends(get
                 billing_rate_usd = :br,
                 contact_email = :ce,
                 contact_name = :cn,
+                tier = :tier,
                 status = 'active'
             WHERE id = :oid
         """),
         {"ml": req.mailbox_limit, "br": req.billing_rate_usd,
-         "ce": req.contact_email, "cn": req.contact_name, "oid": str(org.id)},
+         "ce": req.contact_email, "cn": req.contact_name,
+         "tier": tier, "oid": str(org.id)},
     )
 
     # Create first admin user — no temp password, activation token flow
@@ -586,6 +593,12 @@ async def update_org(org_id: str, req: UpdateOrgRequest, db: AsyncSession = Depe
     updates = {}
     if req.plan is not None:
         updates["plan"] = req.plan
+    # Tier controls enterprise feature gating (DLP, Workspace Security, Posture).
+    # Honour an explicit tier; otherwise keep it in sync with the plan.
+    if req.tier is not None:
+        updates["tier"] = req.tier
+    elif req.plan is not None:
+        updates["tier"] = "Enterprise" if req.plan.strip().lower() == "enterprise" else "Launch"
     if req.mailbox_limit is not None:
         updates["mailbox_limit"] = req.mailbox_limit
     if req.billing_rate_usd is not None:
