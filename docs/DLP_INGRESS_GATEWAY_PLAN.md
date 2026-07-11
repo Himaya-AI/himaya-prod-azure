@@ -6,9 +6,12 @@
 - **Providers:** Microsoft 365 and Google Workspace.
 - **Excluded for now:** Classification, policy evaluation, audit UI, and frontend design.
 - **Primary decision:** Build one durable SMTP gateway and use provider-return delivery.
+- **Service boundary:** Gateway lives in a separate `dlp-gateway/` deployable; Enable DLP, policies, classification, and APIs live in `backend/dlp/`.
 - **Direct internet delivery:** Not included.
 - **Microsoft 365:** Target for production support.
 - **Google Workspace:** Must pass a provider-specific proof of concept and readiness gate before enforcement is generally available.
+
+The implementation roadmap for enablement, user targeting, classification, policies, review, APIs, and rollout is in `docs/DLP_BACKEND_IMPLEMENTATION_ROADMAP.md`.
 
 ## Refined design prompt
 
@@ -34,11 +37,12 @@ flowchart LR
 
     Edge --> Spool[(Durable MTA spool)]
     Spool --> Capture[Capture worker]
-    Capture --> Decision{Future DLP decision}
+    Capture --> Events[Event queue]
+    Events --> Backend[backend/dlp workers]
+    Backend -->|allow or release command| Relay[Relay dispatcher]
 
-    Decision -->|Allow| Relay[Relay dispatcher]
-    Decision -->|Hold| Hold[(Hold queue)]
-    Decision -->|Stop| Stop[Stop and notify]
+    Backend -->|Hold| Hold[(Hold queue)]
+    Backend -->|Stop| Stop[Stop and notify]
     Hold -->|Authorized release command| Relay
 
     Relay -->|Microsoft adapter| Exchange[Exchange Online]
@@ -130,10 +134,11 @@ Therefore:
 
 ## Canonical architecture
 
-The terms in this diagram are used consistently throughout this document:
+Service and plane terms used throughout this document:
 
-- **Data plane:** SMTP acceptance, durable queueing, message capture, decision execution, and provider submission.
-- **Control plane:** Tenant configuration, setup validation, reviewer authorization, release/stop commands, certificate management, and health status.
+- **`dlp-gateway/` data plane:** SMTP acceptance, durable spool, immutable MIME capture, local config cache, provider-return relay, and command consumption for release/stop/retry.
+- **`backend/dlp/` control plane:** Tenant configuration, Enable DLP, setup validation, reviewer authorization, policies, release/stop APIs, certificate management, and health status.
+- **`backend/dlp/` application workers:** Extraction, classification, policy evaluation, notifications, and delivery reconciliation. These are not part of the SMTP edge process.
 - **Storage plane:** MTA spool, immutable MIME objects, metadata, and command/event queues.
 
 ```mermaid
@@ -144,13 +149,16 @@ flowchart TD
     Spool --> Capture[Capture worker]
     Capture --> MIME[(Immutable encrypted MIME storage)]
     Capture --> Metadata[(Message metadata)]
-    Metadata --> Decision[Decision worker]
+    Metadata --> Events[(Event queue)]
 
-    Decision -->|Allow| Relay[Relay dispatcher]
-    Decision -->|Hold| Held[(Held state)]
-    Decision -->|Stop| Stopped[(Stopped state)]
+    Events --> AppWorkers[backend/dlp workers]
+    AppWorkers -->|allow or release command| Commands[(Command queue)]
+    AppWorkers -->|Hold| Held[(Held state)]
+    AppWorkers -->|Stop| Stopped[(Stopped state)]
     Held -. state stored in .-> Metadata
 
+    Commands --> CommandProcessor[Gateway command processor]
+    CommandProcessor --> Relay[Relay dispatcher]
     Relay --> M365Adapter[Microsoft 365 relay adapter]
     Relay --> GoogleAdapter[Google Workspace relay adapter]
     MIME -. reads immutable source .-> Relay
@@ -160,21 +168,28 @@ flowchart TD
     EXO --> Recipient[External recipient]
     GoogleRelay --> Recipient
 
-    Admin[Customer administrator or reviewer] --> API[Himaya control-plane API]
+    Admin[Customer administrator or reviewer] --> API[backend/dlp control-plane API]
     API --> Config[(Tenant configuration)]
     API --> Setup[Provider setup validator]
     API --> Certificates[Certificate manager]
-    API --> Commands[(Command queue)]
-    Commands --> CommandProcessor[Command processor]
-    CommandProcessor -->|Release or approved retry| Relay
-    CommandProcessor -->|Stop| Stopped
+    API --> Commands
     Config --> Publisher[Signed configuration publisher]
     Publisher --> ConfigCache
 
-    Metadata --> Events[(Event queue)]
     Events --> Notifications[Notification service]
     Notifications --> Sender[Sender and security recipients]
 ```
+
+Repository placement:
+
+```text
+himaya-prod-azure/
+├── dlp-gateway/     # SMTP data-plane service
+├── backend/dlp/     # Control plane APIs and application workers
+└── infra/dlp/       # Legacy scripts only — do not extend for production
+```
+
+Full folder trees and ownership tables are in `docs/DLP_BACKEND_IMPLEMENTATION_ROADMAP.md`.
 
 ### 1. SMTP edge
 
@@ -256,11 +271,11 @@ The application-owned MIME object must be:
 - Immutable after capture.
 - Used to construct release transmissions without MIME reconstruction.
 
-### 4. Decision worker
+### 4. Backend decision path
 
-The future classifier and policy engine plug into this component.
+Classification and policy evaluation run in `backend/dlp/` workers after the gateway publishes a capture event. They are not part of the SMTP edge process.
 
-For this design, it only needs a stable contract:
+For this gateway design, the backend only needs a stable decision contract published as commands/events:
 
 ```text
 allow
@@ -269,12 +284,13 @@ stop
 defer
 ```
 
-The worker must be:
+Those workers must be:
 
 - Idempotent.
 - Retryable.
 - Independent of the SMTP connection.
 - Able to move failed decisions into a safe deferred state.
+- Able to publish allow/release/stop commands for `dlp-gateway` to execute.
 
 ### 5. Provider relay dispatcher
 
@@ -290,13 +306,13 @@ The dispatcher:
 
 ### 6. Control plane
 
-The control plane:
+The control plane lives in `backend/dlp/` and:
 
 - Authenticates administrators and reviewers.
 - Stores tenant and provider configuration.
 - Validates provider setup.
 - Authorizes release and stop operations.
-- Publishes commands to the data plane.
+- Publishes commands to the `dlp-gateway` data plane.
 - Manages Microsoft tenant certificates.
 - Publishes signed configuration snapshots to gateway caches.
 
@@ -304,7 +320,7 @@ The SMTP edge must not synchronously query the control-plane API or PostgreSQL d
 
 ### 7. Notification service
 
-The notification service consumes message-state events and sends sender/security notifications. SMTP edges and relay workers emit events but do not directly send user notifications.
+The notification service lives with backend workers. It consumes message-state events and sends sender/security notifications. SMTP edges and gateway relay workers emit events but do not directly send user notifications.
 
 ## End-to-end message flow
 
@@ -319,7 +335,9 @@ sequenceDiagram
     participant Spool as Durable MTA spool
     participant Capture as Capture worker
     participant Store as MIME and metadata storage
-    participant Decision as Decision worker
+    participant Events as Event queue
+    participant Backend as backend/dlp workers
+    participant Commands as Command queue
     participant Relay as Relay dispatcher
     participant Return as Provider return relay
     participant Recipient
@@ -333,8 +351,10 @@ sequenceDiagram
     Spool->>Capture: Message available
     Capture->>Store: Commit immutable MIME and metadata
     Store-->>Capture: Application storage committed
-    Capture->>Decision: Submit message reference
-    Decision-->>Relay: allow
+    Capture->>Events: Publish capture event
+    Events->>Backend: Consume capture event
+    Backend->>Commands: Publish allow command
+    Commands->>Relay: Consume allow command
     Relay->>Return: Submit egress copy and original envelope
     Return-->>Relay: 250 accepted
     Return->>Recipient: Provider performs final delivery
@@ -350,14 +370,14 @@ sequenceDiagram
     participant Spool as Durable MTA spool
     participant Capture as Capture worker
     participant Store as MIME and metadata storage
-    participant Decision as Decision worker
+    participant Backend as backend/dlp workers
     participant Hold as Held message state
     participant Events as Event queue
     participant Notify as Notification service
     participant Reviewer
-    participant API as Control-plane API
+    participant API as backend/dlp API
     participant Commands as Command queue
-    participant Processor as Command processor
+    participant Processor as Gateway command processor
     participant Relay as Relay dispatcher
     participant Return as Provider return relay
     participant Recipient
@@ -369,8 +389,9 @@ sequenceDiagram
     Spool->>Capture: Message available
     Capture->>Store: Commit immutable MIME and metadata
     Store-->>Capture: Application storage committed
-    Capture->>Decision: Submit stored message reference
-    Decision->>Hold: Persist held state
+    Capture->>Events: Publish capture event
+    Events->>Backend: Consume capture event
+    Backend->>Hold: Persist held state
     Hold->>Events: Emit message-held event
     Events->>Notify: Consume notification event
     Notify-->>Reviewer: Hold notification
@@ -779,7 +800,7 @@ Messages with `MAIL FROM: <>` require special handling:
 
 ### Backpressure rules
 
-- Decision workers may lag without breaking SMTP acceptance while queue capacity remains.
+- Backend decision workers may lag without breaking SMTP acceptance while queue capacity remains.
 - Queue high-water marks trigger alerts and admission control.
 - At the hard limit, SMTP returns `451`.
 - Never return `250` merely to keep sender latency low.
@@ -1042,7 +1063,8 @@ Azure UAE North is the working regional assumption. UAE Central, Qatar Central, 
 | Gateway responsibility | Azure service direction |
 | --- | --- |
 | Stateful SMTP edge and durable MTA spool | Azure Virtual Machine Scale Set or Azure Kubernetes Service with Azure Managed Disks; attached persistent disks are required |
-| Capture, decision, relay, and command workers | AKS workloads, Container Apps, Functions, or VM-based workers depending throughput and operational preference |
+| Gateway capture, relay, and command workers | Same `dlp-gateway` pods/nodes as the SMTP edge, or adjacent workers that share the gateway deployment |
+| Backend classification, policy, setup, and notify workers | Existing FastAPI/worker pool under `backend/dlp/workers/` |
 | Immutable MIME objects | Azure Blob Storage with encryption, private endpoints, lifecycle policies, and tenant-scoped access |
 | Metadata database | Azure Database for PostgreSQL Flexible Server |
 | Commands and events | Azure Service Bus; use separate queues/topics for release commands and state events |
@@ -1102,7 +1124,7 @@ These ranges are intentionally broad because message size distribution and provi
 | Component | Planning range/month | Notes |
 | --- | ---: | --- |
 | Two stateful SMTP edges with Managed Disks | US$150–400 | VM Scale Set, AKS node pool, or dedicated VMs; size for concurrent SMTP and spool capacity |
-| Decision/relay/capture workers | US$75–250 | Excludes classifiers; can autoscale with Service Bus queue depth |
+| Decision/relay/capture workers | US$75–250 | Gateway capture/relay workers plus separate backend classify/evaluate workers; exclude LLM classifier cost |
 | PostgreSQL metadata store | US$250–650 | Flexible Server with HA/zone redundancy, storage, and backups dominate baseline |
 | Standard Load Balancer and static IPs | US$25–90 | TCP SMTP ingress; charges include rules and processed data |
 | Service Bus, Key Vault, DNS, certificates | US$20–100 | Usually low at initial volume but depends on operations and certificate count |
