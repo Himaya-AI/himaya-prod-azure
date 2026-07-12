@@ -7,6 +7,7 @@
 - **Excluded for now:** Classification, policy evaluation, audit UI, and frontend design.
 - **Primary decision:** Build one durable SMTP gateway and use provider-return delivery.
 - **Service boundary:** Gateway lives in a separate `dlp-gateway/` deployable; Enable DLP, policies, classification, and APIs live in `backend/dlp/`.
+- **Platform resources:** Reuse existing Himaya PostgreSQL, Blob Storage, Service Bus, and Key Vault with DLP-specific isolation. Gateway compute stays separate.
 - **Direct internet delivery:** Not included.
 - **Microsoft 365:** Target for production support.
 - **Google Workspace:** Must pass a provider-specific proof of concept and readiness gate before enforcement is generally available.
@@ -39,14 +40,14 @@ flowchart LR
     Spool --> Capture[Capture worker]
     Capture --> Events[Event queue]
     Events --> Backend[backend/dlp workers]
-    Backend -->|allow or release command| Relay[Relay dispatcher]
-
+    Backend -->|allow or release| Commands[Command queue]
     Backend -->|Hold| Hold[(Hold queue)]
     Backend -->|Stop| Stop[Stop and notify]
-    Hold -->|Authorized release command| Relay
+    Hold -->|Authorized release| Commands
+    Commands --> Relay[Gateway relay dispatcher]
 
-    Relay -->|Microsoft adapter| Exchange[Exchange Online]
-    Relay -->|Google adapter| GmailRelay[Google SMTP relay]
+    Relay -->|Microsoft adapter| Exchange[Exchange Online return path]
+    Relay -->|Google adapter| GmailRelay[Google SMTP relay return path]
 
     Exchange --> Recipient[External recipient]
     GmailRelay --> Recipient
@@ -132,6 +133,46 @@ Therefore:
 8. **Provider-specific egress behind a common interface**  
    Ingress and queueing are shared. Microsoft and Google delivery behavior is isolated in adapters.
 
+9. **Reuse Himaya platform stores; isolate gateway compute**  
+   Use the existing Himaya PostgreSQL, Blob Storage, Service Bus, and Key Vault with DLP-specific tables, containers, queues, and secrets. Deploy `dlp-gateway` on separate compute with durable disks. Do not query Postgres on the SMTP hot path.
+
+## Shared platform resources
+
+For the MVP and initial production cut, DLP does **not** require a separate Azure Postgres cluster.
+
+```mermaid
+flowchart TB
+    subgraph Shared[Existing Himaya Azure platform]
+        PG[(PostgreSQL Flexible Server)]
+        Blob[(Blob Storage)]
+        SB[(Service Bus)]
+        KV[(Key Vault)]
+        Mon[Azure Monitor]
+    end
+
+    FastAPI[backend FastAPI + backend/dlp workers] --> PG
+    FastAPI --> Blob
+    FastAPI --> SB
+    FastAPI --> KV
+    FastAPI --> Mon
+
+    Gateway[dlp-gateway compute] --> Blob
+    Gateway --> SB
+    Gateway --> KV
+    Gateway --> Mon
+    Gateway -.signed config cache only; no SMTP-time DB calls.-> PG
+```
+
+| Resource | Share with Himaya backend? | Isolation rule |
+| --- | --- | --- |
+| PostgreSQL | Yes — same instance | New `dlp_*` tables/schema; gateway does not query DB during SMTP acceptance |
+| Blob Storage | Yes — same account | Dedicated DLP MIME container/prefix |
+| Service Bus | Yes — same namespace | Dedicated DLP capture/command queues or topics |
+| Key Vault | Yes — same vault | Separate secrets for gateway certs and config signing keys |
+| Compute | No | Separate `dlp-gateway` VMSS/AKS with Postfix and durable Managed Disks |
+
+Split to dedicated Postgres/Service Bus later only if volume, compliance, or blast-radius requirements demand it.
+
 ## Canonical architecture
 
 Service and plane terms used throughout this document:
@@ -139,7 +180,7 @@ Service and plane terms used throughout this document:
 - **`dlp-gateway/` data plane:** SMTP acceptance, durable spool, immutable MIME capture, local config cache, provider-return relay, and command consumption for release/stop/retry.
 - **`backend/dlp/` control plane:** Tenant configuration, Enable DLP, setup validation, reviewer authorization, policies, release/stop APIs, certificate management, and health status.
 - **`backend/dlp/` application workers:** Extraction, classification, policy evaluation, notifications, and delivery reconciliation. These are not part of the SMTP edge process.
-- **Storage plane:** MTA spool, immutable MIME objects, metadata, and command/event queues.
+- **Storage plane:** MTA spool, immutable MIME objects, metadata (in shared Postgres), and command/event queues (in shared Service Bus).
 
 ```mermaid
 flowchart TD
@@ -147,9 +188,9 @@ flowchart TD
     ConfigCache[(Signed local tenant config cache)] -. authorizes .-> Edge
     Edge --> Spool[(Durable MTA spool)]
     Spool --> Capture[Capture worker]
-    Capture --> MIME[(Immutable encrypted MIME storage)]
-    Capture --> Metadata[(Message metadata)]
-    Metadata --> Events[(Event queue)]
+    Capture --> MIME[(Immutable encrypted MIME in Blob)]
+    Capture --> Metadata[(Message metadata in Postgres)]
+    Capture -->|after MIME and metadata commit| Events[(Event queue)]
 
     Events --> AppWorkers[backend/dlp workers]
     AppWorkers -->|allow or release command| Commands[(Command queue)]
@@ -163,8 +204,8 @@ flowchart TD
     Relay --> GoogleAdapter[Google Workspace relay adapter]
     MIME -. reads immutable source .-> Relay
     Metadata -. reads envelope and state .-> Relay
-    M365Adapter --> EXO[Exchange Online]
-    GoogleAdapter --> GoogleRelay[Google SMTP relay]
+    M365Adapter --> EXO[Exchange Online return path]
+    GoogleAdapter --> GoogleRelay[Google SMTP relay return path]
     EXO --> Recipient[External recipient]
     GoogleRelay --> Recipient
 
@@ -239,9 +280,10 @@ The durability boundary is fixed:
 2. The spool commit is fsynced on durable persistent storage.
 3. The SMTP edge returns `250`.
 4. The capture worker copies the immutable MIME into encrypted object storage and commits message metadata.
-5. The MTA spool entry is not eligible for cleanup until the object and metadata commits succeed.
+5. Only after both MIME and metadata commits succeed does the capture worker publish a capture event to the event queue.
+6. The MTA spool entry is not eligible for cleanup until the object and metadata commits succeed.
 
-The durable MTA spool is therefore sufficient for SMTP acceptance. Object storage is the application-owned copy used by decisioning, hold/release, investigation, and recovery.
+The durable MTA spool is therefore sufficient for SMTP acceptance. Object storage is the application-owned copy used by decisioning, hold/release, investigation, and recovery. Backend workers start only after the capture event is published — metadata storage alone does not imply an event was emitted.
 
 Before returning SMTP `250`, the spool must contain:
 
@@ -840,21 +882,41 @@ Do not implement automatic bypass based only on a health check. An attacker or o
 
 ## Backend interfaces
 
-### Provider adapter
+### Gateway relay adapter vs backend setup adapters
+
+Keep SMTP relay and provider admin setup as separate interfaces.
+
+**`dlp-gateway` — `ProviderRelayAdapter` (data plane, SMTP only):**
 
 ```text
 ProviderRelayAdapter
-  validate_setup(tenant)
   submit(message_ref, envelope)
   query_delivery(trace_id)
   classify_smtp_result(result)
   health_check(tenant)
 ```
 
-Implementations:
+Implementations live under `dlp-gateway/`:
 
 - `Microsoft365RelayAdapter`
 - `GoogleWorkspaceRelayAdapter`
+
+**`backend/dlp/providers/` — setup adapters (control plane, not SMTP):**
+
+```text
+ProviderSetupAdapter
+  validate_setup(tenant)
+  create_or_update_connectors(tenant)
+  apply_routing_scope(tenant, scope)
+  health_check(tenant)
+```
+
+Implementations:
+
+- `backend/dlp/providers/microsoft.py`
+- `backend/dlp/providers/google.py`
+
+Setup validation may call gateway health checks, but gateway relay code must not own connector or group provisioning.
 
 ### Control/data-plane commands
 
@@ -1062,17 +1124,19 @@ Azure UAE North is the working regional assumption. UAE Central, Qatar Central, 
 
 | Gateway responsibility | Azure service direction |
 | --- | --- |
-| Stateful SMTP edge and durable MTA spool | Azure Virtual Machine Scale Set or Azure Kubernetes Service with Azure Managed Disks; attached persistent disks are required |
+| Stateful SMTP edge and durable MTA spool | New Azure Virtual Machine Scale Set or AKS workload with Managed Disks; separate from FastAPI compute |
 | Gateway capture, relay, and command workers | Same `dlp-gateway` pods/nodes as the SMTP edge, or adjacent workers that share the gateway deployment |
 | Backend classification, policy, setup, and notify workers | Existing FastAPI/worker pool under `backend/dlp/workers/` |
-| Immutable MIME objects | Azure Blob Storage with encryption, private endpoints, lifecycle policies, and tenant-scoped access |
-| Metadata database | Azure Database for PostgreSQL Flexible Server |
-| Commands and events | Azure Service Bus; use separate queues/topics for release commands and state events |
+| Immutable MIME objects | Existing Himaya Azure Blob Storage account; dedicated DLP container/prefix |
+| Metadata database | Existing Himaya Azure Database for PostgreSQL Flexible Server; new `dlp_*` tables/schema |
+| Commands and events | Existing Himaya Azure Service Bus namespace; dedicated DLP queues/topics |
 | TCP ingress | Azure Standard Load Balancer with static public IPs; SMTP is TCP, not HTTP |
-| Secrets and certificates | Azure Key Vault and managed identities |
-| Logs and metrics | Azure Monitor, Log Analytics, and Application Insights with strict retention and sampling |
+| Secrets and certificates | Existing Himaya Azure Key Vault; separate gateway cert and config-signing secrets |
+| Logs and metrics | Existing Azure Monitor, Log Analytics, and Application Insights with DLP dimensions |
 
 The gateway should run SMTP edges on stateful Azure infrastructure with durable Managed Disks. Do **not** use an ephemeral-only container runtime as the sole durable MTA spool. AKS with persistent volumes, a VM Scale Set, or dedicated VMs are suitable; the important requirement is the durable spool described above.
+
+Cost tables below estimate **incremental** DLP spend on top of the shared Himaya platform. Do not double-count the existing Postgres, Blob, Service Bus, or Key Vault baseline unless DLP forces a size upgrade.
 
 ### Main cost drivers
 
@@ -1112,12 +1176,14 @@ Example: 1,000,000 messages/month at an average 1 MB on-wire size is about 977 G
 
 | Deployment profile | Included baseline | Estimated monthly cost | Suitable use |
 | --- | --- | ---: | --- |
-| POC, single availability zone | One stateful SMTP edge, one small worker, single-server PostgreSQL, minimal Blob Storage, basic monitoring | **US$250–500** | Provider feasibility testing only; not production HA |
-| Production, one region and HA | Two SMTP edges across zones, two workers, zone-redundant PostgreSQL, Managed Disks, Standard Load Balancer, Service Bus, Key Vault, monitoring | **US$750–1,500** | Initial production service at low/moderate volume |
-| Production, one region, 1 TB monthly return egress | HA baseline plus ~1 TB provider-return traffic, 0.3–1 TB retained MIME, controlled Log Analytics volume | **US$950–1,900** | Roughly 1M messages/month at 1 MB average |
-| Production, one region, 10 TB monthly return egress | Scaled SMTP/worker capacity, larger database and queues, 3–10 TB retained MIME, controlled logs | **US$4,000–8,000+** | Roughly 10M messages/month at 1 MB average |
+| POC, single availability zone | One stateful SMTP edge, one small worker; uses shared Himaya Postgres/Blob/Service Bus; minimal extra monitoring | **US$150–400** incremental | Provider feasibility testing only; not production HA |
+| Production, one region and HA | Two SMTP edges across zones, gateway workers, Managed Disks, Standard Load Balancer; shared Postgres/Service Bus/Key Vault sized as needed | **US$400–1,000** incremental | Initial production service at low/moderate volume; excludes full shared-platform baseline |
+| Production, one region, 1 TB monthly return egress | HA gateway baseline plus ~1 TB provider-return traffic, 0.3–1 TB retained MIME, controlled Log Analytics volume | **US$600–1,400** incremental | Roughly 1M messages/month at 1 MB average |
+| Production, one region, 10 TB monthly return egress | Scaled SMTP/worker capacity, possible DB/queue size-up, 3–10 TB retained MIME, controlled logs | **US$3,500–7,500+** incremental | Roughly 10M messages/month at 1 MB average |
 
-These ranges are intentionally broad because message size distribution and provider-return traffic dominate variable cost. Attachments make average message size much more important than raw message count.
+These ranges are **incremental DLP cost** on top of the existing Himaya platform, not a full replacement stack. They are intentionally broad because message size distribution and provider-return traffic dominate variable cost. Attachments make average message size much more important than raw message count.
+
+If DLP forces a Postgres HA upgrade that Himaya would not otherwise need, attribute that delta to DLP. Do not charge the full shared Postgres bill to DLP alone.
 
 ### Approximate cost composition for one HA region
 
@@ -1125,7 +1191,7 @@ These ranges are intentionally broad because message size distribution and provi
 | --- | ---: | --- |
 | Two stateful SMTP edges with Managed Disks | US$150–400 | VM Scale Set, AKS node pool, or dedicated VMs; size for concurrent SMTP and spool capacity |
 | Decision/relay/capture workers | US$75–250 | Gateway capture/relay workers plus separate backend classify/evaluate workers; exclude LLM classifier cost |
-| PostgreSQL metadata store | US$250–650 | Flexible Server with HA/zone redundancy, storage, and backups dominate baseline |
+| PostgreSQL metadata store | US$0–650 | Prefer shared Himaya Flexible Server; range is DLP-driven size-up or HA delta only |
 | Standard Load Balancer and static IPs | US$25–90 | TCP SMTP ingress; charges include rules and processed data |
 | Service Bus, Key Vault, DNS, certificates | US$20–100 | Usually low at initial volume but depends on operations and certificate count |
 | Blob Hot LRS storage | about US$52/TB-month | UAE North planning rate; transactions, replication, lifecycle, and retrieval are additional |

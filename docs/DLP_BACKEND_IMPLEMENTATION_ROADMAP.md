@@ -44,6 +44,7 @@ flowchart LR
     Decision{Decision}
     Commands[Command queue]
     Relay[Gateway relay adapter]
+    ReturnPath[Provider return path]
     Hold[(Review Queue)]
     Stop[Stopped]
     Recipient[External Recipient]
@@ -59,8 +60,8 @@ flowchart LR
     Decision -->|Stop| Stop
     Hold -->|Release| Commands
     Commands --> Relay
-    Relay --> Provider
-    Provider --> Recipient
+    Relay --> ReturnPath
+    ReturnPath --> Recipient
 ```
 
 ## Core architectural decisions
@@ -73,6 +74,44 @@ Build DLP as **two deployable units** in the monorepo:
 2. `backend/dlp/` — control plane APIs and application workers (enablement, classification, policy, review, setup, notifications).
 
 Do not add production DLP behavior to the current overlapping legacy paths under `backend/services/dlp_*.py` or `infra/dlp/dlp_gateway.py`.
+
+### 1a. Shared Himaya platform resources
+
+For the MVP and initial production cut, DLP reuses the existing Himaya Azure platform resources. It does **not** require a separate Postgres cluster by default.
+
+```mermaid
+flowchart TB
+    subgraph Shared[Existing Himaya Azure platform]
+        PG[(PostgreSQL Flexible Server)]
+        Blob[(Blob Storage)]
+        SB[(Service Bus)]
+        KV[(Key Vault)]
+        Mon[Azure Monitor]
+    end
+
+    FastAPI[backend FastAPI + backend/dlp workers] --> PG
+    FastAPI --> Blob
+    FastAPI --> SB
+    FastAPI --> KV
+    FastAPI --> Mon
+
+    Gateway[dlp-gateway compute] --> Blob
+    Gateway --> SB
+    Gateway --> KV
+    Gateway --> Mon
+    Gateway -.config cache only; no SMTP-time DB calls.-> PG
+```
+
+| Resource | Share with Himaya backend? | Isolation rule |
+| --- | --- | --- |
+| PostgreSQL | Yes — same instance | New `dlp_*` tables/schema; gateway does not query DB during SMTP acceptance |
+| Blob Storage | Yes — same account | Dedicated DLP MIME container/prefix |
+| Service Bus | Yes — same namespace | Dedicated DLP capture/command queues or topics |
+| Key Vault | Yes — same vault | Separate secrets for gateway certs and config signing keys |
+| Redis | Optional | Share only if useful for locks/cache; not required on SMTP hot path |
+| Compute | No | `dlp-gateway` is a separate deployable with Postfix and durable disks |
+
+Split to dedicated Postgres/Service Bus later only if volume, compliance, or blast-radius requirements demand it.
 
 #### Repository layout
 
@@ -96,7 +135,7 @@ himaya-prod-azure/
 │   │   │   ├── mta_spool.py
 │   │   │   └── recovery.py
 │   │   ├── capture/
-│   │   │   ├── worker.py            # Spool → immutable MIME + metadata
+│   │   │   ├── worker.py            # Spool → MIME + metadata → publish capture event
 │   │   │   └── mime_store.py
 │   │   ├── config_cache/
 │   │   │   ├── snapshot.py           # Signed tenant config cache
@@ -105,7 +144,7 @@ himaya-prod-azure/
 │   │   │   ├── dispatcher.py
 │   │   │   ├── egress_copy.py
 │   │   │   ├── outcomes.py
-│   │   │   └── adapters/
+│   │   │   └── adapters/            # ProviderRelayAdapter — SMTP only
 │   │   │       ├── base.py
 │   │   │       ├── microsoft.py
 │   │   │       └── google.py
@@ -176,11 +215,13 @@ himaya-prod-azure/
 | Concern | Location | Deployed as |
 | --- | --- | --- |
 | SMTP accept, spool, MIME capture, provider return relay | `dlp-gateway/` | Separate VM/AKS pods with Postfix |
+| Provider SMTP relay adapters (`ProviderRelayAdapter`) | `dlp-gateway/` (relay adapters) | Gateway workers only |
 | Enable DLP APIs, policies, review, settings, overview | `backend/dlp/api/` | Existing FastAPI service |
 | Classification, policy evaluation, setup, notify, reconcile | `backend/dlp/workers/` | Same app or worker pool |
-| Provider admin setup (connectors, groups, routing rules) | `backend/dlp/providers/` | Backend workers |
+| Provider admin setup (connectors, groups, routing rules) | `backend/dlp/providers/` | Backend workers — not SMTP |
 | Event/command/config contracts | `backend/dlp/contracts/` (+ imported by gateway) | Shared schemas |
-| Shared Azure clients | `backend/services/` | Reused or mirrored by gateway |
+| Shared Azure clients | `backend/services/` | Reused by backend; gateway may import or mirror thin clients |
+| Shared Postgres / Blob / Service Bus / Key Vault | Existing Himaya platform | Same instances; DLP-specific tables, containers, queues, and secrets |
 
 Exact file names may change. The two-service boundary must not.
 
@@ -243,7 +284,8 @@ flowchart TD
     Config --> Publisher[Configuration Publisher]
     Publisher --> Cache[(Gateway Configuration Cache)]
 
-    Gateway[dlp-gateway] --> Events[(Event Queue)]
+    Gateway[dlp-gateway] --> MIME[(Blob MIME store)]
+    Gateway --> Events[(Event Queue)]
     Events --> AppWorkers[backend/dlp workers]
     AppWorkers --> Decisions[(Message and Decision Store)]
     AppWorkers -->|allow or release command| Commands
@@ -251,6 +293,10 @@ flowchart TD
 
     Policies --> AppWorkers
     Cache -. authorizes and scopes .-> Gateway
+    API --> PG[(Shared Himaya PostgreSQL)]
+    Decisions --> PG
+    Config --> PG
+    AppWorkers --> MIME
 ```
 
 ### 4. DLP scope is independent from monitoring scope
@@ -1685,7 +1731,9 @@ Build DLP as two services:
 - `dlp-gateway/` for SMTP accept, durable capture, and provider-return relay.
 - `backend/dlp/` for Enable DLP, policies, classification, review, and product APIs.
 
-Integrate them only through signed configuration, durable commands, and events.
+Reuse the existing Himaya PostgreSQL, Blob Storage, Service Bus, and Key Vault with DLP-specific isolation. Keep gateway compute separate.
+
+Integrate the two services only through signed configuration, durable commands, and events.
 
 The **Enable DLP** button must control an asynchronous, provider-aware state machine—not a boolean column.
 
