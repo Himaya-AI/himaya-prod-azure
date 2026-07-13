@@ -12,6 +12,7 @@ Classification and policy live in `backend/dlp/` (separate service). This gatewa
 - `docs/DLP_BACKEND_IMPLEMENTATION_ROADMAP.md`
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — patterns and module boundaries
 - [`DEVELOPMENT.md`](./DEVELOPMENT.md) — step-by-step build log
+- [`HANDOFF.md`](./HANDOFF.md) — for classification/backend engineer takeover
 
 ## Local quick start
 
