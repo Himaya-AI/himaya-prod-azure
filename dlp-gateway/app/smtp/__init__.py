@@ -1,0 +1,1 @@
+"""SMTP edge package."""

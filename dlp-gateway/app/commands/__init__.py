@@ -1,0 +1,1 @@
+"""Command consumer and processor."""
