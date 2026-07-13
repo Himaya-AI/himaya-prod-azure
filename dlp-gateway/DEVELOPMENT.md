@@ -95,6 +95,10 @@ python scripts/send_test_mail.py
 # open http://localhost:8025
 ```
 
+### Review fix (2026-07-13)
+
+Capture order corrected to: blob → annotate accepted metadata → publish event → move to `captured/`. Previously, moving to `captured/` before publish could drop events on crash.
+
 ---
 
 ## Upcoming

@@ -25,31 +25,39 @@ class CaptureWorker:
     def run_once(self) -> int:
         processed = 0
         for record in self.spool.list_pending_capture():
-            mime = self.spool.read_mime(record)
-            blob_uri = self.mime_store.put_immutable(
-                org_id=record.org_id,
-                message_id=str(record.message_id),
-                mime_bytes=mime,
-                sha256=record.mime_sha256,
-            )
-            self.spool.mark_captured(str(record.message_id), blob_uri)
-            event = CaptureEvent(
-                message_id=record.message_id,
-                org_id=record.org_id,
-                provider=record.provider,
-                provider_deployment_id=record.provider_deployment_id,
-                envelope_from=record.envelope_from,
-                envelope_to=record.envelope_to,
-                mime_sha256=record.mime_sha256,
-                mime_size=record.mime_size,
-                blob_uri=blob_uri,
-                received_at=record.received_at,
-            )
-            self.publisher.publish_capture(event)
+            mid = str(record.message_id)
+            try:
+                mime = self.spool.read_mime(record)
+                blob_uri = self.mime_store.put_immutable(
+                    org_id=record.org_id,
+                    message_id=mid,
+                    mime_bytes=mime,
+                    sha256=record.mime_sha256,
+                )
+                # Persist blob pointer while still in accepted/, then publish,
+                # then move to captured/ — so a crash before publish can retry.
+                self.spool.annotate_accepted(mid, blob_uri=blob_uri)
+                event = CaptureEvent(
+                    message_id=record.message_id,
+                    org_id=record.org_id,
+                    provider=record.provider,
+                    provider_deployment_id=record.provider_deployment_id,
+                    envelope_from=record.envelope_from,
+                    envelope_to=record.envelope_to,
+                    mime_sha256=record.mime_sha256,
+                    mime_size=record.mime_size,
+                    blob_uri=blob_uri,
+                    received_at=record.received_at,
+                )
+                self.publisher.publish_capture(event)
+                self.spool.mark_captured(mid, blob_uri)
+            except Exception:
+                log.exception("capture.failed", message_id=mid)
+                continue
             processed += 1
             log.info(
                 "capture.published",
-                message_id=str(record.message_id),
+                message_id=mid,
                 state=MessageState.CAPTURED.value,
             )
         return processed

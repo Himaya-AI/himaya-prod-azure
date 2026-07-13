@@ -3,16 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import re
 from pathlib import Path
-from uuid import UUID
 
 from app.domain.models import MessageState, SpoolRecord
 from app.logging_setup import get_logger
 
 log = get_logger(__name__)
-
-_SAFE_NAME = re.compile(r"[^a-zA-Z0-9._-]+")
 
 
 def sha256_hex(data: bytes) -> str:
@@ -64,6 +60,16 @@ class FilesystemSpoolStore:
         for meta in sorted((self.root / "accepted").glob("*.json")):
             records.append(self._load_meta(meta))
         return records
+
+    def annotate_accepted(self, message_id: str, **extra: object) -> SpoolRecord:
+        """Update accepted metadata in place (e.g. blob_uri) before event publish."""
+        meta = self.root / "accepted" / f"{message_id}.json"
+        if not meta.exists():
+            raise KeyError(message_id)
+        data = json.loads(meta.read_text(encoding="utf-8"))
+        data.update(extra)
+        self._write_fsynced(meta, json.dumps(data, indent=2, default=str).encode("utf-8"))
+        return self._load_meta(meta)
 
     def mark_captured(self, message_id: str, blob_uri: str) -> SpoolRecord:
         record = self._move_bucket(message_id, "accepted", "captured")
