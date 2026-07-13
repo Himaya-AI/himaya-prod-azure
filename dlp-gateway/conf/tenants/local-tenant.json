@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "org_id": "00000000-0000-4000-8000-000000000001",
+  "provider_deployment_id": "00000000-0000-4000-8000-000000000002",
+  "provider": "local",
+  "routing_hostname": "local.smtp.dlp.himaya.test",
+  "status": "enabled",
+  "mode": "monitor",
+  "accepted_sender_domains": ["example.test", "himaya.test"],
+  "relay": {
+    "host": "mailhog",
+    "port": 1025,
+    "use_tls": false
+  },
+  "config_version": 1,
+  "valid_from": "2026-01-01T00:00:00Z",
+  "valid_until": "2099-01-01T00:00:00Z"
+}

@@ -1,0 +1,41 @@
+services:
+  gateway:
+    build: .
+    container_name: dlp-gateway
+    env_file:
+      - .env.example
+    ports:
+      - "2525:2525"
+      - "8080:8080"
+    volumes:
+      - dlp_spool:/var/dlp/spool
+      - dlp_data:/var/dlp/data
+      - dlp_queues:/var/dlp/queues
+    depends_on:
+      - mailhog
+      - azurite
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: dlp-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    restart: unless-stopped
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.33.0
+    container_name: dlp-azurite
+    command: azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --location /data --debug /data/debug.log --skipApiVersionCheck
+    ports:
+      - "10000:10000"
+    volumes:
+      - azurite_data:/data
+    restart: unless-stopped
+
+volumes:
+  dlp_spool:
+  dlp_data:
+  dlp_queues:
+  azurite_data:
