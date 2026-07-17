@@ -106,11 +106,15 @@ def _get_classifier():
     return _classifier
 
 
-async def _classify_content(email_data: dict) -> dict:
+async def _classify_content(email_data: dict, email_verify: Optional[dict] = None) -> dict:
     """
     Classify email content using the LLM ensemble (Claude → GPT-4o fallback).
     Falls back to deterministic heuristics if both LLMs are unavailable
     (no API keys configured, network timeout, etc.).
+
+    email_verify — sender domain verification context from reputation-service
+    (reputation_result["email_verify"]), forwarded to the classifier so it can
+    factor in domain/SPF/DMARC signals alongside content.
     """
     sender    = email_data.get("sender", "")
     recipient = email_data.get("recipient", "")
@@ -129,12 +133,17 @@ async def _classify_content(email_data: dict) -> dict:
 
     if classifier is not None:
         try:
+            logger.info(
+                "classify_content | email_verify passed to classifier: %r",
+                email_verify,
+            )
             result = await classifier.classify(
                 sender=sender,
                 recipient=recipient,
                 subject=subject,
                 body=body[:4000],           # Cap to avoid token overflow
                 attachments=attachments or None,
+                email_verify=email_verify,
                 headers={
                     "SPF":   "pass" if auth_headers.get("spf_pass") else "fail",
                     "DKIM":  "pass" if auth_headers.get("dkim_pass") else "fail",
@@ -440,13 +449,14 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
         # Step 2: Reputation analysis first
         link_result, reputation_result = await analyze_email_reputation(email_data, auth_results)
         logger.info(
-            "reputation | sender=%s score=%s verdict=%s spf=%s dkim=%s dmarc=%s indicators=%s link_score=%d urls=%d attachments=%s",
+            "reputation | sender=%s score=%s verdict=%s spf=%s dkim=%s dmarc=%s email_verify=%s indicators=%s link_score=%d urls=%d attachments=%s",
             sender,
             reputation_result.get("reputation_score") if reputation_result else "N/A",
             reputation_result.get("verdict") if reputation_result else "N/A",
             reputation_result.get("spf_pass") if reputation_result else "N/A",
             reputation_result.get("dkim_pass") if reputation_result else "N/A",
             reputation_result.get("dmarc_pass") if reputation_result else "N/A",
+            bool(reputation_result.get("email_verify")) if reputation_result else False,
             reputation_result.get("indicators", []) if reputation_result else [],
             link_result.get("link_score", 0),
             link_result.get("urls_found", 0),
@@ -461,7 +471,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                 org_id=org_id,
                 reputation_hint=reputation_result,
             ),
-            _classify_content(email_data),
+            _classify_content(email_data, email_verify=reputation_result.get("email_verify") if reputation_result else None),
         )
         logger.info(
             "graph | sender=%s trust_score=%s trust_method=%s reasoning=%s domain_spread=%s indicators=%s llm_adjustment=%s",
@@ -564,6 +574,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
             "spf_pass":   reputation_result.get("spf_pass"),
             "dkim_pass":  reputation_result.get("dkim_pass"),
             "dmarc_pass": reputation_result.get("dmarc_pass"),
+            "email_verify": reputation_result.get("email_verify"),
         }
 
         # Apply FP bias (reduce risk for known-benign senders)

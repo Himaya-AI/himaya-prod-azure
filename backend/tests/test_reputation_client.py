@@ -41,6 +41,7 @@ def test_map_sender_result_from_service():
             "type": "sender",
             "score": 40,
             "indicators": ["spf_fail", "dmarc_fail"],
+            "email-verify": {"domain": "evil.com", "has_mx_records": True},
         }
     ]
     auth = {"spf": "fail", "dkim": "none", "dmarc": "fail"}
@@ -48,6 +49,7 @@ def test_map_sender_result_from_service():
     assert mapped["reputation_score"] == 40
     assert "spf_fail" in mapped["indicators"]
     assert mapped["spf_pass"] is False
+    assert mapped["email_verify"]["domain"] == "evil.com"
 
 
 def test_map_sender_result_fallback_auth_only():
@@ -55,6 +57,7 @@ def test_map_sender_result_fallback_auth_only():
     mapped = rc.map_sender_result([], auth)
     assert mapped["reputation_score"] == 40
     assert mapped["spf_pass"] is False
+    assert mapped["email_verify"] is None
 
 
 def test_map_link_result_malicious_url_and_ioc():

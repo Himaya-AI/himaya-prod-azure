@@ -135,12 +135,14 @@ def map_sender_result(
 
     sender_result = next((r for r in results if r.get("type") == "sender"), None)
     if sender_result is not None:
+        email_verify = sender_result.get("email_verify") or sender_result.get("email-verify")
         return {
             "reputation_score": int(sender_result.get("score", 0)),
             "indicators": list(sender_result.get("indicators") or []),
             "spf_pass": spf == "pass",
             "dkim_pass": dkim == "pass",
             "dmarc_pass": dmarc == "pass",
+            "email_verify": email_verify,
         }
 
     return _fallback_sender_reputation(auth_results)
@@ -332,4 +334,5 @@ def _fallback_sender_reputation(auth_results: dict) -> dict[str, Any]:
         "spf_pass": spf == "pass",
         "dkim_pass": dkim == "pass",
         "dmarc_pass": dmarc == "pass",
+        "email_verify": None,
     }

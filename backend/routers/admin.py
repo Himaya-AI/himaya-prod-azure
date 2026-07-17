@@ -1054,98 +1054,98 @@ async def inject_test_threats(
                 ],
             },
         },
-        {
-            "label": "ACCOUNT TAKEOVER — fake Microsoft security alert",
-            "data": {
-                "message_id": f"test-ato-{_uuid.uuid4().hex[:8]}@microsoftonline-alerts.net",
-                "sender": "security-noreply@microsoftonline-alerts.net",
-                "recipient": _pick(1),
-                "subject": "1 URGENT: Unusual sign-in to your Microsoft 365 account from Nigeria",
-                "body": (
-                    "We detected a sign-in attempt to your Microsoft 365 account from an unrecognized device. "
-                    "Location: Lagos, Nigeria. IP Address: 197.210.54.121. "
-                    "If this was not you, your account may be compromised. You must verify your identity within 24 hours "
-                    "or your account will be suspended. Click here to secure your account: "
-                    "http://microsoft-secure-verify.account-protection-now.com/verify?token=eyJhbGciOiJSUzI1NiJ9 "
-                    "Microsoft Corporation | One Microsoft Way, Redmond WA"
-                ),
-                "html_body": "",
-                "date": "Mon, 14 Apr 2026 04:30:00 +0000",
-                "auth_results": {"spf": "fail", "dkim": "fail", "dmarc": "fail", "sender_ip": "185.220.101.42"},
-                "attachments": [],
-            },
-        },
-        {
-            "label": "CREDENTIAL HARVESTING — fake Google storage warning",
-            "data": {
-                "message_id": f"test-cred-{_uuid.uuid4().hex[:8]}@accounts-google-portal.xyz",
-                "sender": "no-reply@workspace-google-notification.com",
-                "recipient": _pick(2),
-                "subject": "1 Action Required: Your Google Workspace account storage is 95% full",
-                "body": (
-                    "Your Google Workspace account storage has reached 95% capacity. "
-                    "To avoid email delivery failures and data loss, you must verify your account and expand your storage. "
-                    "Accounts not verified within 48 hours will have incoming emails automatically rejected. "
-                    "Verify your account here: "
-                    "http://google-workspace-storage-verify.accounts-google-portal.xyz/auth?redirect=storage&email=user@himaya.ai "
-                    "Action required by: April 16, 2026. Google LLC, 1600 Amphitheatre Parkway."
-                ),
-                "html_body": "",
-                "date": "Mon, 14 Apr 2026 04:30:00 +0000",
-                "auth_results": {"spf": "fail", "dkim": "none", "dmarc": "fail", "sender_ip": "91.108.4.200"},
-                "attachments": [],
-            },
-        },
-        {
-            "label": "MALWARE — known-hash ransomware dropper",
-            "data": {
-                "message_id": f"test-ransomware-{_uuid.uuid4().hex[:8]}@invoice-delivery-portal.net",
-                "sender": "billing@invoice-delivery-portal.net",
-                "recipient": _pick(3),
-                "subject": "1 Invoice #INV-20260628 — Action Required",
-                "body": (
-                    "Please find attached your invoice INV-20260628 for services rendered in June 2026. "
-                    "Kindly review and process the payment at your earliest convenience. "
-                    "The document is password protected for security — password: INV2026. "
-                    "For queries contact billing@invoice-delivery-portal.net. "
-                    "This is an automated message from our invoicing system."
-                ),
-                "html_body": "",
-                "date": "Mon, 28 Jun 2026 09:15:00 +0000",
-                "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "91.108.56.179"},
-                "attachments": [
-                    {
-                        "filename": "Invoice_INV-20260628.pdf.exe",
-                        "mimeType": "application/octet-stream",
-                        "size": 412680,
-                        "sha256": "ad7b9eaa692cbfe6e256b632603baf378c58c06d5f742e55bc9b751b8c022e2f",
-                    }
-                ],
-            },
-        },
-        {
-            "label": "PHISHING / BEC — CEO impersonation wire fraud",
-            "data": {
-                "message_id": f"test-bec-{_uuid.uuid4().hex[:8]}@himaya-tech-group.com",
-                "sender": "adnan.ahmed.ceo@himaya-tech-group.com",
-                "recipient": _pick(3),
-                "subject": "1 Urgent — Confidential Wire Transfer Request",
-                "body": (
-                    "Hi, I'm currently in an urgent board meeting and I need your help with something sensitive. "
-                    "We are finalizing an acquisition deal and I need you to process a wire transfer "
-                    "of USD $47,500 to our legal escrow account before market close today. "
-                    "This is time-critical and must be kept confidential until the deal is announced. "
-                    "Please initiate the transfer to: Bank: Emirates NBD, Account: Argent Legal Holdings Ltd, "
-                    "IBAN: AE070331234567890123456, Reference: PROJ-ACQ-2026-Q2. "
-                    "Confirm by reply once done. Do not discuss this with anyone else — legal compliance "
-                    "requires strict confidentiality. Adnan Ahmed, CEO Himaya Technologies"
-                ),
-                "html_body": "",
-                "date": "Mon, 14 Apr 2026 04:30:00 +0000",
-                "auth_results": {"spf": "fail", "dkim": "fail", "dmarc": "fail", "sender_ip": "104.21.34.56"},
-                "attachments": [],
-            },
-        },
+        # {
+        #     "label": "ACCOUNT TAKEOVER — fake Microsoft security alert",
+        #     "data": {
+        #         "message_id": f"test-ato-{_uuid.uuid4().hex[:8]}@microsoftonline-alerts.net",
+        #         "sender": "security-noreply@microsoftonline-alerts.net",
+        #         "recipient": _pick(1),
+        #         "subject": "1 URGENT: Unusual sign-in to your Microsoft 365 account from Nigeria",
+        #         "body": (
+        #             "We detected a sign-in attempt to your Microsoft 365 account from an unrecognized device. "
+        #             "Location: Lagos, Nigeria. IP Address: 197.210.54.121. "
+        #             "If this was not you, your account may be compromised. You must verify your identity within 24 hours "
+        #             "or your account will be suspended. Click here to secure your account: "
+        #             "http://microsoft-secure-verify.account-protection-now.com/verify?token=eyJhbGciOiJSUzI1NiJ9 "
+        #             "Microsoft Corporation | One Microsoft Way, Redmond WA"
+        #         ),
+        #         "html_body": "",
+        #         "date": "Mon, 14 Apr 2026 04:30:00 +0000",
+        #         "auth_results": {"spf": "fail", "dkim": "fail", "dmarc": "fail", "sender_ip": "185.220.101.42"},
+        #         "attachments": [],
+        #     },
+        # },
+        # {
+        #     "label": "CREDENTIAL HARVESTING — fake Google storage warning",
+        #     "data": {
+        #         "message_id": f"test-cred-{_uuid.uuid4().hex[:8]}@accounts-google-portal.xyz",
+        #         "sender": "no-reply@workspace-google-notification.com",
+        #         "recipient": _pick(2),
+        #         "subject": "1 Action Required: Your Google Workspace account storage is 95% full",
+        #         "body": (
+        #             "Your Google Workspace account storage has reached 95% capacity. "
+        #             "To avoid email delivery failures and data loss, you must verify your account and expand your storage. "
+        #             "Accounts not verified within 48 hours will have incoming emails automatically rejected. "
+        #             "Verify your account here: "
+        #             "http://google-workspace-storage-verify.accounts-google-portal.xyz/auth?redirect=storage&email=user@himaya.ai "
+        #             "Action required by: April 16, 2026. Google LLC, 1600 Amphitheatre Parkway."
+        #         ),
+        #         "html_body": "",
+        #         "date": "Mon, 14 Apr 2026 04:30:00 +0000",
+        #         "auth_results": {"spf": "fail", "dkim": "none", "dmarc": "fail", "sender_ip": "91.108.4.200"},
+        #         "attachments": [],
+        #     },
+        # },
+        # {
+        #     "label": "MALWARE — known-hash ransomware dropper",
+        #     "data": {
+        #         "message_id": f"test-ransomware-{_uuid.uuid4().hex[:8]}@invoice-delivery-portal.net",
+        #         "sender": "billing@invoice-delivery-portal.net",
+        #         "recipient": _pick(3),
+        #         "subject": "1 Invoice #INV-20260628 — Action Required",
+        #         "body": (
+        #             "Please find attached your invoice INV-20260628 for services rendered in June 2026. "
+        #             "Kindly review and process the payment at your earliest convenience. "
+        #             "The document is password protected for security — password: INV2026. "
+        #             "For queries contact billing@invoice-delivery-portal.net. "
+        #             "This is an automated message from our invoicing system."
+        #         ),
+        #         "html_body": "",
+        #         "date": "Mon, 28 Jun 2026 09:15:00 +0000",
+        #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "91.108.56.179"},
+        #         "attachments": [
+        #             {
+        #                 "filename": "Invoice_INV-20260628.pdf.exe",
+        #                 "mimeType": "application/octet-stream",
+        #                 "size": 412680,
+        #                 "sha256": "ad7b9eaa692cbfe6e256b632603baf378c58c06d5f742e55bc9b751b8c022e2f",
+        #             }
+        #         ],
+        #     },
+        # },
+        # {
+        #     "label": "PHISHING / BEC — CEO impersonation wire fraud",
+        #     "data": {
+        #         "message_id": f"test-bec-{_uuid.uuid4().hex[:8]}@himaya-tech-group.com",
+        #         "sender": "adnan.ahmed.ceo@himaya-tech-group.com",
+        #         "recipient": _pick(3),
+        #         "subject": "1 Urgent — Confidential Wire Transfer Request",
+        #         "body": (
+        #             "Hi, I'm currently in an urgent board meeting and I need your help with something sensitive. "
+        #             "We are finalizing an acquisition deal and I need you to process a wire transfer "
+        #             "of USD $47,500 to our legal escrow account before market close today. "
+        #             "This is time-critical and must be kept confidential until the deal is announced. "
+        #             "Please initiate the transfer to: Bank: Emirates NBD, Account: Argent Legal Holdings Ltd, "
+        #             "IBAN: AE070331234567890123456, Reference: PROJ-ACQ-2026-Q2. "
+        #             "Confirm by reply once done. Do not discuss this with anyone else — legal compliance "
+        #             "requires strict confidentiality. Adnan Ahmed, CEO Himaya Technologies"
+        #         ),
+        #         "html_body": "",
+        #         "date": "Mon, 14 Apr 2026 04:30:00 +0000",
+        #         "auth_results": {"spf": "fail", "dkim": "fail", "dmarc": "fail", "sender_ip": "104.21.34.56"},
+        #         "attachments": [],
+        #     },
+        # },
     ]
 
     # Seed prior email history for the trusted sender so the trust gate fires
@@ -1166,22 +1166,48 @@ async def inject_test_threats(
             "threat_type": None,
         })
 
+    # test_payloads.append({
+    #     "label": "TRUSTED SENDER — LLM skip gate (trust score ≥ 65)",
+    #     "data": {
+    #         "message_id": f"test-trusted-{_uuid.uuid4().hex[:8]}@trusted-corp.com",
+    #         "sender": _trusted_sender,
+    #         "recipient": _trusted_recipient,
+    #         "subject": "1 Q2 Budget Review — Agenda for Tomorrow",
+    #         "body": (
+    #             "Hi team, please find the agenda for tomorrow's Q2 budget review attached. "
+    #             "We will be covering departmental spend, headcount planning, and the updated "
+    #             "capex forecast. Looking forward to seeing everyone at 10 AM. "
+    #             "Alice Thornton | Finance Director, Trusted Corp"
+    #         ),
+    #         "html_body": "",
+    #         "date": "Mon, 27 Jun 2026 08:00:00 +0000",
+    #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "52.84.10.1"},
+    #         "attachments": [],
+    #     },
+    # })
+
     test_payloads.append({
-        "label": "TRUSTED SENDER — LLM skip gate (trust score ≥ 65)",
+        "label": "FALSE POSITIVE REGRESSION — legit Microsoft 'Default Directory' verification code "
+                 "(previously misclassified as Himaya-Suspicious)",
         "data": {
-            "message_id": f"test-trusted-{_uuid.uuid4().hex[:8]}@trusted-corp.com",
-            "sender": _trusted_sender,
-            "recipient": _trusted_recipient,
-            "subject": "1 Q2 Budget Review — Agenda for Tomorrow",
+            "message_id": f"test-fp-msft-verify-{_uuid.uuid4().hex[:8]}@accountprotection.microsoft.com",
+            "sender": "account-security-noreply@accountprotection.microsoft.com",
+            "recipient": _pick(0),
+            "subject": "Your Default Directory verification code",
             "body": (
-                "Hi team, please find the agenda for tomorrow's Q2 budget review attached. "
-                "We will be covering departmental spend, headcount planning, and the updated "
-                "capex forecast. Looking forward to seeing everyone at 10 AM. "
-                "Alice Thornton | Finance Director, Trusted Corp"
+                "Default Directory\n\n"
+                "Account verification code\n\n"
+                "To access Default Directory's apps and resources, please use the code below "
+                "for account verification. The code will only work for 30 minutes.\n\n"
+                "Account verification code:\n"
+                "29682845\n\n"
+                "If you didn't request a code, you can ignore this email.\n\n"
+                "Privacy Statement\n"
+                "Microsoft Corporation, One Microsoft Way, Redmond, WA 98052"
             ),
             "html_body": "",
-            "date": "Mon, 27 Jun 2026 08:00:00 +0000",
-            "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "52.84.10.1"},
+            "date": "Tue, 07 Jul 2026 13:37:00 +0000",
+            "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "40.92.90.104"},
             "attachments": [],
         },
     })
