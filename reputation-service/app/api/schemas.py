@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class EntityType(str, Enum):
@@ -112,7 +112,30 @@ class SignalEvidence(BaseModel):
     detail: str | None = None
 
 
+class EmailVerifyContext(BaseModel):
+    valid_format: bool = False
+    domain: str | None = None
+    root_domain: str | None = None
+    subdomain: str | None = None
+    tld: str | None = None
+    valid_tld: bool = False
+    public_domain: bool = False
+    has_a_records: bool = False
+    has_mx_records: bool = False
+    has_txt_records: bool = False
+    has_spf_records: bool = False
+    spf_qualifier: str | None = None
+    spf_strict: bool = False
+    dmarc_configured: bool = False
+    mx_records: list[str] = Field(default_factory=list)
+    txt_records: list[str] = Field(default_factory=list)
+    indicators: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class ReputationResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     type: EntityType
     value: str
     normalized_value: str
@@ -126,6 +149,7 @@ class ReputationResult(BaseModel):
     evidence: list[SignalEvidence] = Field(default_factory=list)
     agreement_level: AgreementLevel = AgreementLevel.none
     summary: str
+    email_verify: EmailVerifyContext | None = Field(default=None, alias="email-verify")
     raw_signals: list[dict[str, Any]] | None = None
     cached_at: datetime | None = None
     expires_at: datetime | None = None

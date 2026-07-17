@@ -110,6 +110,7 @@ class RemoteContentClassifier:
         body: str,
         attachments: list[str] | None = None,
         headers: dict[str, str] | None = None,
+        email_verify: dict[str, Any] | None = None,
     ) -> ContentClassificationResult:
         payload: dict[str, Any] = {
             "sender": sender,
@@ -118,6 +119,7 @@ class RemoteContentClassifier:
             "body": body,
             "attachments": attachments,
             "headers": headers,
+            "email_verify": email_verify,
         }
 
         # ── Primary path: remote Kimi service ────────────────────────────
@@ -151,6 +153,7 @@ class RemoteContentClassifier:
                 return await self._haiku_fallback(
                     sender=sender, recipient=recipient, subject=subject,
                     body=body, attachments=attachments, headers=headers,
+                    email_verify=email_verify,
                 )
             raise RemoteClassifierTimeout(
                 f"Remote classifier timed out after {self._primary_timeout}s "
@@ -182,6 +185,7 @@ class RemoteContentClassifier:
         body: str,
         attachments: list[str] | None,
         headers: dict[str, str] | None,
+        email_verify: dict[str, Any] | None,
     ) -> ContentClassificationResult:
         """
         Fall back to Claude Haiku via the local ContentClassifier when the
@@ -208,6 +212,7 @@ class RemoteContentClassifier:
                 sender=sender, recipient=recipient,
                 subject=subject, body=body,
                 attachments=attachments, headers=headers,
+                email_verify=email_verify,
             )
             # Tag the model so downstream telemetry can distinguish fallback runs
             if result.model_used and "fallback" not in result.model_used:
