@@ -6,6 +6,7 @@ from datetime import datetime
 
 from app.api.schemas import (
     AgreementLevel,
+    EmailVerifyContext,
     EntityType,
     ReputationEntity,
     ReputationResult,
@@ -92,6 +93,7 @@ class ReputationOrchestrator:
             sources_responded=len(source_signals),
         )
         score = self.scorer.score(normalized.entity_type, signals, correlation)
+        email_verify = await self._email_verify_for_sender(entity, normalized)
 
         return ReputationResult(
             type=normalized.entity_type,
@@ -107,12 +109,59 @@ class ReputationOrchestrator:
             evidence=score.evidence,
             agreement_level=correlation.agreement_level,
             summary=score.summary,
+            email_verify=email_verify,
             raw_signals=[
                 signal.to_public_dict(include_raw=True)
                 for signal in signals
             ]
             if include_raw_signals
             else None,
+        )
+
+    async def _email_verify_for_sender(
+        self,
+        entity: ReputationEntity,
+        normalized: NormalizedEntity,
+    ) -> EmailVerifyContext | None:
+        """
+        Domain/SPF/DMARC verification context for `sender` entities, surfaced to
+        the classifier via ReputationResult.email_verify. Reuses the "dns" adapter's
+        DnsVerificationResult (same data DnsAdapter.lookup() scores on) rather than
+        duplicating DNS resolution logic.
+        """
+        if entity.type != EntityType.sender or not normalized.related_domain:
+            return None
+
+        dns_adapter = next(
+            (adapter for adapter in self.registry.adapters if adapter.name == "dns"),
+            None,
+        )
+        if dns_adapter is None or not dns_adapter.config.enabled or not dns_adapter.is_configured:
+            return None
+
+        verification = await dns_adapter.inspect_domain(normalized.related_domain)
+        if verification is None:
+            return None
+
+        return EmailVerifyContext(
+            valid_format=verification.valid_format,
+            domain=verification.domain,
+            root_domain=verification.root_domain,
+            subdomain=verification.subdomain,
+            tld=verification.tld,
+            valid_tld=verification.valid_tld,
+            public_domain=verification.public_domain,
+            has_a_records=verification.has_a_records,
+            has_mx_records=verification.has_mx_records,
+            has_txt_records=verification.has_txt_records,
+            has_spf_records=verification.has_spf_records,
+            spf_qualifier=verification.spf_qualifier,
+            spf_strict=verification.spf_strict,
+            dmarc_configured=verification.dmarc_configured,
+            mx_records=verification.mx_records,
+            txt_records=verification.txt_records,
+            indicators=verification.indicators,
+            notes=verification.notes,
         )
 
     async def _store_ti_signals(
