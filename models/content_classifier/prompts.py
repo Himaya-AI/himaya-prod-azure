@@ -878,6 +878,7 @@ def build_classification_prompt(
     body: str,
     attachments: list[str] | None = None,
     headers: dict[str, str] | None = None,
+  email_verify: dict[str, object] | None = None,
 ) -> str:
     """
     Build the user-turn prompt for email classification.
@@ -900,6 +901,12 @@ def build_classification_prompt(
         for k, v in headers.items():
             parts.append(f"  {k}: {v}")
 
+    if email_verify:
+      import json
+
+      parts.append("EMAIL_VERIFY:")
+      parts.append(json.dumps(email_verify, indent=2, sort_keys=True, ensure_ascii=False))
+
     if attachments:
         parts.append(f"ATTACHMENTS: {', '.join(attachments)}")
 
@@ -915,6 +922,7 @@ def get_messages_for_classification(
     body: str,
     attachments: list[str] | None = None,
     headers: dict[str, str] | None = None,
+  email_verify: dict[str, object] | None = None,
     include_few_shot: bool = True,
 ) -> list[dict[str, str]]:
     """
@@ -944,6 +952,7 @@ def get_messages_for_classification(
         body=body,
         attachments=attachments,
         headers=headers,
+      email_verify=email_verify,
     )
 
     messages.append({"role": "user", "content": user_prompt})
