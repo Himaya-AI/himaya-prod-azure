@@ -240,6 +240,7 @@ class ContentClassifier:
         body: str,
         attachments: list[str] | None = None,
         headers: dict[str, str] | None = None,
+        email_verify: dict[str, Any] | None = None,
     ) -> ContentClassificationResult:
         """
         Classify an email for threats. Uses Claude with GPT-4o fallback.
@@ -264,6 +265,7 @@ class ContentClassifier:
             body=body,
             attachments=attachments,
             headers=headers,
+            email_verify=email_verify,
             include_few_shot=self.include_few_shot,
         )
 
