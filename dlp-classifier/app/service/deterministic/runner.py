@@ -7,6 +7,7 @@ import redis.asyncio as redis
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 
 from app.service.base import DetectionResult
+from app.service.deterministic.credentials import CredentialDetector
 from app.service.deterministic.lexicon import LexiconDetector
 from app.service.deterministic.ner import NERDetector
 from app.service.deterministic.pii import PIIDetector
@@ -37,6 +38,7 @@ class DeterministicRunner:
             PIIDetector(self._engine),
             NERDetector(self._engine),
             LexiconDetector(redis_client),
+            CredentialDetector(),
         ]
 
     @property

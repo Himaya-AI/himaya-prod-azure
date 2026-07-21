@@ -11,6 +11,8 @@ from fastapi import FastAPI
 
 from app.routers import classify
 from app.service.deterministic.runner import DeterministicRunner
+from app.service.llm.classifier import KimiClassifier
+from app.service.pipeline import ClassificationPipeline
 from config.redis_client import create_redis_client
 from config.settings import get_settings
 
@@ -79,6 +81,9 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing DeterministicRunner...")
     app.state.runner = DeterministicRunner(app.state.redis)
     app.state.engine = app.state.runner.engine
+
+    logger.info("Initializing classification pipeline...")
+    app.state.pipeline = ClassificationPipeline(app.state.runner, KimiClassifier())
 
     logger.info("dlp-classifier ready.")
     yield
