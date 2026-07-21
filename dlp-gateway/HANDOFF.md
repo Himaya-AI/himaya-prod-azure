@@ -1,20 +1,14 @@
-# DLP Gateway — Handoff for Classification / Backend Engineer
+# DLP Gateway — Handoff for Backend / Classifier Engineers
 
-Simple guide to what is already built, how to plug in, and where you take over.
+Simple guide to what the gateway already does, how the three services connect, and where to take over.
 
-## What this service is
+## Three services
 
-`dlp-gateway/` is the **mail pipe**.
-
-It:
-
-1. Accepts outbound email over SMTP  
-2. Saves the original message safely  
-3. Publishes a **capture event**  
-4. Waits for a **command** (`allow` / `hold` is your side; gateway acts on `allow` / `release` / `stop`)  
-5. Sends allowed/released mail to the provider return path (MailHog locally)
-
-It does **not** classify content. That is your job in `backend/dlp/`.
+| Service | Role |
+| --- | --- |
+| `dlp-gateway/` | Mail pipe: SMTP accept, store MIME, relay on command |
+| `backend/dlp/` | Orchestration: capture consumer, extraction, policy, APIs, review |
+| `dlp-classifier/` | Detectors: return **findings only** (no allow/hold/stop) |
 
 ```text
 Sender / provider
@@ -24,16 +18,26 @@ dlp-gateway (SMTP + store + relay)     ← DONE (local MVP)
       │
       │  capture event
       ▼
-backend/dlp (extract → classify → policy)  ← YOUR WORK
+backend/dlp (extract + policy + APIs)  ← BACKEND WORK
+      │
+      │  classify request
+      ▼
+dlp-classifier (PII / NER / …)         ← CLASSIFIER WORK
+      │
+      │  findings
+      ▼
+backend/dlp policy
       │
       │  allow / release / stop command
       ▼
 dlp-gateway relays (or stops)
 ```
 
+Gateway does **not** classify. Classifier does **not** send gateway commands.
+
 ---
 
-## What is already done
+## What the gateway already has
 
 | Piece | Status |
 | --- | --- |
@@ -47,11 +51,11 @@ dlp-gateway relays (or stops)
 | Relay original MIME to MailHog | Done |
 | Health check `:8080/healthz` | Done |
 
-**Not done yet (gateway side, later):** crash recovery hardening, Service Bus, real Microsoft 365 relay, Google.
+**Still later on gateway:** crash recovery hardening, Service Bus, real Microsoft 365 relay, Google.
 
-**Not started (your side):** extraction, detectors, policy engine, review APIs, Enable DLP.
+**Backend / classifier still needed:** extraction client path, classifier API wiring, policy → commands, review APIs, Enable DLP, turn off `FORCE_ALLOW`.
 
-Design docs (more detail):
+Design docs:
 
 - `docs/DLP_INGRESS_GATEWAY_PLAN.md`
 - `docs/DLP_BACKEND_IMPLEMENTATION_ROADMAP.md`
@@ -74,165 +78,120 @@ docker compose up --build -d
 | MailHog UI | http://localhost:8025 | See relayed mail |
 | Azurite Blob | `localhost:10000` | Stored MIME |
 
-Send a test message:
-
 ```bash
 python scripts/send_test_mail.py
 ```
 
-Allowed test sender domains (see `conf/tenants/local-tenant.json`):
-
-- `example.test`
-- `himaya.test`
-
-Example: `alice@example.test` → works. `eve@evil.test` → rejected.
+Allowed sender domains (`conf/tenants/local-tenant.json`): `example.test`, `himaya.test`.
 
 ---
 
-## How you connect (the contract)
+## How backend connects to the gateway
 
-You talk to the gateway through **events and commands**, not by calling SMTP or reading the spool directly.
+Talk through **events and commands**, not SMTP or the spool disk.
 
-### 1. You consume: capture event
-
-After mail is stored in Blob, gateway publishes:
+### 1. Consume: capture event
 
 **Event type:** `dlp.message.captured.v1`
 
-Important fields:
-
 | Field | Meaning |
 | --- | --- |
-| `message_id` | ID you must use in commands |
+| `message_id` | ID for later commands |
 | `org_id` | Tenant |
-| `envelope_from` / `envelope_to` | SMTP envelope (includes BCC recipients) |
+| `envelope_from` / `envelope_to` | SMTP envelope (includes BCC) |
 | `mime_sha256` / `mime_size` | Integrity / size |
-| `blob_uri` | Where to download the original MIME |
-| `received_at` | When gateway accepted it |
+| `blob_uri` | Original MIME in Blob |
+| `received_at` | Accept time |
 
-Model code today: `dlp-gateway/app/domain/models.py` → `CaptureEvent`  
-Local queue files: under the `dlp_queues` Docker volume (`captures/ready/…`)
+Model: `dlp-gateway/app/domain/models.py` → `CaptureEvent`  
+Local queue: Docker volume `dlp_queues` → `captures/ready/`
 
-**Your first job:** read MIME from `blob_uri`, extract text, classify, evaluate policy.
-
-### 2. You publish: commands
+### 2. Publish: gateway commands
 
 | Command | Gateway does |
 | --- | --- |
-| `allow` | Relay original MIME to return path |
-| `release` | Same as allow (after a human review hold) |
-| `stop` | Do not relay; mark stopped |
+| `allow` | Relay original MIME |
+| `release` | Same as allow after review |
+| `stop` | Do not relay |
 | `retry` | Try relay again |
-
-Model: `GatewayCommand` in the same file.
-
-Minimum command payload:
 
 ```json
 {
   "schema_version": 1,
   "command_type": "allow",
-  "message_id": "<same uuid from capture event>",
+  "message_id": "<uuid from capture event>",
   "org_id": "<same org>",
   "reason": "optional"
 }
 ```
 
-### 3. Turn off the stub when you are ready
+### 3. Turn off the stub when ready
 
-Today local mode has:
+Today: `FORCE_ALLOW=true` (gateway auto-allows after capture).
 
-```text
-FORCE_ALLOW=true
-```
+When backend + classifier + policy work:
 
-That means gateway auto-sends `allow` after every capture so we could test without classification.
-
-When your worker is ready:
-
-1. Set `FORCE_ALLOW=false` on the gateway  
-2. Your worker consumes capture events and publishes real `allow` / `stop` (and later hold/release via API)  
-3. Gateway command consumer already knows how to act on those commands  
-
-Do **not** classify inside the gateway process.
+1. Set `FORCE_ALLOW=false`
+2. Backend consumes capture events
+3. Backend calls `dlp-classifier` for findings
+4. Policy publishes real `allow` / `stop` (hold/release later)
+5. Gateway command consumer already handles those commands
 
 ---
 
-## Suggested takeover steps (your side)
+## How backend connects to the classifier
 
-1. **Copy / share contracts**  
-   Move or mirror `CaptureEvent` + `GatewayCommand` into `backend/dlp/contracts/` so both services use the same schema.
+Classifier owns detectors. Backend owns orchestration and decisions.
 
-2. **Build a capture consumer**  
-   `backend/dlp/workers/capture_consumer.py`  
-   - read event  
-   - download MIME from Blob (`blob_uri`)  
-   - never rebuild the email from subject/body fields for release  
+Suggested flow:
 
-3. **Extraction + classification**  
-   Produce findings only (what was found, confidence, what could not be read).  
-   Do not decide delivery inside the classifier.
+1. Backend downloads MIME from `blob_uri` and extracts text/parts  
+2. Backend calls `dlp-classifier` with message id + text parts  
+3. Classifier returns findings / limitations / escalate flags  
+4. Backend policy decides allow / hold / stop  
+5. Backend publishes the gateway command  
 
-4. **Policy worker**  
-   Input: findings + recipients + org mode  
-   Output: publish `allow` or `stop` command (hold later with review API).
+Classifier must **not** publish `allow`/`stop` to the gateway.
 
-5. **Disable `FORCE_ALLOW`** and run both services together locally.
-
-6. **Hold / release (next)**  
-   Hold = your backend stores review item; gateway does nothing until `release` or `stop` command.
+Share a versioned findings schema from `backend/dlp/contracts/` (or equivalent) so both sides stay compatible.
 
 ---
 
-## Rules that keep things maintainable
+## Suggested takeover split
 
-1. Gateway owns SMTP + spool + relay. You own classify + policy + APIs.  
+### Backend engineer
+
+1. Mirror contracts: capture events, gateway commands, findings  
+2. `capture_consumer` + extraction worker  
+3. Thin client to `dlp-classifier`  
+4. Policy worker → allow/stop commands  
+5. Disable `FORCE_ALLOW` in joint local runs  
+6. Review queue / Enable DLP APIs next  
+
+### Classifier engineer
+
+1. Finish detector pack in `dlp-classifier/` (PII/NER started; credentials/LLM later)  
+2. Expose a stable classify API or worker interface  
+3. Return findings only; set `escalate` when LLM/follow-up is needed  
+4. Version detectors so backend can cache safely  
+
+---
+
+## Rules
+
+1. Gateway = SMTP + spool + relay. Backend = extract + policy + APIs. Classifier = findings.  
 2. Original MIME in Blob is the source of truth for release.  
-3. Do not call Postgres from the SMTP path (gateway already follows this).  
-4. Prefer deterministic detectors first; LLM only for hard cases.  
-5. If inspection is incomplete (encrypted attachment, etc.), return a limitation — policy decides hold/allow.  
-6. Keep event/command schemas versioned (`schema_version`).
-
----
-
-## Local vs production adapters
-
-| Need | Local now | Later |
-| --- | --- | --- |
-| Queue | Filesystem bus in gateway | Azure Service Bus (both services) |
-| MIME store | Azurite | Same Azure Blob account as Himaya |
-| Decisions | `FORCE_ALLOW` | Your policy worker |
-| Relay target | MailHog | Microsoft 365 return connector |
-
-You can start classification against **local Docker + Azurite** without waiting for Microsoft staging.
-
----
-
-## Quick ownership split
-
-| You build | Gateway team builds |
-| --- | --- |
-| Extractors / detectors / findings | SMTP edge, spool, capture |
-| Policy allow/hold/stop | Command consumer + relay |
-| Review queue APIs | Provider return adapters (M365) |
-| Enable DLP / settings APIs | Signed tenant config publishing |
-| Capture consumer worker | Service Bus production wiring |
-
----
-
-## Questions / blockers to ask early
-
-- Exact Service Bus topic/queue names (when leaving filesystem bus)  
-- Shared Blob container name / auth (managed identity vs connection string)  
-- Who owns hold state in DB (`dlp_review_items`) vs gateway spool folders  
-- Monitor vs enforce behavior when classification fails  
+3. No Postgres on the SMTP hot path.  
+4. Deterministic detectors first; LLM only for hard cases.  
+5. Incomplete inspection → limitations; policy decides hold/allow.  
+6. Version every event, command, and findings schema.
 
 ---
 
 ## TL;DR
 
-Gateway local MVP is ready: mail in → Blob + capture event → (stub allow) → MailHog.
+Gateway local MVP: mail in → Blob + capture event → (stub allow) → MailHog.
 
-**You take over at the capture event.**  
-Read MIME → classify → policy → publish `allow` / `stop`.  
-Then turn `FORCE_ALLOW` off.
+**Backend takes over at the capture event.**  
+**Classifier takes over when backend asks for findings.**  
+Policy in backend publishes `allow` / `stop`, then turn `FORCE_ALLOW` off.

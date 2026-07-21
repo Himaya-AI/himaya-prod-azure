@@ -6,12 +6,12 @@ This document describes how to build the DLP **backend control plane and applica
 
 It covers:
 
-- Repository layout for `dlp-gateway/` vs `backend/dlp/`.
+- Repository layout for `dlp-gateway/`, `backend/dlp/`, and `dlp-classifier/`.
 - Tenant enablement and the **Enable DLP** administrator action.
 - All-user and selected-user protection scopes.
 - Provider setup orchestration for Microsoft 365 and Google Workspace.
-- Gateway/control-plane integration contracts.
-- Message extraction, classification, and policy evaluation.
+- Gateway / control-plane / classifier integration contracts.
+- Message extraction (backend), classification (`dlp-classifier`), and policy evaluation.
 - Allow, hold, release, and stop enforcement orchestration.
 - Queue, logs, overview statistics, settings, and engine health APIs.
 - Notifications, auditability, observability, testing, migration, and rollout.
@@ -39,7 +39,7 @@ flowchart LR
     Gateway[dlp-gateway SMTP data plane]
     Events[Capture event]
     Extract[Backend extraction worker]
-    Classify[Backend classification worker]
+    Classifier[dlp-classifier service]
     Evaluate[Backend policy worker]
     Decision{Decision}
     Commands[Command queue]
@@ -52,8 +52,8 @@ flowchart LR
     Provider --> Gateway
     Gateway --> Events
     Events --> Extract
-    Extract --> Classify
-    Classify --> Evaluate
+    Extract -->|text or parts| Classifier
+    Classifier -->|findings| Evaluate
     Evaluate --> Decision
     Decision -->|Allow| Commands
     Decision -->|Hold| Hold
@@ -66,14 +66,15 @@ flowchart LR
 
 ## Core architectural decisions
 
-### 1. Two deployable units
+### 1. Three deployable units
 
-Build DLP as **two deployable units** in the monorepo:
+Build DLP as **three deployable units** in the monorepo:
 
 1. `dlp-gateway/` — SMTP data plane (accept, spool, capture, relay).
-2. `backend/dlp/` — control plane APIs and application workers (enablement, classification, policy, review, setup, notifications).
+2. `backend/dlp/` — control plane APIs and application workers (enablement, extraction orchestration, policy, review, setup, notifications).
+3. `dlp-classifier/` — separate classification service (deterministic detectors, later LLM escalation). Returns **findings only**; it does not decide allow/hold/stop.
 
-Do not add production DLP behavior to the current overlapping legacy paths under `backend/services/dlp_*.py` or `infra/dlp/dlp_gateway.py`.
+Do not run detectors inside the SMTP edge. Do not add production DLP behavior to the current overlapping legacy paths under `backend/services/dlp_*.py` or `infra/dlp/dlp_gateway.py`.
 
 ### 1a. Shared Himaya platform resources
 
@@ -94,22 +95,25 @@ flowchart TB
     FastAPI --> SB
     FastAPI --> KV
     FastAPI --> Mon
+    FastAPI -->|classify request| Classifier[dlp-classifier]
 
     Gateway[dlp-gateway compute] --> Blob
     Gateway --> SB
     Gateway --> KV
     Gateway --> Mon
     Gateway -.config cache only; no SMTP-time DB calls.-> PG
+
+    Classifier --> Mon
 ```
 
 | Resource | Share with Himaya backend? | Isolation rule |
 | --- | --- | --- |
-| PostgreSQL | Yes — same instance | New `dlp_*` tables/schema; gateway does not query DB during SMTP acceptance |
-| Blob Storage | Yes — same account | Dedicated DLP MIME container/prefix |
+| PostgreSQL | Yes — same instance | New `dlp_*` tables/schema; gateway and classifier do not query DB during SMTP acceptance |
+| Blob Storage | Yes — same account | Dedicated DLP MIME container/prefix; classifier may read extracted text or MIME via backend |
 | Service Bus | Yes — same namespace | Dedicated DLP capture/command queues or topics |
-| Key Vault | Yes — same vault | Separate secrets for gateway certs and config signing keys |
+| Key Vault | Yes — same vault | Separate secrets for gateway certs, config signing keys, and classifier credentials |
 | Redis | Optional | Share only if useful for locks/cache; not required on SMTP hot path |
-| Compute | No | `dlp-gateway` is a separate deployable with Postfix and durable disks |
+| Compute | No | Separate deployables for `dlp-gateway` and `dlp-classifier` |
 
 Split to dedicated Postgres/Service Bus later only if volume, compliance, or blast-radius requirements demand it.
 
@@ -117,45 +121,19 @@ Split to dedicated Postgres/Service Bus later only if volume, compliance, or bla
 
 ```text
 himaya-prod-azure/
-├── dlp-gateway/                      # Separate SMTP data-plane service
+├── dlp-gateway/                      # SMTP data-plane service
 │   ├── Dockerfile
-│   ├── requirements.txt
-│   ├── conf/
-│   │   └── postfix/
-│   ├── scripts/
+│   ├── app/                          # accept, spool, capture, relay, commands
+│   └── ...
+│
+├── dlp-classifier/                   # Separate classification service
 │   ├── app/
-│   │   ├── main.py                   # Gateway process bootstrap
-│   │   ├── config.py
-│   │   ├── smtp/
-│   │   │   ├── edge.py
-│   │   │   ├── trust.py
-│   │   │   ├── tenant_resolver.py
-│   │   │   └── headers.py
-│   │   ├── spool/
-│   │   │   ├── mta_spool.py
-│   │   │   └── recovery.py
-│   │   ├── capture/
-│   │   │   ├── worker.py            # Spool → MIME + metadata → publish capture event
-│   │   │   └── mime_store.py
-│   │   ├── config_cache/
-│   │   │   ├── snapshot.py           # Signed tenant config cache
-│   │   │   └── refresh.py
-│   │   ├── relay/
-│   │   │   ├── dispatcher.py
-│   │   │   ├── egress_copy.py
-│   │   │   ├── outcomes.py
-│   │   │   └── adapters/            # ProviderRelayAdapter — SMTP only
-│   │   │       ├── base.py
-│   │   │       ├── microsoft.py
-│   │   │       └── google.py
-│   │   ├── commands/
-│   │   │   ├── consumer.py           # release / stop / retry
-│   │   │   └── processor.py
-│   │   ├── events/
-│   │   │   └── publisher.py          # dlp.message.captured.v1, etc.
-│   │   ├── health/
-│   │   └── metrics/
-│   └── tests/
+│   │   ├── main.py
+│   │   └── service/
+│   │       ├── base.py               # DetectionResult / BaseDetector
+│   │       ├── deterministic/        # PII, NER, credentials, etc.
+│   │       └── llm/                  # Optional escalation
+│   └── ...
 │
 ├── backend/
 │   ├── main.py                       # Mounts /api/dlp/v2
@@ -163,45 +141,23 @@ himaya-prod-azure/
 │   ├── services/                     # Shared QueueClient, StorageClient, email
 │   └── dlp/                          # DLP control plane + app workers
 │       ├── api/
-│       │   ├── router.py
-│       │   ├── enablement.py
-│       │   ├── policies.py
-│       │   ├── queue.py
-│       │   ├── logs.py
-│       │   ├── overview.py
-│       │   ├── settings.py
-│       │   ├── eligible_users.py
-│       │   └── schemas.py
 │       ├── application/
-│       │   ├── enablement_service.py
-│       │   ├── setup_service.py
-│       │   ├── scope_service.py
-│       │   ├── message_orchestrator.py
-│       │   ├── review_service.py
-│       │   ├── policy_service.py
-│       │   └── config_publisher.py
 │       ├── domain/
-│       ├── classification/
-│       │   ├── engine.py
-│       │   ├── registry.py
-│       │   ├── extractors/
-│       │   └── detectors/
+│       ├── extraction/               # MIME/part extraction before classify call
+│       ├── classification/           # Thin client/adapter to dlp-classifier
+│       │   └── client.py             # HTTP or queue client — not detector impl
 │       ├── policy/
-│       │   ├── evaluator.py
-│       │   ├── compiler.py
-│       │   └── simulator.py
 │       ├── providers/                # Provider setup automation, not SMTP
-│       │   ├── base.py
-│       │   ├── microsoft.py
-│       │   └── google.py
 │       ├── persistence/
-│       ├── contracts/                # Shared schemas with dlp-gateway
+│       ├── contracts/                # Shared schemas with gateway + classifier
 │       │   ├── events.py
 │       │   ├── commands.py
+│       │   ├── findings.py
 │       │   └── config_snapshot.py
 │       └── workers/
 │           ├── capture_consumer.py   # Consumes gateway capture events
-│           ├── classify.py
+│           ├── extract.py
+│           ├── classify.py           # Calls dlp-classifier, persists findings
 │           ├── evaluate.py
 │           ├── setup.py
 │           ├── reconcile.py
@@ -216,14 +172,15 @@ himaya-prod-azure/
 | --- | --- | --- |
 | SMTP accept, spool, MIME capture, provider return relay | `dlp-gateway/` | Separate VM/AKS pods with Postfix |
 | Provider SMTP relay adapters (`ProviderRelayAdapter`) | `dlp-gateway/` (relay adapters) | Gateway workers only |
+| Detectors, NER/PII, LLM escalation | `dlp-classifier/` | Separate classifier service |
 | Enable DLP APIs, policies, review, settings, overview | `backend/dlp/api/` | Existing FastAPI service |
-| Classification, policy evaluation, setup, notify, reconcile | `backend/dlp/workers/` | Same app or worker pool |
+| Extraction, classify orchestration, policy, setup, notify | `backend/dlp/workers/` | Same app or worker pool |
 | Provider admin setup (connectors, groups, routing rules) | `backend/dlp/providers/` | Backend workers — not SMTP |
-| Event/command/config contracts | `backend/dlp/contracts/` (+ imported by gateway) | Shared schemas |
-| Shared Azure clients | `backend/services/` | Reused by backend; gateway may import or mirror thin clients |
+| Event/command/findings/config contracts | `backend/dlp/contracts/` (+ imported by gateway/classifier) | Shared schemas |
+| Shared Azure clients | `backend/services/` | Reused by backend; gateway/classifier may mirror thin clients |
 | Shared Postgres / Blob / Service Bus / Key Vault | Existing Himaya platform | Same instances; DLP-specific tables, containers, queues, and secrets |
 
-Exact file names may change. The two-service boundary must not.
+Exact file names may change. The three-service boundary must not.
 
 ### 2. One orchestration path
 
@@ -231,9 +188,9 @@ Every gateway message must use the same lifecycle:
 
 ```text
 captured by dlp-gateway
-  -> extracted
-  -> classified
-  -> evaluated
+  -> extracted by backend/dlp
+  -> classified by dlp-classifier (findings only)
+  -> evaluated by backend/dlp policy
   -> allowed | held | stopped
   -> relayed by dlp-gateway
   -> provider_accepted | failed | outcome_uncertain
@@ -241,7 +198,7 @@ captured by dlp-gateway
 
 Do not maintain separate webhook, inline polling, draft, and gateway policy engines.
 
-### 3. Separate control plane and data plane
+### 3. Separate control plane, data plane, and classifier
 
 **SMTP data plane (`dlp-gateway/`)** owns:
 
@@ -262,15 +219,22 @@ Do not maintain separate webhook, inline polling, draft, and gateway policy engi
 - Setup validation.
 - Review authorization.
 - Settings and status.
+- Capture-event consumption and extraction from stored MIME.
+- Calling `dlp-classifier` and persisting findings.
+- Policy evaluation and publishing allow/release/stop commands.
+- Notifications and delivery reconciliation.
 
-**Backend application workers** (not the SMTP edge) own:
+**Classifier service (`dlp-classifier/`)** owns:
 
-- Content extraction from stored MIME.
-- Classification execution.
-- Policy evaluation.
-- Setup/repair orchestration.
-- Notifications.
-- Delivery reconciliation using provider traces.
+- Detector implementations (PII, NER, credentials, lexicons, later LLM).
+- Returning versioned findings and escalate/limitation signals.
+- Classifier-specific model/runtime dependencies (for example spaCy/Presidio).
+
+It must not:
+
+- Accept SMTP.
+- Publish gateway allow/stop commands.
+- Own review-queue or Enable DLP state.
 
 They communicate only through durable commands, events, and signed configuration snapshots. The SMTP edge must never call FastAPI synchronously during mail acceptance.
 
@@ -344,7 +308,7 @@ Do not extend these as the production gateway or DLP v2 path:
 - Mock provider policy push as the source of enforcement truth.
 - Organization-level ad hoc `dlp_*` columns as the long-term configuration model.
 
-These can remain temporarily behind legacy feature flags during migration. New work goes into `dlp-gateway/` and `backend/dlp/`.
+These can remain temporarily behind legacy feature flags during migration. New work goes into `dlp-gateway/`, `backend/dlp/`, and `dlp-classifier/`.
 
 ## Enable DLP capability
 
@@ -1010,7 +974,7 @@ Never accept arbitrary unverified email strings as the primary selected-user ide
 
 ## Gateway integration contracts
 
-These contracts are the only supported integration between `backend/dlp/` and `dlp-gateway/`.
+These contracts are the supported integration between `backend/dlp/` and `dlp-gateway/`. Classification findings use a separate contract between `backend/dlp/` and `dlp-classifier/` (see Classification backend).
 
 ### Signed configuration snapshot
 
@@ -1083,11 +1047,29 @@ The `dlp-gateway` command processor and relay dispatcher validate current state 
 
 ## Classification backend
 
-Classification runs in `backend/dlp/workers/` against MIME already persisted by `dlp-gateway`. It does not run inside the SMTP edge.
+Classification is a **separate service**: `dlp-classifier/`.
+
+- `dlp-gateway` persists MIME and publishes capture events.
+- `backend/dlp` extracts inspectable text/parts and calls `dlp-classifier`.
+- `dlp-classifier` returns findings only.
+- `backend/dlp` policy worker turns findings into allow/hold/stop commands for the gateway.
+
+Do not run detectors inside the SMTP edge. Do not let the classifier publish gateway commands.
+
+### Integration shape
+
+```text
+backend/dlp classify worker
+  -> request { message_id, org_id, text_parts[], detector_pack_version? }
+  -> dlp-classifier
+  -> response { findings[], limitations[], escalate, detector_versions }
+```
+
+Transport may be HTTP or a queue. Keep the findings schema stable either way.
 
 ### Extraction pipeline
 
-Extract once from the immutable MIME object and reuse results.
+Extract once in `backend/dlp` from the immutable MIME object and reuse results before calling the classifier.
 
 Stages:
 
@@ -1110,16 +1092,16 @@ Security controls:
 - No macro execution.
 - Timeouts per part.
 
-### Detector registry
+### Detector registry (`dlp-classifier`)
 
-Initial detector families:
+Initial detector families (implemented or stubbed in `dlp-classifier/`):
 
-- Source code.
-- Health data.
-- Finance data.
-- Legal data.
-- PII.
+- PII (Presidio-backed financial/contact/identity entities).
+- NER (person, location, organization, and related entities).
 - Credentials and API/access keys.
+- Lexicon / EDM (planned).
+- Source code, health, finance, legal packs (expand over time).
+- Optional LLM escalation for ambiguous narrative content.
 
 Every detector returns:
 
@@ -1135,14 +1117,14 @@ limitations
 
 ### Performance strategy
 
-Use a staged classifier:
+Use a staged classifier inside `dlp-classifier`:
 
 1. Deterministic patterns and file heuristics.
-2. Structured validators.
-3. Statistical/local models.
-4. Targeted LLM escalation only for ambiguous content.
+2. Structured validators (for example credit-card Luhn).
+3. Statistical/local models (NER).
+4. Targeted LLM escalation only when detectors set `escalate` or content is ambiguous.
 
-Do not call a slow LLM for every message.
+Do not call a slow LLM for every message. Backend may skip the classifier call entirely only for explicit bypass/test modes — never as silent fail-open in enforce mode.
 
 Cache classification by:
 
@@ -1620,15 +1602,16 @@ Exit criteria:
 
 Deliver:
 
-- MIME parser.
-- Attachment extraction.
-- Detector registry.
-- Initial six data-type families.
+- MIME parser and attachment extraction in `backend/dlp`.
+- Stable backend → `dlp-classifier` client and findings schema.
+- Detector pack progress in `dlp-classifier` (PII/NER first; credentials next).
 - Classification caching and limitations.
+- Turn off gateway `FORCE_ALLOW` in joint local tests once allow/stop commands are produced by policy.
 
 Exit criteria:
 
-- Versioned results are reproducible.
+- Versioned findings are reproducible across classifier versions.
+- Backend can drive gateway allow/stop from classifier output.
 - Load and malicious-file tests pass.
 
 ### Milestone 5 — policy engine
@@ -1726,21 +1709,22 @@ This validates the highest-risk integration before investing in classification a
 
 ## Final recommendation
 
-Build DLP as two services:
+Build DLP as three services:
 
 - `dlp-gateway/` for SMTP accept, durable capture, and provider-return relay.
-- `backend/dlp/` for Enable DLP, policies, classification, review, and product APIs.
+- `backend/dlp/` for Enable DLP, extraction orchestration, policies, review, and product APIs.
+- `dlp-classifier/` for detectors and findings (no delivery decisions).
 
-Reuse the existing Himaya PostgreSQL, Blob Storage, Service Bus, and Key Vault with DLP-specific isolation. Keep gateway compute separate.
+Reuse the existing Himaya PostgreSQL, Blob Storage, Service Bus, and Key Vault with DLP-specific isolation. Keep gateway and classifier compute separate from FastAPI as needed.
 
-Integrate the two services only through signed configuration, durable commands, and events.
+Integrate gateway and backend through signed configuration, durable commands, and events. Integrate backend and classifier through a versioned findings API/contract.
 
 The **Enable DLP** button must control an asynchronous, provider-aware state machine—not a boolean column.
 
 Keep these rules:
 
-- SMTP and FastAPI are separate deployable units.
-- Classification and policy workers run in the backend, not inside the SMTP edge.
+- SMTP, FastAPI/control plane, and classifier are separate deployable units.
+- Classification runs in `dlp-classifier`; policy runs in `backend/dlp`; neither runs inside the SMTP edge.
 - DLP scope is independent from monitoring scope.
 - All-user scope dynamically includes new users.
 - Selected-user scope uses stable directory identities.

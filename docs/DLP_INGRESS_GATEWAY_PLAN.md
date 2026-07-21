@@ -6,8 +6,8 @@
 - **Providers:** Microsoft 365 and Google Workspace.
 - **Excluded for now:** Classification, policy evaluation, audit UI, and frontend design.
 - **Primary decision:** Build one durable SMTP gateway and use provider-return delivery.
-- **Service boundary:** Gateway lives in a separate `dlp-gateway/` deployable; Enable DLP, policies, classification, and APIs live in `backend/dlp/`.
-- **Platform resources:** Reuse existing Himaya PostgreSQL, Blob Storage, Service Bus, and Key Vault with DLP-specific isolation. Gateway compute stays separate.
+- **Service boundary:** Three deployables — `dlp-gateway/` (SMTP data plane), `backend/dlp/` (control plane, extraction, policy, APIs), and `dlp-classifier/` (findings only).
+- **Platform resources:** Reuse existing Himaya PostgreSQL, Blob Storage, Service Bus, and Key Vault with DLP-specific isolation. Gateway and classifier compute stay separate from FastAPI as needed.
 - **Direct internet delivery:** Not included.
 - **Microsoft 365:** Target for production support.
 - **Google Workspace:** Must pass a provider-specific proof of concept and readiness gate before enforcement is generally available.
@@ -40,6 +40,8 @@ flowchart LR
     Spool --> Capture[Capture worker]
     Capture --> Events[Event queue]
     Events --> Backend[backend/dlp workers]
+    Backend -->|text parts| Classifier[dlp-classifier]
+    Classifier -->|findings| Backend
     Backend -->|allow or release| Commands[Command queue]
     Backend -->|Hold| Hold[(Hold queue)]
     Backend -->|Stop| Stop[Stop and notify]
@@ -155,12 +157,15 @@ flowchart TB
     FastAPI --> SB
     FastAPI --> KV
     FastAPI --> Mon
+    FastAPI -->|classify request| Classifier[dlp-classifier]
 
     Gateway[dlp-gateway compute] --> Blob
     Gateway --> SB
     Gateway --> KV
     Gateway --> Mon
     Gateway -.signed config cache only; no SMTP-time DB calls.-> PG
+
+    Classifier --> Mon
 ```
 
 | Resource | Share with Himaya backend? | Isolation rule |
@@ -168,8 +173,8 @@ flowchart TB
 | PostgreSQL | Yes — same instance | New `dlp_*` tables/schema; gateway does not query DB during SMTP acceptance |
 | Blob Storage | Yes — same account | Dedicated DLP MIME container/prefix |
 | Service Bus | Yes — same namespace | Dedicated DLP capture/command queues or topics |
-| Key Vault | Yes — same vault | Separate secrets for gateway certs and config signing keys |
-| Compute | No | Separate `dlp-gateway` VMSS/AKS with Postfix and durable Managed Disks |
+| Key Vault | Yes — same vault | Separate secrets for gateway certs, config signing keys, and classifier credentials |
+| Compute | No | Separate `dlp-gateway` and `dlp-classifier` compute from FastAPI |
 
 Split to dedicated Postgres/Service Bus later only if volume, compliance, or blast-radius requirements demand it.
 
@@ -179,7 +184,8 @@ Service and plane terms used throughout this document:
 
 - **`dlp-gateway/` data plane:** SMTP acceptance, durable spool, immutable MIME capture, local config cache, provider-return relay, and command consumption for release/stop/retry.
 - **`backend/dlp/` control plane:** Tenant configuration, Enable DLP, setup validation, reviewer authorization, policies, release/stop APIs, certificate management, and health status.
-- **`backend/dlp/` application workers:** Extraction, classification, policy evaluation, notifications, and delivery reconciliation. These are not part of the SMTP edge process.
+- **`backend/dlp/` application workers:** Extraction, classifier client calls, policy evaluation, notifications, and delivery reconciliation. These are not part of the SMTP edge process.
+- **`dlp-classifier/` service:** Detector execution and findings only. Does not accept SMTP and does not publish gateway delivery commands.
 - **Storage plane:** MTA spool, immutable MIME objects, metadata (in shared Postgres), and command/event queues (in shared Service Bus).
 
 ```mermaid
@@ -193,6 +199,8 @@ flowchart TD
     Capture -->|after MIME and metadata commit| Events[(Event queue)]
 
     Events --> AppWorkers[backend/dlp workers]
+    AppWorkers -->|text parts| Classifier[dlp-classifier]
+    Classifier -->|findings| AppWorkers
     AppWorkers -->|allow or release command| Commands[(Command queue)]
     AppWorkers -->|Hold| Held[(Held state)]
     AppWorkers -->|Stop| Stopped[(Stopped state)]
@@ -225,9 +233,10 @@ Repository placement:
 
 ```text
 himaya-prod-azure/
-├── dlp-gateway/     # SMTP data-plane service
-├── backend/dlp/     # Control plane APIs and application workers
-└── infra/dlp/       # Legacy scripts only — do not extend for production
+├── dlp-gateway/       # SMTP data-plane service
+├── dlp-classifier/    # Classification service (findings only)
+├── backend/dlp/       # Control plane APIs and orchestration workers
+└── infra/dlp/         # Legacy scripts only — do not extend for production
 ```
 
 Full folder trees and ownership tables are in `docs/DLP_BACKEND_IMPLEMENTATION_ROADMAP.md`.
@@ -315,7 +324,7 @@ The application-owned MIME object must be:
 
 ### 4. Backend decision path
 
-Classification and policy evaluation run in `backend/dlp/` workers after the gateway publishes a capture event. They are not part of the SMTP edge process.
+After the gateway publishes a capture event, `backend/dlp` workers extract content, call `dlp-classifier` for findings, then run policy evaluation. Classification and policy are not part of the SMTP edge process.
 
 For this gateway design, the backend only needs a stable decision contract published as commands/events:
 
@@ -1126,7 +1135,8 @@ Azure UAE North is the working regional assumption. UAE Central, Qatar Central, 
 | --- | --- |
 | Stateful SMTP edge and durable MTA spool | New Azure Virtual Machine Scale Set or AKS workload with Managed Disks; separate from FastAPI compute |
 | Gateway capture, relay, and command workers | Same `dlp-gateway` pods/nodes as the SMTP edge, or adjacent workers that share the gateway deployment |
-| Backend classification, policy, setup, and notify workers | Existing FastAPI/worker pool under `backend/dlp/workers/` |
+| Backend extraction, policy, setup, and notify workers | Existing FastAPI/worker pool under `backend/dlp/workers/` |
+| Detector / NER / LLM classification | Separate `dlp-classifier` service; backend calls it for findings |
 | Immutable MIME objects | Existing Himaya Azure Blob Storage account; dedicated DLP container/prefix |
 | Metadata database | Existing Himaya Azure Database for PostgreSQL Flexible Server; new `dlp_*` tables/schema |
 | Commands and events | Existing Himaya Azure Service Bus namespace; dedicated DLP queues/topics |
