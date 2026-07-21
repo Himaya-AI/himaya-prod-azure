@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
+import redis.asyncio as redis
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 
 from app.service.base import DetectionResult
+from app.service.deterministic.lexicon import LexiconDetector
 from app.service.deterministic.ner import NERDetector
 from app.service.deterministic.pii import PIIDetector
 from app.service.deterministic.recognizers.credit_card import CreditCardValidator
@@ -28,17 +31,31 @@ class DeterministicRunner:
     AnalyzerEngine lifecycle so spaCy loads once, runs every detector, and
     aggregates their findings."""
 
-    def __init__(self) -> None:
-        engine = _build_shared_engine()
+    def __init__(self, redis_client: redis.Redis) -> None:
+        self._engine = _build_shared_engine()
         self._detectors = [
-            PIIDetector(engine),
-            NERDetector(engine),
+            PIIDetector(self._engine),
+            NERDetector(self._engine),
+            LexiconDetector(redis_client),
         ]
 
-    def run(self, text: str, metadata: dict[str, Any]) -> list[DetectionResult]:
-        """Runs all detectors against the extracted text. Never raises —
-        a failed detector returns escalate=True with error set instead."""
-        return [detector.analyze(text, metadata) for detector in self._detectors]
+    @property
+    def engine(self) -> AnalyzerEngine:
+        return self._engine
+
+    async def run(self, text: str, metadata: dict[str, Any]) -> list[DetectionResult]:
+        """Runs all detectors concurrently against the extracted text — they
+        have no interconnected dependencies. Never raises — a failed
+        detector returns escalate=True with error set instead."""
+        return list(
+            await asyncio.gather(
+                *(detector.analyze(text, metadata) for detector in self._detectors)
+            )
+        )
+
+    @property
+    def detector_count(self) -> int:
+        return len(self._detectors)
 
     def should_escalate(self, results: list[DetectionResult]) -> bool:
         """True if any detector was inconclusive — Tier 2 runs if even one
