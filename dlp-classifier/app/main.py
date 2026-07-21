@@ -9,7 +9,7 @@ from pathlib import Path
 import redis.asyncio as aioredis
 from fastapi import FastAPI
 
-from app.routers import classify
+from app.routes import classify
 from app.service.deterministic.runner import DeterministicRunner
 from app.service.llm.classifier import KimiClassifier
 from app.service.pipeline import ClassificationPipeline
