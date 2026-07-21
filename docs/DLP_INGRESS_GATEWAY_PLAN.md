@@ -388,6 +388,7 @@ sequenceDiagram
     participant Store as MIME and metadata storage
     participant Events as Event queue
     participant Backend as backend/dlp workers
+    participant Classifier as dlp-classifier
     participant Commands as Command queue
     participant Relay as Relay dispatcher
     participant Return as Provider return relay
@@ -404,6 +405,9 @@ sequenceDiagram
     Store-->>Capture: Application storage committed
     Capture->>Events: Publish capture event
     Events->>Backend: Consume capture event
+    Backend->>Backend: Extract inspectable text/parts
+    Backend->>Classifier: Classify request
+    Classifier-->>Backend: Findings only
     Backend->>Commands: Publish allow command
     Commands->>Relay: Consume allow command
     Relay->>Return: Submit egress copy and original envelope
@@ -422,6 +426,7 @@ sequenceDiagram
     participant Capture as Capture worker
     participant Store as MIME and metadata storage
     participant Backend as backend/dlp workers
+    participant Classifier as dlp-classifier
     participant Hold as Held message state
     participant Events as Event queue
     participant Notify as Notification service
@@ -442,7 +447,10 @@ sequenceDiagram
     Store-->>Capture: Application storage committed
     Capture->>Events: Publish capture event
     Events->>Backend: Consume capture event
-    Backend->>Hold: Persist held state
+    Backend->>Backend: Extract inspectable text/parts
+    Backend->>Classifier: Classify request
+    Classifier-->>Backend: Findings only
+    Backend->>Hold: Persist held state from policy
     Hold->>Events: Emit message-held event
     Events->>Notify: Consume notification event
     Notify-->>Reviewer: Hold notification
@@ -1200,7 +1208,7 @@ If DLP forces a Postgres HA upgrade that Himaya would not otherwise need, attrib
 | Component | Planning range/month | Notes |
 | --- | ---: | --- |
 | Two stateful SMTP edges with Managed Disks | US$150–400 | VM Scale Set, AKS node pool, or dedicated VMs; size for concurrent SMTP and spool capacity |
-| Decision/relay/capture workers | US$75–250 | Gateway capture/relay workers plus separate backend classify/evaluate workers; exclude LLM classifier cost |
+| Decision/relay/capture workers | US$75–250 | Gateway capture/relay workers plus backend extract/evaluate workers and separate `dlp-classifier` compute; exclude LLM classifier cost |
 | PostgreSQL metadata store | US$0–650 | Prefer shared Himaya Flexible Server; range is DLP-driven size-up or HA delta only |
 | Standard Load Balancer and static IPs | US$25–90 | TCP SMTP ingress; charges include rules and processed data |
 | Service Bus, Key Vault, DNS, certificates | US$20–100 | Usually low at initial volume but depends on operations and certificate count |

@@ -108,8 +108,8 @@ flowchart TB
 
 | Resource | Share with Himaya backend? | Isolation rule |
 | --- | --- | --- |
-| PostgreSQL | Yes — same instance | New `dlp_*` tables/schema; gateway and classifier do not query DB during SMTP acceptance |
-| Blob Storage | Yes — same account | Dedicated DLP MIME container/prefix; classifier may read extracted text or MIME via backend |
+| PostgreSQL | Yes — same instance | New `dlp_*` tables/schema; gateway does not query DB during SMTP acceptance |
+| Blob Storage | Yes — same account | Dedicated DLP MIME container/prefix; backend reads MIME and sends text/parts to the classifier |
 | Service Bus | Yes — same namespace | Dedicated DLP capture/command queues or topics |
 | Key Vault | Yes — same vault | Separate secrets for gateway certs, config signing keys, and classifier credentials |
 | Redis | Optional | Share only if useful for locks/cache; not required on SMTP hot path |
@@ -236,7 +236,7 @@ It must not:
 - Publish gateway allow/stop commands.
 - Own review-queue or Enable DLP state.
 
-They communicate only through durable commands, events, and signed configuration snapshots. The SMTP edge must never call FastAPI synchronously during mail acceptance.
+Gateway and backend communicate through durable commands, events, and signed configuration snapshots. Backend and classifier communicate through a versioned findings request/response contract. The SMTP edge must never call FastAPI or the classifier synchronously during mail acceptance.
 
 ```mermaid
 flowchart TD
@@ -251,6 +251,8 @@ flowchart TD
     Gateway[dlp-gateway] --> MIME[(Blob MIME store)]
     Gateway --> Events[(Event Queue)]
     Events --> AppWorkers[backend/dlp workers]
+    AppWorkers -->|classify request| Classifier[dlp-classifier]
+    Classifier -->|findings| AppWorkers
     AppWorkers --> Decisions[(Message and Decision Store)]
     AppWorkers -->|allow or release command| Commands
     Commands --> Gateway
@@ -1322,7 +1324,7 @@ Engine status includes:
 - Queue depth.
 - Capture worker health.
 - Extraction engine health.
-- Detector versions.
+- `dlp-classifier` health and detector versions.
 - Policy evaluator version.
 - Provider return path status.
 - Configuration version drift.
@@ -1690,7 +1692,7 @@ Exit criteria:
 
 ## Recommended first engineering slice
 
-Do not begin with classifiers.
+Do not block the first gateway round-trip on a complete detector pack. Classifier work can proceed in parallel in `dlp-classifier/`, but the first production-risk slice should prove Microsoft accept → store → allow → return before full policy/classification enforcement.
 
 Build this vertical slice first:
 

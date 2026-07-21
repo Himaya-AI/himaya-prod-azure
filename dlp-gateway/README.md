@@ -4,7 +4,7 @@ SMTP data-plane service for outbound DLP.
 
 Receives mail from Microsoft 365 / Google Workspace, durably stores the original MIME, publishes capture events, and relays allowed or released messages back through the provider return path.
 
-Classification and policy live in `backend/dlp/` (separate service). This gateway does **not** classify content on the SMTP hot path.
+Classification lives in `dlp-classifier/`; policy and APIs live in `backend/dlp/`. This gateway does **not** classify content on the SMTP hot path.
 
 ## Design references
 
