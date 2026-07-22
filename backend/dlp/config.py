@@ -28,12 +28,16 @@ class DlpSettings(BaseSettings):
     classifier_connect_timeout_seconds: float = 5.0
     classifier_read_timeout_seconds: float = 45.0
 
+    message_bus: Literal["filesystem", "service_bus"] = "filesystem"
+    service_bus_connection_string: str = ""
+    service_bus_fully_qualified_namespace: str = ""
     capture_queue_name: str = "dlp-capture"
     command_queue_name: str = "dlp-commands"
     local_queue_dir: Path = Path("/var/dlp/queues")
     local_queue_reclaim_seconds: int = 300
 
     azure_storage_connection_string: str = ""
+    azure_storage_account: str = ""
     mime_blob_container: str = "dlp-mime"
     max_mime_bytes: int = 25 * 1024 * 1024
     max_classifier_text_bytes: int = 2 * 1024 * 1024

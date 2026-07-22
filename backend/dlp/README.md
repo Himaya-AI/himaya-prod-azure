@@ -48,6 +48,18 @@ python -m backend.dlp.migrate
 Run this as a one-shot deployment task before starting updated API and worker
 tasks. Do not run migrations independently in every API replica.
 
+## Adapters
+
+- Local: `FilesystemDlpMessageBus` uses the gateway's durable queue directory.
+- Azure: `AzureServiceBusDlpMessageBus` uses dedicated capture and command
+  queues.
+- MIME: `AzureBlobMimeStore` validates the configured host/container, enforces
+  the byte limit while streaming, and checks SHA-256 before returning content.
+
+Production should use managed identity with `DLP_SERVICE_BUS_FULLY_QUALIFIED_NAMESPACE`
+and `DLP_AZURE_STORAGE_ACCOUNT`; connection strings are for local development
+or controlled migration only.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.
