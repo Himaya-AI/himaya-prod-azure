@@ -86,6 +86,21 @@ IDs, non-sensitive finding references, intended action, effective action, and
 explanation. Fatal extraction gaps and detector errors produce a system hold.
 Monitor mode records what would happen while effectively allowing delivery.
 
+## Worker
+
+After migrations, run the data-processing worker separately from FastAPI:
+
+```bash
+python -m backend.dlp.workers.main
+```
+
+The worker consumes capture events idempotently, verifies and extracts MIME,
+calls the classifier, evaluates policy, and commits the decision plus gateway
+command in one database transaction. A separate loop publishes outbox rows.
+If publication succeeds but the database update fails, the same deterministic
+command ID is retried and the gateway safely deduplicates it. A hold creates no
+delivery command, so the gateway keeps the message captured.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.

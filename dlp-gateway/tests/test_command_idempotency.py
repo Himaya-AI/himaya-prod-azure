@@ -10,6 +10,7 @@ import pytest
 from app.commands.processor import (
     CommandProcessingStatus,
     CommandProcessor,
+    CommandNotReadyError,
     CommandRejectedError,
 )
 from app.domain.models import (
@@ -114,6 +115,39 @@ def test_expected_state_is_enforced(tmp_path: Path) -> None:
                 message_id=record.message_id,
                 org_id=record.org_id,
                 expected_state=MessageState.HELD,
+            )
+        )
+
+
+def test_accepted_message_is_retryable_during_capture_race(
+    tmp_path: Path,
+) -> None:
+    spool = FilesystemSpoolStore(tmp_path / "spool")
+    mime = b"From: alice@example.test\r\n\r\nhello\r\n"
+    record = SpoolRecord(
+        org_id=str(uuid4()),
+        provider="local",
+        provider_deployment_id=str(uuid4()),
+        session_id="session",
+        envelope_from="alice@example.test",
+        envelope_to=["bob@external.test"],
+        mime_sha256=sha256_hex(mime),
+        mime_size=len(mime),
+        spool_mime_path="",
+        metadata_path="",
+    )
+    spool.commit(record, mime)
+    processor = CommandProcessor(
+        spool, _AcceptingRelay(spool)  # type: ignore[arg-type]
+    )
+
+    with pytest.raises(CommandNotReadyError):
+        processor.process(
+            GatewayCommand(
+                command_type=CommandType.ALLOW,
+                message_id=record.message_id,
+                org_id=record.org_id,
+                expected_state=MessageState.CAPTURED,
             )
         )
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from app.commands.processor import (
     CommandProcessor,
     CommandRejectedError,
+    UnknownMessageError,
 )
 from app.events.bus import FilesystemEventBus
 from app.logging_setup import get_logger
@@ -21,6 +22,14 @@ class CommandConsumer:
             try:
                 self.processor.process(command)
                 self.bus.ack_command(command)
+            except UnknownMessageError as exc:
+                log.info(
+                    "command.not_ready",
+                    command_id=str(command.command_id),
+                    message_id=str(command.message_id),
+                    reason=str(exc),
+                )
+                self.bus.retry_command(command)
             except CommandRejectedError as exc:
                 log.warning(
                     "command.rejected",

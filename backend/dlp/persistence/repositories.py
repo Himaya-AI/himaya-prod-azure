@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
@@ -173,9 +173,17 @@ class CommandOutboxRepository:
         await self._session.flush()
 
     async def mark_failed(
-        self, row: DlpCommandOutbox, error: str
+        self,
+        row: DlpCommandOutbox,
+        error: str,
+        retry_delay_seconds: float = 1.0,
+        terminal: bool = False,
     ) -> None:
         row.attempts += 1
         row.last_error = error[:4000]
+        row.status = "failed" if terminal else "pending"
+        row.available_at = _utcnow() + timedelta(
+            seconds=retry_delay_seconds
+        )
         row.updated_at = _utcnow()
         await self._session.flush()

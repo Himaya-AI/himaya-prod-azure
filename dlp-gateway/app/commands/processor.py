@@ -24,6 +24,10 @@ class UnknownMessageError(LookupError):
     """Message is not available yet; caller may retry later."""
 
 
+class CommandNotReadyError(UnknownMessageError):
+    """Message exists but has not reached the expected state yet."""
+
+
 class CommandProcessor:
     def __init__(self, spool: FilesystemSpoolStore, relay: RelayDispatcher) -> None:
         self.spool = spool
@@ -50,6 +54,14 @@ class CommandProcessor:
             command.expected_state is not None
             and record.state != command.expected_state
         ):
+            if (
+                record.state == MessageState.ACCEPTED_IN_SPOOL
+                and command.expected_state == MessageState.CAPTURED
+            ):
+                raise CommandNotReadyError(
+                    "Capture event is committed but spool transition "
+                    "is still in progress"
+                )
             raise CommandRejectedError(
                 f"Expected {command.expected_state.value}, "
                 f"found {record.state.value}"

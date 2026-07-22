@@ -53,6 +53,13 @@ class FilesystemEventBus:
     def ack_command(self, command: GatewayCommand) -> None:
         self._ack("commands", str(command.command_id))
 
+    def retry_command(self, command: GatewayCommand) -> None:
+        self._settle(
+            "commands",
+            str(command.command_id),
+            destination="ready",
+        )
+
     def dead_letter_command(
         self, command: GatewayCommand, reason: str
     ) -> None:
