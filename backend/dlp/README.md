@@ -60,6 +60,14 @@ Production should use managed identity with `DLP_SERVICE_BUS_FULLY_QUALIFIED_NAM
 and `DLP_AZURE_STORAGE_ACCOUNT`; connection strings are for local development
 or controlled migration only.
 
+## MIME extraction
+
+`SafeMimeExtractor` bounds MIME size, part count, per-part bytes, archive
+expansion, extracted text, attachment memory, and attachment runtime. PDF,
+Office, and RTF extraction runs in a child process. Unsupported, malformed,
+encrypted, truncated, timed-out, and failed extraction is returned as a
+structured limitation so policy can hold rather than silently allow.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.
