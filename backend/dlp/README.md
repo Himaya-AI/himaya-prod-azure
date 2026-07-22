@@ -68,6 +68,14 @@ Office, and RTF extraction runs in a child process. Unsupported, malformed,
 encrypted, truncated, timed-out, and failed extraction is returned as a
 structured limitation so policy can hold rather than silently allow.
 
+## Classifier boundary
+
+`ClassifierClient` is the only code that calls `POST /classify`. It validates
+the exact v1 response, flattens detector matches into service-independent
+findings, retries only transient failures, and opens a circuit breaker after
+repeated outages. Timeout, transport, and contract failures remain distinct
+from a valid no-findings response.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.

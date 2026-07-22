@@ -27,6 +27,9 @@ class DlpSettings(BaseSettings):
     classifier_service_url: str = "http://127.0.0.1:8002"
     classifier_connect_timeout_seconds: float = 5.0
     classifier_read_timeout_seconds: float = 45.0
+    classifier_max_attempts: int = 3
+    classifier_circuit_failure_threshold: int = 5
+    classifier_circuit_recovery_seconds: float = 30.0
 
     message_bus: Literal["filesystem", "service_bus"] = "filesystem"
     service_bus_connection_string: str = ""
