@@ -49,7 +49,7 @@ class PIIDetector(BaseDetector):
     def name(self) -> str:
         return "pii"
 
-    def analyze(self, text: str, metadata: dict[str, Any]) -> DetectionResult:
+    async def analyze(self, text: str, metadata: dict[str, Any]) -> DetectionResult:
         try:
             results = self._engine.analyze(
                 text=text, entities=_SUPPORTED_ENTITIES, language="en"

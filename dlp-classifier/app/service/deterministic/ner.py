@@ -43,7 +43,7 @@ class NERDetector(BaseDetector):
     def name(self) -> str:
         return "ner"
 
-    def analyze(self, text: str, metadata: dict[str, Any]) -> DetectionResult:
+    async def analyze(self, text: str, metadata: dict[str, Any]) -> DetectionResult:
         try:
             results = self._engine.analyze(
                 text=text, entities=ENTITIES_NER, language="en"
