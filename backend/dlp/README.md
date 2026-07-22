@@ -76,6 +76,16 @@ findings, retries only transient failures, and opens a circuit breaker after
 repeated outages. Timeout, transport, and contract failures remain distinct
 from a valid no-findings response.
 
+## Policy evaluation
+
+Policy is deterministic and separate from classification. Rules match typed
+entity findings, confidence, detector, LLM outcome, recipient scope, and
+tenant domains. `STOP` outranks `HOLD`, which outranks `ALLOW`; priority breaks
+ties. Every decision records the immutable policy version, all matching rule
+IDs, non-sensitive finding references, intended action, effective action, and
+explanation. Fatal extraction gaps and detector errors produce a system hold.
+Monitor mode records what would happen while effectively allowing delivery.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.
