@@ -101,6 +101,23 @@ If publication succeeds but the database update fails, the same deterministic
 command ID is retried and the gateway safely deduplicates it. A hold creates no
 delivery command, so the gateway keeps the message captured.
 
+## Local end-to-end stack
+
+The unified stack uses Postgres, Azurite, MailHog, the gateway, the backend
+worker, and a contract-faithful classifier stub. No cloud credentials are
+required.
+
+```bash
+docker compose -f docker-compose.dlp.yml up --build -d
+$env:DLP_E2E="1"  # PowerShell
+python -m pytest backend/tests/integration/test_dlp_local_e2e.py -q
+docker compose -f docker-compose.dlp.yml down -v
+```
+
+The test proves both paths: a clean external email is relayed to MailHog, while
+a high-confidence credit-card finding creates a stop decision and is not
+relayed. The classifier stub exists only for local contract testing.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.

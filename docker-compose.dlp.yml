@@ -1,0 +1,135 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: himaya
+      POSTGRES_USER: himaya
+      POSTGRES_PASSWORD: himaya-local
+    ports:
+      - "55432:5432"
+    volumes:
+      - dlp_postgres:/var/lib/postgresql/data
+      - ./backend/dlp/testing/init_local.sql:/docker-entrypoint-initdb.d/01-dlp-local.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U himaya -d himaya"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.33.0
+    command:
+      - azurite-blob
+      - --blobHost
+      - 0.0.0.0
+      - --blobPort
+      - "10000"
+      - --location
+      - /data
+      - --skipApiVersionCheck
+    volumes:
+      - dlp_azurite:/data
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - "18025:8025"
+
+  gateway:
+    build:
+      context: ./dlp-gateway
+    environment:
+      DLP_ENV: local
+      SMTP_HOST: 0.0.0.0
+      SMTP_PORT: 2525
+      HEALTH_HOST: 0.0.0.0
+      HEALTH_PORT: 8080
+      SPOOL_DIR: /var/dlp/spool
+      DATA_DIR: /var/dlp/data
+      QUEUE_DIR: /var/dlp/queues
+      FORCE_ALLOW: "false"
+      TENANT_CONFIG_PATH: /app/conf/tenants/local-tenant.json
+      AZURE_STORAGE_CONNECTION_STRING: "${DLP_AZURITE_CONNECTION_STRING:-DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;}"
+      BLOB_CONTAINER: dlp-mime
+      RELAY_HOST: mailhog
+      RELAY_PORT: 1025
+      RELAY_USE_TLS: "false"
+    ports:
+      - "2526:2525"
+      - "18080:8080"
+    volumes:
+      - dlp_spool:/var/dlp/spool
+      - dlp_gateway_data:/var/dlp/data
+      - dlp_queues:/var/dlp/queues
+    depends_on:
+      azurite:
+        condition: service_started
+      mailhog:
+        condition: service_started
+
+  dlp-migrate:
+    image: himaya-dlp-backend-local
+    build:
+      context: .
+    command: ["python", "-m", "backend.dlp.migrate"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://himaya:himaya-local@postgres:5432/himaya
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  classifier-stub:
+    image: himaya-dlp-backend-local
+    command:
+      - uvicorn
+      - backend.dlp.testing.classifier_stub:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+    ports:
+      - "18002:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    depends_on:
+      dlp-migrate:
+        condition: service_completed_successfully
+
+  dlp-worker:
+    image: himaya-dlp-backend-local
+    command: ["python", "-m", "backend.dlp.workers.main"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://himaya:himaya-local@postgres:5432/himaya
+      DLP_GATEWAY_PIPELINE_ENABLED: "true"
+      DLP_TENANT_MODE: enforce
+      DLP_MESSAGE_BUS: filesystem
+      DLP_LOCAL_QUEUE_DIR: /var/dlp/queues
+      DLP_LOCAL_QUEUE_RECLAIM_SECONDS: 30
+      DLP_CLASSIFIER_SERVICE_URL: http://classifier-stub:8000
+      DLP_AZURE_STORAGE_CONNECTION_STRING: "${DLP_AZURITE_CONNECTION_STRING:-DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;}"
+      DLP_MIME_BLOB_CONTAINER: dlp-mime
+    volumes:
+      - dlp_queues:/var/dlp/queues
+    depends_on:
+      dlp-migrate:
+        condition: service_completed_successfully
+      classifier-stub:
+        condition: service_healthy
+      azurite:
+        condition: service_started
+      gateway:
+        condition: service_started
+
+volumes:
+  dlp_postgres:
+  dlp_azurite:
+  dlp_spool:
+  dlp_gateway_data:
+  dlp_queues:
