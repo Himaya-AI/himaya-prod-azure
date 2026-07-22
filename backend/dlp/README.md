@@ -36,6 +36,18 @@ Contracts in `contracts/` mirror the currently deployed service payloads:
 
 Schema changes must be versioned and covered by cross-service contract tests.
 
+## Database migrations
+
+DLP v2 uses its own Alembic version table and never creates tables during API
+startup.
+
+```bash
+python -m backend.dlp.migrate
+```
+
+Run this as a one-shot deployment task before starting updated API and worker
+tasks. Do not run migrations independently in every API replica.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.
