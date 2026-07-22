@@ -11,15 +11,27 @@ from backend.dlp.policy.evaluator import (
     PolicySet,
     RuleConditions,
 )
+from backend.dlp.policy.serialization import (
+    PolicyDocument,
+    PolicyRuleDocument,
+    RuleConditionsDocument,
+    policy_from_document,
+    policy_to_document,
+)
 
 __all__ = [
     "FindingReference",
     "MessageContext",
     "PolicyAction",
     "PolicyDecision",
+    "PolicyDocument",
     "PolicyEvaluator",
     "PolicyRule",
+    "PolicyRuleDocument",
     "PolicySet",
     "RuleConditions",
+    "RuleConditionsDocument",
     "build_default_policy",
+    "policy_from_document",
+    "policy_to_document",
 ]

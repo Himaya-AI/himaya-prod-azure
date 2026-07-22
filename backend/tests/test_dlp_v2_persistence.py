@@ -12,6 +12,9 @@ from backend.dlp.persistence.models import (
     DlpMessage,
     DlpMessageEvent,
     DlpMessagePart,
+    DlpPolicyVersion,
+    DlpReviewAction,
+    DlpTenantConfig,
 )
 from backend.dlp.persistence.repositories import CommandOutboxRepository
 
@@ -24,6 +27,9 @@ def test_v2_models_use_only_new_table_names() -> None:
         DlpDecision.__tablename__,
         DlpMessageEvent.__tablename__,
         DlpCommandOutbox.__tablename__,
+        DlpPolicyVersion.__tablename__,
+        DlpTenantConfig.__tablename__,
+        DlpReviewAction.__tablename__,
     }
 
     assert tables == {
@@ -33,6 +39,9 @@ def test_v2_models_use_only_new_table_names() -> None:
         "dlp_decisions",
         "dlp_message_events",
         "dlp_command_outbox",
+        "dlp_policy_versions",
+        "dlp_tenant_configs",
+        "dlp_review_actions",
     }
     assert tables.isdisjoint({"dlp_policies", "dlp_events", "dlp_queue"})
 

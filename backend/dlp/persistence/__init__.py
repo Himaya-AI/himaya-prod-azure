@@ -7,6 +7,9 @@ from backend.dlp.persistence.models import (
     DlpMessage,
     DlpMessageEvent,
     DlpMessagePart,
+    DlpPolicyVersion,
+    DlpReviewAction,
+    DlpTenantConfig,
 )
 
 __all__ = [
@@ -16,4 +19,7 @@ __all__ = [
     "DlpMessage",
     "DlpMessageEvent",
     "DlpMessagePart",
+    "DlpPolicyVersion",
+    "DlpReviewAction",
+    "DlpTenantConfig",
 ]

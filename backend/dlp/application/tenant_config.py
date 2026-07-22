@@ -10,7 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dlp.config import DlpSettings
 from backend.dlp.domain import TenantMode
-from backend.dlp.policy import PolicySet, build_default_policy
+from backend.dlp.persistence.models import (
+    DlpPolicyVersion,
+    DlpTenantConfig,
+)
+from backend.dlp.policy import (
+    PolicySet,
+    build_default_policy,
+    policy_from_document,
+)
 from backend.models.db_models import Organization
 
 
@@ -33,39 +41,52 @@ class DatabaseTenantConfigProvider:
         self, session: AsyncSession, org_id: UUID
     ) -> TenantRuntimeConfig:
         result = await session.execute(
-            select(
-                Organization.domain,
-                Organization.org_metadata,
-            ).where(Organization.id == org_id)
+            select(Organization.domain).where(
+                Organization.id == org_id
+            )
         )
-        row = result.one_or_none()
-        if row is None:
+        domain = result.scalar_one_or_none()
+        if domain is None:
             raise LookupError(f"Organization not found: {org_id}")
 
-        metadata = row.org_metadata or {}
-        dlp_metadata = metadata.get("dlp_v2") or {}
-        domains = {
-            str(row.domain).lower().rstrip(".")
-        } if row.domain else set()
-        domains.update(
-            str(domain).lower().rstrip(".")
-            for domain in dlp_metadata.get("domains", [])
-            if domain
-        )
-        mode_value = dlp_metadata.get(
-            "mode", self.defaults.tenant_mode
-        )
-        return TenantRuntimeConfig(
-            enabled=bool(
-                dlp_metadata.get(
-                    "enabled",
-                    self.defaults.gateway_pipeline_enabled,
+        config = await session.get(DlpTenantConfig, org_id)
+        domains = {str(domain).lower().rstrip(".")}
+        if config is not None:
+            domains.update(
+                str(value).lower().rstrip(".")
+                for value in config.domains
+                if value
+            )
+        policy = build_default_policy()
+        if config is not None and config.active_policy_version_id:
+            version = await session.get(
+                DlpPolicyVersion,
+                config.active_policy_version_id,
+            )
+            if version is None or version.status != "published":
+                raise RuntimeError(
+                    "Active DLP policy version is unavailable"
                 )
+            policy = policy_from_document(
+                version.policy_document,
+                version=f"tenant-v{version.version}",
+            )
+        return TenantRuntimeConfig(
+            enabled=(
+                config.enabled
+                if config is not None
+                else self.defaults.gateway_pipeline_enabled
             ),
-            mode=TenantMode(mode_value),
+            mode=TenantMode(
+                config.mode
+                if config is not None
+                else self.defaults.tenant_mode
+            ),
             domains=frozenset(domains),
-            lexicon_version=str(
-                dlp_metadata.get("lexicon_version", "v1")
+            lexicon_version=(
+                config.lexicon_version
+                if config is not None
+                else "v1"
             ),
-            policy=build_default_policy(),
+            policy=policy,
         )

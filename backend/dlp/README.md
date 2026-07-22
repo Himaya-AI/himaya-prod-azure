@@ -118,6 +118,21 @@ The test proves both paths: a clean external email is relayed to MailHog, while
 a high-confidence credit-card finding creates a stop decision and is not
 relayed. The classifier stub exists only for local contract testing.
 
+## Control-plane API
+
+All routes are authenticated and tenant-scoped under `/api/dlp/v2`:
+
+- `GET /status`
+- `GET|PUT /settings`
+- `GET /policy`, `GET|PUT /policy/draft`, `POST /policy/publish`
+- `GET /messages`, `GET /messages/{message_id}`
+- `POST /messages/{message_id}/release`
+- `POST /messages/{message_id}/stop`
+
+Settings, policy mutations, release, and stop require an administrator role.
+Published policies are immutable. Review actions require an idempotency key
+and atomically create an audit record plus outbox command.
+
 ## Safety rules
 
 1. Never read or write legacy DLP tables.
