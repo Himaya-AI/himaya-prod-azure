@@ -1,0 +1,1 @@
+"""Immutable MIME storage adapters."""

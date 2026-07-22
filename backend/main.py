@@ -41,6 +41,7 @@ from backend.routers.phish_report import router as phish_report_router
 from backend.routers.posture import router as posture_router
 from backend.routers.dlp import router as dlp_router, ensure_dlp_tables
 from backend.routers.dlp_webhook import router as dlp_webhook_router
+from backend.dlp.api import router as dlp_v2_router
 from backend.routers.drafts import router as drafts_router, ensure_draft_tables
 from backend.routers.spam import router as spam_router, ensure_spam_tables
 from backend.routers.saas_security import router as saas_security_router
@@ -2199,6 +2200,7 @@ app.include_router(phish_report_router)
 app.include_router(posture_router)
 app.include_router(dlp_router)
 app.include_router(dlp_webhook_router)
+app.include_router(dlp_v2_router)
 app.include_router(drafts_router)
 app.include_router(spam_router)
 app.include_router(saas_security_router)
