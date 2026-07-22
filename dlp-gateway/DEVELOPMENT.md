@@ -101,11 +101,33 @@ Capture order corrected to: blob → annotate accepted metadata → publish even
 
 ---
 
+## Step 7 — Idempotent commands and queue recovery ✅
+
+**Goal:** Prevent duplicate/stale backend commands from relaying mail twice or
+overriding a terminal stop.
+
+**Delivered:**
+
+- Durable `processed_command_ids` in spool metadata
+- `expected_state` and tenant ownership checks
+- Terminal guards for stopped/provider-accepted messages
+- Command dead-lettering for permanent rejection
+- Configurable recovery of stale filesystem queue messages
+- Tests for duplicate allow, stop-then-allow, stale state, and recovery
+
+**Verify:**
+
+```bash
+cd dlp-gateway
+python -m pytest -q
+```
+
+---
+
 ## Upcoming
 
 | Step | Goal |
 | --- | --- |
-| 7 | Stronger hold/stop/release state tests |
-| 8 | Spool recovery on startup |
+| 8 | Broader spool/reconciliation recovery |
 | 9 | Broader integration tests in CI |
 | 10 | Staging M365 adapter (not local) |

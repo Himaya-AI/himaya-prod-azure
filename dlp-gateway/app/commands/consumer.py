@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from app.commands.processor import CommandProcessor
+from app.commands.processor import (
+    CommandProcessor,
+    CommandRejectedError,
+)
 from app.events.bus import FilesystemEventBus
 from app.logging_setup import get_logger
 
@@ -18,6 +21,14 @@ class CommandConsumer:
             try:
                 self.processor.process(command)
                 self.bus.ack_command(command)
+            except CommandRejectedError as exc:
+                log.warning(
+                    "command.rejected",
+                    command_id=str(command.command_id),
+                    message_id=str(command.message_id),
+                    reason=str(exc),
+                )
+                self.bus.dead_letter_command(command, str(exc))
             except Exception:
                 log.exception(
                     "command.failed",

@@ -50,6 +50,11 @@ class SpoolRecord(BaseModel):
     peer: str | None = None
     spool_mime_path: str
     metadata_path: str
+    blob_uri: str | None = None
+    processed_command_ids: list[UUID] = Field(default_factory=list)
+    stop_reason: str | None = None
+    relay_smtp_code: int | None = None
+    relay_detail: str | None = None
 
 
 class CaptureEvent(BaseModel):

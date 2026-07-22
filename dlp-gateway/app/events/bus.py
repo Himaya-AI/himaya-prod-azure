@@ -21,9 +21,11 @@ class FilesystemEventBus:
             "captures/ready",
             "captures/processing",
             "captures/done",
+            "captures/dead",
             "commands/ready",
             "commands/processing",
             "commands/done",
+            "commands/dead",
         ):
             (self.root / name).mkdir(parents=True, exist_ok=True)
 
@@ -51,6 +53,34 @@ class FilesystemEventBus:
     def ack_command(self, command: GatewayCommand) -> None:
         self._ack("commands", str(command.command_id))
 
+    def dead_letter_command(
+        self, command: GatewayCommand, reason: str
+    ) -> None:
+        self._settle(
+            "commands",
+            str(command.command_id),
+            destination="dead",
+            reason=reason,
+        )
+
+    def recover_stale(
+        self, kind: str, stale_after_seconds: int
+    ) -> int:
+        if kind not in {"captures", "commands"}:
+            raise ValueError(f"Unsupported queue kind: {kind}")
+        now = time.time()
+        recovered = 0
+        processing = self.root / kind / "processing"
+        ready = self.root / kind / "ready"
+        for path in processing.glob("*.json"):
+            if now - path.stat().st_mtime < stale_after_seconds:
+                continue
+            os.replace(path, ready / path.name)
+            recovered += 1
+        if recovered:
+            log.warning("bus.recovered_stale", kind=kind, count=recovered)
+        return recovered
+
     def _enqueue(self, kind: str, payload: dict) -> None:
         name = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
         tmp = self.root / kind / "ready" / f".{name}"
@@ -77,10 +107,35 @@ class FilesystemEventBus:
         return items
 
     def _ack(self, kind: str, token: str) -> None:
+        self._settle(kind, token, destination="done")
+
+    def _settle(
+        self,
+        kind: str,
+        token: str,
+        destination: str,
+        reason: str | None = None,
+    ) -> None:
         processing = self.root / kind / "processing"
-        done = self.root / kind / "done"
+        target = self.root / kind / destination
         for path in processing.glob("*.json"):
             text = path.read_text(encoding="utf-8")
             if token in text:
-                os.replace(path, done / path.name)
+                if reason is not None:
+                    payload = json.loads(text)
+                    payload["_dead_letter_reason"] = reason
+                    self._write_fsynced(
+                        path,
+                        json.dumps(
+                            payload, indent=2, default=str
+                        ).encode("utf-8"),
+                    )
+                os.replace(path, target / path.name)
                 return
+
+    @staticmethod
+    def _write_fsynced(path: Path, data: bytes) -> None:
+        with open(path, "wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())

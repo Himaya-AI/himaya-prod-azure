@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     spool_dir: Path = Path("/var/dlp/spool")
     data_dir: Path = Path("/var/dlp/data")
     queue_dir: Path = Path("/var/dlp/queues")
+    queue_reclaim_seconds: int = 300
     tenant_config_path: Path = Path("/app/conf/tenants/local-tenant.json")
 
     force_allow: bool = True

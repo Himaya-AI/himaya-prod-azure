@@ -53,7 +53,12 @@ def build_app():
     )
     relay = RelayDispatcher(spool, relay_adapter)
     commands = CommandConsumer(bus, CommandProcessor(spool, relay))
-    workers = WorkerSupervisor(capture, auto_allow, commands)
+    workers = WorkerSupervisor(
+        capture,
+        auto_allow,
+        commands,
+        reclaim_after_sec=settings.queue_reclaim_seconds,
+    )
 
     handler = DlpSMTPHandler(settings, spool, resolver, trust)
     smtp = SmtpEdge(handler, settings)

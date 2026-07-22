@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from uuid import UUID
 
 from app.domain.models import MessageState, SpoolRecord
 from app.logging_setup import get_logger
@@ -73,18 +74,10 @@ class FilesystemSpoolStore:
 
     def mark_captured(self, message_id: str, blob_uri: str) -> SpoolRecord:
         record = self._move_bucket(message_id, "accepted", "captured")
-        extra = record.model_dump()
-        extra["state"] = MessageState.CAPTURED
-        extra["blob_uri"] = blob_uri
-        updated = SpoolRecord.model_validate(
-            {k: v for k, v in extra.items() if k in SpoolRecord.model_fields}
-        )
-        # Persist extended fields beside core record
-        path = Path(updated.metadata_path)
-        payload = updated.model_dump(mode="json")
-        payload["blob_uri"] = blob_uri
-        self._write_fsynced(path, json.dumps(payload, indent=2, default=str).encode("utf-8"))
-        return updated
+        record.state = MessageState.CAPTURED
+        record.blob_uri = blob_uri
+        self._persist_record(record)
+        return record
 
     def get(self, message_id: str) -> SpoolRecord | None:
         for bucket in ("accepted", "captured", "held", "stopped", "done", "failed"):
@@ -116,15 +109,23 @@ class FilesystemSpoolStore:
         if current_bucket != bucket:
             record = self._move_bucket(message_id, current_bucket, bucket)
 
-        payload = record.model_dump(mode="json")
-        payload["state"] = state
-        payload.update(extra)
-        path = Path(record.metadata_path)
-        if path.parent.name != bucket:
-            path = self.root / bucket / f"{message_id}.json"
-        self._write_fsynced(path, json.dumps(payload, indent=2, default=str).encode("utf-8"))
         record.state = MessageState(state)
-        record.metadata_path = str(path)
+        for key, value in extra.items():
+            if key in SpoolRecord.model_fields:
+                setattr(record, key, value)
+        self._persist_record(record)
+        return record
+
+    def record_command_processed(
+        self, message_id: str, command_id: str
+    ) -> SpoolRecord:
+        record = self.get(message_id)
+        if record is None:
+            raise KeyError(message_id)
+        parsed_id = UUID(command_id)
+        if parsed_id not in record.processed_command_ids:
+            record.processed_command_ids.append(parsed_id)
+            self._persist_record(record)
         return record
 
     def _move_bucket(self, message_id: str, src: str, dst: str) -> SpoolRecord:
@@ -145,9 +146,15 @@ class FilesystemSpoolStore:
         )
         return record
 
+    def _persist_record(self, record: SpoolRecord) -> None:
+        self._write_fsynced(
+            Path(record.metadata_path),
+            record.model_dump_json(indent=2).encode("utf-8"),
+        )
+
     def _load_meta(self, path: Path) -> SpoolRecord:
         data = json.loads(path.read_text(encoding="utf-8"))
-        # Ignore non-model extras such as blob_uri when validating
+        # Ignore forward-compatible fields from newer gateway versions.
         filtered = {k: v for k, v in data.items() if k in SpoolRecord.model_fields}
         record = SpoolRecord.model_validate(filtered)
         record.metadata_path = str(path)

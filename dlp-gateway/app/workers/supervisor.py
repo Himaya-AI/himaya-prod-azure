@@ -17,10 +17,17 @@ class WorkerSupervisor:
     auto_allow: AutoAllowWorker
     commands: CommandConsumer
     poll_interval_sec: float = 1.0
+    reclaim_after_sec: int = 300
     _stop: threading.Event = field(default_factory=threading.Event)
     _thread: threading.Thread | None = field(default=None, init=False, repr=False)
 
     def start(self) -> None:
+        self.auto_allow.bus.recover_stale(
+            "captures", self.reclaim_after_sec
+        )
+        self.commands.bus.recover_stale(
+            "commands", self.reclaim_after_sec
+        )
         self._thread = threading.Thread(target=self._loop, name="dlp-workers", daemon=True)
         self._thread.start()
         log.info("workers.started")
