@@ -551,6 +551,27 @@ async def lifespan(app: FastAPI):
                     org_id UUID PRIMARY KEY,
                     last_scanned_at TIMESTAMPTZ DEFAULT NOW()
                 )""",
+                # Exfil Monitor — continuous auto-forward + delegate detection.
+                # Mirrors backend/services/exfil_monitor.py::ensure_exfil_table.
+                """CREATE TABLE IF NOT EXISTS posture_exfil_events (
+                    id UUID PRIMARY KEY,
+                    org_id UUID NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    mailbox TEXT NOT NULL,
+                    target TEXT NOT NULL,
+                    is_external BOOLEAN DEFAULT FALSE,
+                    risk TEXT NOT NULL DEFAULT 'low',
+                    risk_reasons JSONB,
+                    detail JSONB,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    first_seen TIMESTAMPTZ DEFAULT NOW(),
+                    last_seen TIMESTAMPTZ DEFAULT NOW(),
+                    remediated_at TIMESTAMPTZ,
+                    note TEXT,
+                    UNIQUE (org_id, fingerprint)
+                )""",
             ]
             # Guard against blocking the whole DB: ADD COLUMN takes an
             # ACCESS EXCLUSIVE lock. If a long-running transaction holds the
@@ -809,6 +830,14 @@ async def lifespan(app: FastAPI):
         logger.info("Workspace sync loop started (5 min interval for cloud connectors)")
     except Exception as e:
         logger.warning(f"Workspace sync loop failed to start: {e}")
+
+    # Start Exfil Monitor loop — continuous auto-forwarding + delegate detection
+    try:
+        from backend.services.exfil_monitor import run_exfil_monitor_loop
+        asyncio.create_task(run_exfil_monitor_loop())
+        logger.info("Exfil monitor loop started (auto-forward + delegate detection)")
+    except Exception as e:
+        logger.warning(f"Exfil monitor loop failed to start: {e}")
 
     # Start Databricks background scanner (10 min interval)
     try:

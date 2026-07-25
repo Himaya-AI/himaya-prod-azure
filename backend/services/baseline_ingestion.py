@@ -492,9 +492,13 @@ def _extract_m365_recipients(msg: dict) -> list[str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _get_service_account_headers_sync(subject_email: str = None) -> dict | None:
+def _get_service_account_headers_sync(subject_email: str = None, scopes: list[str] | None = None) -> dict | None:
     """Build Authorization headers using the Google service account (domain-wide delegation).
     This function makes a synchronous blocking HTTP call — call it via asyncio.to_thread in async contexts.
+
+    Pass a custom ``scopes`` list to request additional DWD scopes (e.g.
+    ``gmail.settings.sharing`` for auto-forwarding/delegate remediation). When
+    omitted, the default read/quarantine scope set is used.
     """
     import base64, json as _json
     sa_b64 = os.getenv("GOOGLE_SERVICE_ACCOUNT_B64", "")
@@ -504,7 +508,7 @@ def _get_service_account_headers_sync(subject_email: str = None) -> dict | None:
         from google.oauth2 import service_account
         import google.auth.transport.requests as ga_requests
         sa_info = _json.loads(base64.b64decode(sa_b64).decode())
-        scopes = [
+        scopes = scopes or [
             "https://www.googleapis.com/auth/gmail.modify",           # quarantine (move out of inbox)
             "https://www.googleapis.com/auth/gmail.settings.basic",   # posture: read/write inbox filters
             "https://www.googleapis.com/auth/admin.directory.user.readonly",
@@ -521,15 +525,15 @@ def _get_service_account_headers_sync(subject_email: str = None) -> dict | None:
         return None
 
 
-def _get_service_account_headers(subject_email: str = None) -> dict | None:
+def _get_service_account_headers(subject_email: str = None, scopes: list[str] | None = None) -> dict | None:
     """Sync shim kept for backwards-compat; use _get_sa_headers_async in async code."""
-    return _get_service_account_headers_sync(subject_email)
+    return _get_service_account_headers_sync(subject_email, scopes)
 
 
-async def _get_sa_headers_async(subject_email: str = None) -> dict | None:
+async def _get_sa_headers_async(subject_email: str = None, scopes: list[str] | None = None) -> dict | None:
     """Async-safe wrapper: runs the blocking SA credential refresh in a thread pool."""
     import asyncio
-    return await asyncio.to_thread(_get_service_account_headers_sync, subject_email)
+    return await asyncio.to_thread(_get_service_account_headers_sync, subject_email, scopes)
 
 
 async def _ingest_google(

@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { Shield, AlertTriangle, CheckCircle2, RefreshCw, Trash2, ExternalLink, Info, ChevronDown, ChevronUp, Mail, Inbox, ArrowRight, XCircle, Eye, EyeOff, Forward, Zap } from 'lucide-react'
+import { Shield, AlertTriangle, CheckCircle2, RefreshCw, Trash2, ExternalLink, Info, ChevronDown, ChevronUp, Mail, Inbox, ArrowRight, XCircle, Eye, EyeOff, Forward, Zap, ShieldAlert, UserX, Clock } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/Table'
@@ -43,6 +43,23 @@ interface ForwardRule {
   risk: 'high' | 'medium' | 'low'
 }
 
+interface ExfilEvent {
+  id: string
+  kind: 'forward' | 'delegate'
+  provider: 'm365' | 'google'
+  mailbox: string
+  target: string
+  is_external: boolean
+  risk: 'high' | 'medium' | 'low'
+  risk_reasons: string[]
+  detail: Record<string, unknown>
+  status: 'active' | 'remediated' | 'dismissed' | 'auto_cleared'
+  first_seen?: string
+  last_seen?: string
+  remediated_at?: string
+  note?: string
+}
+
 interface PostureSummary {
   posture_score: number
   high_risk_apps: number
@@ -54,7 +71,7 @@ interface PostureSummary {
   last_scanned?: string
 }
 
-type Tab = 'apps' | 'rules' | 'forwards'
+type Tab = 'apps' | 'rules' | 'forwards' | 'exfil'
 
 const RISK_COLOR: Record<string, string> = {
   high: 'text-red-400',
@@ -355,6 +372,101 @@ function ForwardsTab({ forwards, loading }: { forwards: ForwardRule[]; loading: 
   )
 }
 
+// ── Exfil Monitor Tab ──────────────────────────────────────────────────────────
+function ExfilTab({ events, loading, onRemediate, onDismiss, busy }: {
+  events: ExfilEvent[]
+  loading: boolean
+  onRemediate: (e: ExfilEvent) => void
+  onDismiss: (e: ExfilEvent) => void
+  busy: string | null
+}) {
+  if (loading) return <LoadingSkeleton rows={4} cols={6} />
+
+  const active = events.filter(e => e.status === 'active')
+  const critical = active.filter(e => e.risk === 'high' && e.is_external)
+
+  const fmt = (s?: string) => (s ? new Date(s).toLocaleString() : '—')
+
+  return (
+    <div className="space-y-3">
+      {critical.length > 0 ? (
+        <div className="flex items-start gap-3 px-4 py-3 bg-red-500/[0.06] border border-red-500/20 rounded-xl text-[12px] text-red-300">
+          <ShieldAlert size={13} className="mt-0.5 flex-shrink-0" />
+          <span><strong>{critical.length} active external exfiltration path{critical.length !== 1 ? 's' : ''} detected.</strong> Auto-forwarding or delegate access to an external account is a classic attacker persistence mechanism — remediate immediately.</span>
+        </div>
+      ) : active.length === 0 && !loading ? (
+        <div className="flex items-start gap-3 px-4 py-3 bg-emerald-500/[0.06] border border-emerald-500/20 rounded-xl text-[12px] text-emerald-300">
+          <CheckCircle2 size={13} className="mt-0.5 flex-shrink-0" />
+          <span>No active auto-forwarding or delegate exfiltration paths detected. Monitored continuously.</span>
+        </div>
+      ) : (
+        <div className="flex items-start gap-3 px-4 py-3 bg-amber-500/[0.06] border border-amber-500/20 rounded-xl text-[12px] text-amber-300">
+          <AlertTriangle size={13} className="mt-0.5 flex-shrink-0" />
+          <span>{active.length} active forwarding/delegate path{active.length !== 1 ? 's' : ''} under review. External destinations are highest risk.</span>
+        </div>
+      )}
+      <div className="bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden">
+        <Table>
+          <Thead>
+            <Tr>
+              <Th>Type</Th>
+              <Th>Mailbox</Th>
+              <Th>Destination / Delegate</Th>
+              <Th>Provider</Th>
+              <Th>First Seen</Th>
+              <Th>Risk</Th>
+              <Th></Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {active.length === 0 && (
+              <Tr><Td colSpan={7} className="text-center text-[#71717a] py-10 text-[13px]">No active exfil paths</Td></Tr>
+            )}
+            {active.map(e => (
+              <Tr key={e.id} className={e.is_external ? 'bg-red-500/[0.03]' : ''}>
+                <Td>
+                  <span className="inline-flex items-center gap-1.5 text-[12px] text-[#d4d4d8]">
+                    {e.kind === 'delegate' ? <UserX size={12} className="text-red-400" /> : <Forward size={12} className="text-amber-400" />}
+                    {e.kind === 'delegate' ? 'Delegate' : 'Forward'}
+                  </span>
+                </Td>
+                <Td className="text-[13px] font-medium text-[var(--foreground)] max-w-[160px]"><div className="truncate" title={e.mailbox}>{e.mailbox}</div></Td>
+                <Td className="text-[13px] font-mono text-[#a1a1aa] max-w-[180px]"><div className="truncate" title={e.target}>{e.target}</div></Td>
+                <Td><ProviderBadge provider={e.provider} /></Td>
+                <Td className="text-[11px] text-[#71717a] whitespace-nowrap"><span className="inline-flex items-center gap-1"><Clock size={10} />{fmt(e.first_seen)}</span></Td>
+                <Td>
+                  <div className="flex flex-col gap-0.5">
+                    <RiskBadge risk={e.risk} />
+                    {e.is_external && <span className="text-[10px] text-red-400">External</span>}
+                  </div>
+                </Td>
+                <Td>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => onRemediate(e)}
+                      disabled={busy === e.id}
+                      className="text-[11px] text-red-400/80 hover:text-red-400 px-2 py-1 rounded hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                    >
+                      {busy === e.id ? 'Working…' : e.kind === 'delegate' ? 'Remove Delegate' : 'Disable Forward'}
+                    </button>
+                    <button
+                      onClick={() => onDismiss(e)}
+                      disabled={busy === e.id}
+                      className="text-[11px] text-[#71717a] hover:text-white px-2 py-1 rounded hover:bg-white/[0.05] transition-colors disabled:opacity-50"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
+      </div>
+    </div>
+  )
+}
+
 function LoadingSkeleton({ rows, cols }: { rows: number; cols: number }) {
   return (
     <div className="bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden">
@@ -377,12 +489,15 @@ export default function PosturePage() {
   const [apps, setApps] = useState<OAuthApp[]>([])
   const [rules, setRules] = useState<InboxRule[]>([])
   const [forwards, setForwards] = useState<ForwardRule[]>([])
+  const [exfil, setExfil] = useState<ExfilEvent[]>([])
   const [loadingSummary, setLoadingSummary] = useState(true)
   const [aiScore, setAiScore] = useState<{ score: number; label: string; reasoning: string } | null>(null)
   const [loadingAiScore, setLoadingAiScore] = useState(false)
   const [loadingApps, setLoadingApps] = useState(false)
   const [loadingRules, setLoadingRules] = useState(false)
   const [loadingForwards, setLoadingForwards] = useState(false)
+  const [loadingExfil, setLoadingExfil] = useState(false)
+  const [busyExfil, setBusyExfil] = useState<string | null>(null)
   const [revoking, setRevoking] = useState<string | null>(null)
   const [deletingRule, setDeletingRule] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
@@ -454,19 +569,29 @@ export default function PosturePage() {
     setLoadingForwards(false)
   }, [])
 
+  const fetchExfil = useCallback(async () => {
+    setLoadingExfil(true)
+    try {
+      const r = await api.get('/api/posture/exfil?status=active')
+      setExfil(Array.isArray(r.data) ? r.data : [])
+    } catch { setExfil([]) }
+    setLoadingExfil(false)
+  }, [])
+
   useEffect(() => { fetchSummary() }, [fetchSummary])
   useEffect(() => { fetchAiScore() }, [fetchAiScore])
   useEffect(() => { fetchApps() }, [fetchApps])
   useEffect(() => { fetchRules() }, [fetchRules])
   useEffect(() => { fetchForwards() }, [fetchForwards])
+  useEffect(() => { fetchExfil() }, [fetchExfil])
 
   const triggerScan = async () => {
     setScanning(true)
     try {
-      await api.post('/api/posture/scan')
-      showToast('success', 'Posture scan started — results will update in ~30 seconds.')
+      await Promise.all([api.post('/api/posture/scan'), api.post('/api/posture/exfil/scan')])
+      showToast('success', 'Posture + exfil scan started — results will update in ~30 seconds.')
       setTimeout(async () => {
-        await Promise.all([fetchSummary(), fetchApps(), fetchRules(), fetchForwards()])
+        await Promise.all([fetchSummary(), fetchApps(), fetchRules(), fetchForwards(), fetchExfil()])
         setScanning(false)
       }, 30000)
     } catch {
@@ -503,10 +628,39 @@ export default function PosturePage() {
     setDeletingRule(null)
   }
 
+  const remediateExfil = async (e: ExfilEvent) => {
+    setBusyExfil(e.id)
+    try {
+      const r = await api.post(`/api/posture/exfil/${e.id}/remediate`)
+      if (r.data?.ok) {
+        setExfil(prev => prev.filter(x => x.id !== e.id))
+        showToast('success', r.data.message || 'Remediated')
+      } else {
+        showToast('error', r.data?.message || 'Remediation needs manual action')
+      }
+    } catch {
+      showToast('error', 'Remediation failed')
+    }
+    setBusyExfil(null)
+  }
+
+  const dismissExfil = async (e: ExfilEvent) => {
+    setBusyExfil(e.id)
+    try {
+      await api.post(`/api/posture/exfil/${e.id}/dismiss`, { note: 'Authorised by analyst' })
+      setExfil(prev => prev.filter(x => x.id !== e.id))
+      showToast('success', 'Marked as authorised')
+    } catch {
+      showToast('error', 'Failed to dismiss')
+    }
+    setBusyExfil(null)
+  }
+
   const TAB_CONFIG: { key: Tab; label: string; icon: React.ReactNode; count?: number; danger?: boolean }[] = [
     { key: 'apps',     label: 'OAuth Apps',     icon: <Zap size={13} />,     count: summary?.total_apps,     danger: (summary?.high_risk_apps ?? 0) > 0 },
     { key: 'rules',    label: 'Inbox Rules',    icon: <Inbox size={13} />,   count: summary?.total_rules,    danger: (summary?.high_risk_rules ?? 0) > 0 },
     { key: 'forwards', label: 'Auto-Forwarding', icon: <Forward size={13} />, count: summary?.total_forwards, danger: (summary?.external_forwards ?? 0) > 0 },
+    { key: 'exfil', label: 'Exfil Monitor', icon: <ShieldAlert size={13} />, count: exfil.filter(e => e.status === 'active').length, danger: exfil.some(e => e.status === 'active' && e.is_external) },
   ]
 
   return (
@@ -644,6 +798,9 @@ export default function PosturePage() {
       )}
       {tab === 'forwards' && (
         <ForwardsTab forwards={sortByRisk(forwards)} loading={loadingForwards} />
+      )}
+      {tab === 'exfil' && (
+        <ExfilTab events={exfil} loading={loadingExfil} onRemediate={remediateExfil} onDismiss={dismissExfil} busy={busyExfil} />
       )}
 
       {/* Confirm Revoke Modal */}

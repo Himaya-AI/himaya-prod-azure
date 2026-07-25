@@ -690,6 +690,120 @@ async def get_forwards(
         return []
 
 
+# ── Exfil Monitor (continuous auto-forward + delegate exfiltration) ────────────
+
+@router.get("/exfil")
+async def list_exfil_events(
+    status: str = "active",
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List detected auto-forwarding / delegate exfil events.
+
+    status=active (default) | all | remediated | dismissed | auto_cleared
+    """
+    await _require_enterprise(current_user, db)
+    from backend.services.exfil_monitor import ensure_exfil_table
+    await ensure_exfil_table(db)
+    where = "org_id=:oid" if status == "all" else "org_id=:oid AND status=:st"
+    params = {"oid": str(current_user.org_id)}
+    if status != "all":
+        params["st"] = status
+    try:
+        rows = (await db.execute(text(
+            f"SELECT id, kind, provider, mailbox, target, is_external, risk, risk_reasons, "
+            f"detail, status, first_seen, last_seen, remediated_at, note "
+            f"FROM posture_exfil_events WHERE {where} "
+            f"ORDER BY (risk='high') DESC, is_external DESC, last_seen DESC"
+        ), params)).fetchall()
+    except Exception as e:
+        logger.warning(f"exfil list failed: {e}")
+        return []
+    import json as _j
+    def _load(v):
+        if v is None:
+            return v
+        return _j.loads(v) if isinstance(v, str) else v
+    return [
+        {
+            "id": str(r[0]), "kind": r[1], "provider": r[2], "mailbox": r[3], "target": r[4],
+            "is_external": bool(r[5]), "risk": r[6], "risk_reasons": _load(r[7]) or [],
+            "detail": _load(r[8]) or {}, "status": r[9],
+            "first_seen": r[10].isoformat() if r[10] else None,
+            "last_seen": r[11].isoformat() if r[11] else None,
+            "remediated_at": r[12].isoformat() if r[12] else None,
+            "note": r[13],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/exfil/scan")
+async def trigger_exfil_scan(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run a focused auto-forward + delegate scan for this org now (background)."""
+    await _require_enterprise(current_user, db)
+    import asyncio
+    from backend.services.exfil_monitor import scan_org_exfil
+    asyncio.create_task(scan_org_exfil(str(current_user.org_id)))
+    return {"ok": True, "message": "Exfil scan started"}
+
+
+@router.post("/exfil/{event_id}/remediate")
+async def remediate_exfil_event(
+    event_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Remove the forwarding rule / delegate at the provider and mark remediated."""
+    await _require_enterprise(current_user, db)
+    from backend.services.exfil_monitor import remediate_event
+    import json as _j
+    row = (await db.execute(text(
+        "SELECT kind, provider, mailbox, target, detail FROM posture_exfil_events "
+        "WHERE id=:id AND org_id=:oid"
+    ), {"id": event_id, "oid": str(current_user.org_id)})).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Event not found")
+    detail = row[4]
+    if isinstance(detail, str):
+        detail = _j.loads(detail)
+    event = {
+        "kind": row[0], "provider": row[1], "mailbox": row[2], "target": row[3],
+        "detail": detail or {}, "org_id": str(current_user.org_id),
+    }
+    result = await remediate_event(event)
+    if result.get("ok"):
+        await db.execute(text(
+            "UPDATE posture_exfil_events SET status='remediated', remediated_at=NOW(), note=:n "
+            "WHERE id=:id AND org_id=:oid"
+        ), {"n": result.get("message"), "id": event_id, "oid": str(current_user.org_id)})
+        await db.commit()
+    return result
+
+
+@router.post("/exfil/{event_id}/dismiss")
+async def dismiss_exfil_event(
+    event_id: str,
+    body: dict | None = None,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark an exfil event as an authorised/known forward (suppress future alerts)."""
+    await _require_enterprise(current_user, db)
+    note = (body or {}).get("note", "Dismissed by analyst")
+    res = await db.execute(text(
+        "UPDATE posture_exfil_events SET status='dismissed', note=:n "
+        "WHERE id=:id AND org_id=:oid"
+    ), {"n": note, "id": event_id, "oid": str(current_user.org_id)})
+    await db.commit()
+    if res.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return {"ok": True}
+
+
 # ── Scan (trigger) ────────────────────────────────────────────────────────────
 
 # In-memory cache for AI score: org_id -> {score, label, reasoning, generated_at}
