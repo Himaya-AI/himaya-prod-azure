@@ -5,6 +5,14 @@ from typing import Any
 
 import redis.asyncio as redis
 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
+from presidio_analyzer.nlp_engine import NlpEngineProvider
+from presidio_analyzer.predefined_recognizers import (
+    InAadhaarRecognizer,
+    InPanRecognizer,
+    InPassportRecognizer,
+    UkNinoRecognizer,
+    UkPassportRecognizer,
+)
 
 from app.service.base import DetectionResult
 from app.service.deterministic.credentials import CredentialDetector
@@ -12,7 +20,6 @@ from app.service.deterministic.lexicon import LexiconDetector
 from app.service.deterministic.ner import NERDetector
 from app.service.deterministic.pii import PIIDetector
 from app.service.deterministic.recognizers.credit_card import CreditCardValidator
-from app.service.deterministic.recognizers.organization import OrganizationRecognizer
 
 
 def _build_shared_engine() -> AnalyzerEngine:
@@ -22,9 +29,22 @@ def _build_shared_engine() -> AnalyzerEngine:
     registry.load_predefined_recognizers()
 
     registry.add_recognizer(CreditCardValidator())
-    registry.add_recognizer(OrganizationRecognizer())
+    registry.add_recognizer(UkNinoRecognizer())
+    registry.add_recognizer(UkPassportRecognizer())
+    registry.add_recognizer(InAadhaarRecognizer())
+    registry.add_recognizer(InPanRecognizer())
+    registry.add_recognizer(InPassportRecognizer())
 
-    return AnalyzerEngine(registry=registry, supported_languages=["en"])
+    nlp_engine = NlpEngineProvider(
+        nlp_configuration={
+            "nlp_engine_name": "spacy",
+            "models": [{"lang_code": "en", "model_name": "en_core_web_sm"}],
+        }
+    ).create_engine()
+
+    return AnalyzerEngine(
+        registry=registry, nlp_engine=nlp_engine, supported_languages=["en"]
+    )
 
 
 class DeterministicRunner:
