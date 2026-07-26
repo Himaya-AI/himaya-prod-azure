@@ -3,6 +3,9 @@
 `backend/dlp` is the control plane and application-worker boundary between
 `dlp-gateway` and `dlp-classifier`.
 
+For shipped-vs-remaining status and cutover notes, see
+[`docs/DLP_V2_STATUS.md`](../../docs/DLP_V2_STATUS.md).
+
 ## Ownership
 
 This module owns:
