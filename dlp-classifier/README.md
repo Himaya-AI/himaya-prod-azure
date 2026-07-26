@@ -20,7 +20,7 @@ returning a combined result for the gateway to act on.
         ▼                          ▼
  Tier 0 — DeterministicRunner   (always runs first)
    ├─ PIIDetector        (Presidio + custom CreditCardValidator)
-   ├─ NERDetector         (Presidio + custom OrganizationRecognizer)
+   ├─ NERDetector         (Presidio built-ins — PERSON/LOCATION/NRP/ORGANIZATION)
    ├─ LexiconDetector     (Aho-Corasick, tenant lexicon from Redis)
    └─ CredentialDetector  (BetterLeaks subprocess)
         │
@@ -46,6 +46,16 @@ Tier 2 is deliberately not part of the same `BaseDetector` contract — it
 returns a semantic verdict (`LLMClassificationResult`), not span-based
 matches, and is always invoked after Tier 0 rather than conditionally.
 
+`RecognizerRegistry.load_predefined_recognizers()` only auto-registers a
+curated subset of Presidio's built-in recognizers (mostly US-focused).
+`UK_NINO`, `UK_PASSPORT`, `IN_AADHAAR`, `IN_PAN`, and `IN_PASSPORT` — all
+requested by `pii.py`'s entity lists — are NOT in that subset even though
+the recognizer classes exist in the installed package, so `runner.py`'s
+`_build_shared_engine()` registers them explicitly. If a future Presidio
+upgrade changes what's auto-loaded, re-check this list against
+`RecognizerRegistry().load_predefined_recognizers()`'s actual output rather
+than assuming an entity in `pii.py`'s lists has a live recognizer.
+
 ## Directory layout
 
 ```
@@ -65,7 +75,6 @@ app/
       edm.py                    Exact Data Match — NOT YET IMPLEMENTED
       recognizers/
         credit_card.py          CreditCardValidator (BIN + Luhn + denylist)
-        organization.py         OrganizationRecognizer (spaCy ORG -> entity)
     llm/
       classifier.py             KimiClassifier — Bedrock Kimi K2.5 wrapper
   utils/
@@ -88,7 +97,6 @@ requirements.txt
 | HTTP API | FastAPI + uvicorn | `app/main.py`, `app/routes/classify.py` |
 | PII + NER detection | Presidio Analyzer (+ spaCy `en_core_web_sm`) | `app/service/deterministic/pii.py`, `ner.py` |
 | Credit card validation | Custom (BIN prefix, test-number denylist, Luhn) | `recognizers/credit_card.py` |
-| Org name detection | Custom spaCy `ORG`-label wrapper | `recognizers/organization.py` |
 | Tenant lexicon matching | pyahocorasick (Aho-Corasick automaton) | `app/utils/automaton.py`, `lexicon.py` |
 | Lexicon storage/cache | Redis (`redis.asyncio`) | `config/redis_client.py`, `lexicon.py` |
 | Credential/secret scanning | BetterLeaks (external Go binary, subprocess) | `credentials.py`, `scripts/install_betterleaks.sh` |
