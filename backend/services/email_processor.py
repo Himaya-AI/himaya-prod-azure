@@ -269,6 +269,47 @@ def _calculate_risk_score(content_score: int, graph_score: int, reputation_score
     }
 
 
+# Well-known transactional / security-infrastructure sender domains that emit
+# legitimate OTP, verification-code, sign-in and account-security mail. Such
+# mail is routinely content-flagged as PHISHING / CREDENTIAL_HARVESTING because
+# it literally contains "verification code", "account", "sign in", etc. When the
+# message is DMARC-authenticated it genuinely originates from the provider (a
+# spoofer cannot pass DMARC for these apex domains), so a content-only suspicion
+# must NOT quarantine it. Deliberately EXCLUDES consumer mailbox domains
+# (gmail.com, outlook.com, icloud.com, yahoo.com, …) — those carry ordinary
+# user-to-user mail and can host authenticated-but-compromised phishing/BEC.
+_TRUSTED_PROVIDER_DOMAINS = frozenset({
+    "microsoft.com", "accountprotection.microsoft.com", "microsoftonline.com",
+    "office.com", "office365.com", "azure.com", "windowsazure.com",
+    "google.com", "accounts.google.com", "gmail-smtp-in.l.google.com",
+    "apple.com", "id.apple.com", "email.apple.com",
+    "amazon.com", "amazonaws.com", "aws.amazon.com",
+    "github.com", "githubusercontent.com", "okta.com", "oktacdn.com",
+    "slack.com", "atlassian.com", "atlassian.net", "salesforce.com",
+    "notify.himaya.ai", "himaya.ai",
+})
+
+
+def _is_trusted_provider_domain(sender_domain: str) -> bool:
+    """True if the sender's domain is (or is a sub-domain of) a trusted
+    transactional/security provider domain."""
+    d = (sender_domain or "").strip().lower().rstrip(".")
+    if not d:
+        return False
+    return any(d == td or d.endswith("." + td) for td in _TRUSTED_PROVIDER_DOMAINS)
+
+
+def _is_dmarc_authenticated(auth_results: dict) -> bool:
+    """A message is authenticated when DMARC passes, or when both DKIM and SPF
+    pass (aligned). Mirrors the policy-engine trust gate."""
+    ar = auth_results or {}
+
+    def _p(v) -> bool:
+        return isinstance(v, str) and v.lower() in ("pass", "passed")
+
+    return _p(ar.get("dmarc")) or (_p(ar.get("dkim")) and _p(ar.get("spf")))
+
+
 def _determine_action(risk_score: int, threat_type: str) -> str:
     """
     Post-delivery action — Himaya sits AFTER email is delivered (like Abnormal Security).
@@ -592,6 +633,39 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
             risk_result["risk_score"] = effective_risk
             logger.info(f"VIP risk boost applied: {risk_result['risk_score'] - 15} → {effective_risk} for {recipient_email}")
         action = _determine_action(effective_risk, threat_type)
+
+        # ── Trusted-provider false-positive guard ────────────────────────────
+        # Legit OTP / verification-code / account-security mail from well-known
+        # transactional providers (Microsoft accountprotection, Google, Apple,
+        # GitHub, Okta, …) is routinely content-scored as PHISHING/credential
+        # harvesting because of "verification code", "account", "sign in"
+        # language, and can cross the quarantine threshold once low graph-trust
+        # for a first-seen sender is folded in. When such mail is DMARC-
+        # authenticated it genuinely came from the provider (spoofers can't pass
+        # DMARC for these domains), so a *content-only* suspicion must not
+        # quarantine or spam-file it. We downgrade to FLAGGED_HIGH for analyst
+        # visibility — UNLESS there is hard evidence (malicious URL or dangerous
+        # attachment), which is always honoured regardless of sender.
+        if action in ("QUARANTINED", "MARKED_SPAM"):
+            _has_hard_ioc = bool(
+                link_result.get("malicious_urls")
+                or link_result.get("suspicious_attachments")
+            )
+            if (
+                not _has_hard_ioc
+                and _is_trusted_provider_domain(sender_domain)
+                and _is_dmarc_authenticated(auth_results)
+            ):
+                logger.info(
+                    "trusted-provider guard: downgrading %s → FLAGGED_HIGH for "
+                    "authenticated %s (sender=%s risk=%s type=%s, no hard IOC)",
+                    action, sender_domain, sender, effective_risk, threat_type,
+                )
+                content_result.setdefault("indicators", []).append(
+                    f"trusted_provider_authenticated:{sender_domain} "
+                    f"(content-only suspicion — quarantine suppressed)"
+                )
+                action = "FLAGGED_HIGH"
 
         # Step 5b: Auto-action via Gmail API based on determined action
         auto_action_success = False
