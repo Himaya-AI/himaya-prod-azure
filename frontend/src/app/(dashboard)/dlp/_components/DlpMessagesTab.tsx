@@ -20,11 +20,13 @@ import { Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
 import {
   getDlpErrorMessage,
+  getDlpMessage,
   listDlpMessages,
   releaseDlpMessage,
   stopDlpMessage,
 } from '@/lib/dlp/api'
 import type {
+  DlpMessageDetail,
   DlpMessageSummary,
   DlpReviewAction,
 } from '@/lib/dlp/types'
@@ -49,21 +51,11 @@ const FILTERS = [
   { value: 'stop_requested', label: 'Stop requested' },
 ]
 
-const REVIEWABLE_PAGE_STATES = ['decided', 'held'] as const
-const REVIEWABLE_FETCH_LIMIT = 100
-
 function actionVariant(action: string | null) {
   if (action === 'stop') return 'danger' as const
   if (action === 'hold') return 'warning' as const
   if (action === 'allow') return 'success' as const
   return 'neutral' as const
-}
-
-function isReviewable(message: DlpMessageSummary) {
-  return (
-    message.effective_action === 'hold' &&
-    ['decided', 'held'].includes(message.state)
-  )
 }
 
 function makeIdempotencyKey() {
@@ -200,38 +192,120 @@ function ReviewDialog({
   )
 }
 
-async function fetchReviewablePage(before?: string | null) {
-  const responses = await Promise.all(
-    REVIEWABLE_PAGE_STATES.map((state) =>
-      listDlpMessages({
-        state,
-        before: before ?? undefined,
-        limit: REVIEWABLE_FETCH_LIMIT,
-      }),
-    ),
+function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
+  return (
+    <div className="space-y-4 py-1">
+      <div className="grid gap-3 md:grid-cols-3">
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[#52525b]">Subject</p>
+          <p className="mt-1 text-xs text-[#a1a1aa]">
+            {detail.subject || (detail.preview_available ? '—' : 'Unavailable')}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[#52525b]">Policy version</p>
+          <p className="mt-1 text-xs text-[#a1a1aa]">{detail.policy_version ?? '—'}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-wide text-[#52525b]">Intended action</p>
+          <p className="mt-1 text-xs text-[#a1a1aa]">{detail.intended_action ?? 'Pending'}</p>
+        </div>
+      </div>
+
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-[#52525b]">Explanation</p>
+        <p className="mt-1 text-xs leading-relaxed text-[#a1a1aa]">
+          {detail.explanation ?? 'No decision explanation is available.'}
+        </p>
+      </div>
+
+      {detail.matched_rule_ids.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Matched rules</p>
+          <div className="flex flex-wrap gap-1.5">
+            {detail.matched_rule_ids.map((ruleId) => (
+              <Badge key={ruleId} variant="neutral">{ruleId}</Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {detail.findings.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Findings</p>
+          <div className="space-y-1.5">
+            {detail.findings.map((finding, index) => (
+              <div
+                key={`${finding.detector}-${finding.entity_type}-${index}`}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
+              >
+                <Badge variant="info">{finding.detector}</Badge>
+                <span className="text-xs text-[#a1a1aa]">{finding.entity_type}</span>
+                <span className="text-[11px] text-[#71717a]">
+                  {(finding.confidence * 100).toFixed(0)}%
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {detail.sanitized_preview && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">
+            Sanitized preview
+          </p>
+          <p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-[#0d0d12] px-3 py-2 text-xs leading-relaxed text-[#a1a1aa]">
+            {detail.sanitized_preview}
+          </p>
+        </div>
+      )}
+
+      {!detail.preview_available && (
+        <p className="text-[11px] text-[#52525b]">
+          Content preview is unavailable for this message.
+        </p>
+      )}
+
+      {detail.extraction_limitations.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Limitations</p>
+          <ul className="space-y-1 text-xs text-amber-200/80">
+            {detail.extraction_limitations.map((item, index) => (
+              <li key={`${item.code}-${index}`}>
+                <span className="font-medium">{item.code}</span>
+                {item.detail ? `: ${item.detail}` : ''}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {detail.review_history.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Review history</p>
+          <div className="space-y-2">
+            {detail.review_history.map((item, index) => (
+              <div
+                key={`${item.action}-${item.created_at}-${index}`}
+                className="rounded-lg border border-white/[0.06] px-3 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant={item.action === 'stop' ? 'danger' : 'info'}>
+                    {item.action.toUpperCase()}
+                  </Badge>
+                  <span className="text-[11px] text-[#71717a]">
+                    {new Date(item.created_at).toLocaleString()}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-[#a1a1aa]">{item.reason}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
   )
-
-  const merged = [...new Map(
-    responses
-      .flatMap((response) => response.items)
-      .filter(isReviewable)
-      .map((item) => [item.message_id, item]),
-  ).values()].sort(
-    (left, right) =>
-      new Date(right.received_at).getTime() - new Date(left.received_at).getTime(),
-  )
-
-  const cursors = responses
-    .map((response) => response.next_cursor)
-    .filter((cursor): cursor is string => Boolean(cursor))
-    .sort(
-      (left, right) => new Date(right).getTime() - new Date(left).getTime(),
-    )
-
-  return {
-    items: merged,
-    next_cursor: cursors[0] ?? null,
-  }
 }
 
 export default function DlpMessagesTab({ canManage }: Props) {
@@ -242,6 +316,8 @@ export default function DlpMessagesTab({ canManage }: Props) {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const [details, setDetails] = useState<Record<string, DlpMessageDetail>>({})
+  const [detailLoading, setDetailLoading] = useState<string | null>(null)
   const [review, setReview] = useState<PendingReview | null>(null)
 
   const load = useCallback(async (append = false, cursor: string | null = null) => {
@@ -249,14 +325,12 @@ export default function DlpMessagesTab({ canManage }: Props) {
     else setLoading(true)
     setError(null)
     try {
-      const response = filter === 'reviewable'
-        ? await fetchReviewablePage(append ? cursor : null)
-        : await listDlpMessages({
-            state: filter || undefined,
-            before: append ? cursor ?? undefined : undefined,
-            limit: 50,
-          })
-
+      const response = await listDlpMessages({
+        reviewable: filter === 'reviewable' ? true : undefined,
+        state: filter && filter !== 'reviewable' ? filter : undefined,
+        before: append ? cursor ?? undefined : undefined,
+        limit: 50,
+      })
       setMessages((current) => {
         const combined = append ? [...current, ...response.items] : response.items
         return [...new Map(combined.map((item) => [item.message_id, item])).values()]
@@ -274,8 +348,28 @@ export default function DlpMessagesTab({ canManage }: Props) {
     setMessages([])
     setNextCursor(null)
     setExpanded(null)
+    setDetails({})
     void load(false, null)
   }, [filter, load])
+
+  async function toggleDetail(messageId: string) {
+    if (expanded === messageId) {
+      setExpanded(null)
+      return
+    }
+    setExpanded(messageId)
+    if (details[messageId]) return
+    setDetailLoading(messageId)
+    try {
+      const detail = await getDlpMessage(messageId)
+      setDetails((current) => ({ ...current, [messageId]: detail }))
+    } catch (requestError) {
+      toast.error(getDlpErrorMessage(requestError, 'Could not load message detail.'))
+      setExpanded(null)
+    } finally {
+      setDetailLoading(null)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -283,7 +377,7 @@ export default function DlpMessagesTab({ canManage }: Props) {
         <div>
           <h2 className="text-sm font-medium text-white">DLP messages</h2>
           <p className="mt-1 text-xs text-[#71717a]">
-            Envelope and decision data. Content preview is not yet available in v2.
+            Review held decisions with findings and a bounded sanitized preview.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -317,13 +411,6 @@ export default function DlpMessagesTab({ canManage }: Props) {
             Administrator permission is required to release or stop held messages.
           </p>
         </div>
-      )}
-
-      {filter === 'reviewable' && (
-        <p className="text-xs text-[#71717a]">
-          Showing held decisions from <code>decided</code> and <code>held</code> states.
-          Server-side reviewable filtering is not available yet.
-        </p>
       )}
 
       <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#13131a]">
@@ -380,10 +467,8 @@ export default function DlpMessagesTab({ canManage }: Props) {
                         </Badge>
                         <button
                           type="button"
-                          aria-label="Toggle decision explanation"
-                          onClick={() => setExpanded(
-                            expanded === message.message_id ? null : message.message_id,
-                          )}
+                          aria-label="Toggle message detail"
+                          onClick={() => void toggleDetail(message.message_id)}
                           className="p-1 text-[#71717a] hover:text-white"
                         >
                           {expanded === message.message_id
@@ -397,7 +482,7 @@ export default function DlpMessagesTab({ canManage }: Props) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={!canManage || !isReviewable(message)}
+                          disabled={!canManage || !message.reviewable}
                           onClick={() => setReview({
                             message,
                             action: 'release',
@@ -409,7 +494,7 @@ export default function DlpMessagesTab({ canManage }: Props) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          disabled={!canManage || !isReviewable(message)}
+                          disabled={!canManage || !message.reviewable}
                           className="text-red-400"
                           onClick={() => setReview({
                             message,
@@ -425,18 +510,18 @@ export default function DlpMessagesTab({ canManage }: Props) {
                   {expanded === message.message_id && (
                     <Tr className="hover:bg-transparent">
                       <Td colSpan={5} className="bg-white/[0.015]">
-                        <div className="grid gap-3 py-1 md:grid-cols-3">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-wide text-[#52525b]">Intended action</p>
-                            <p className="mt-1 text-xs text-[#a1a1aa]">{message.intended_action ?? 'Pending'}</p>
+                        {detailLoading === message.message_id ? (
+                          <div className="space-y-2 py-2">
+                            <div className="h-4 w-1/3 animate-pulse rounded bg-white/[0.04]" />
+                            <div className="h-16 animate-pulse rounded bg-white/[0.04]" />
                           </div>
-                          <div className="md:col-span-2">
-                            <p className="text-[10px] uppercase tracking-wide text-[#52525b]">Explanation</p>
-                            <p className="mt-1 text-xs leading-relaxed text-[#a1a1aa]">
-                              {message.explanation ?? 'No decision explanation is available.'}
-                            </p>
-                          </div>
-                        </div>
+                        ) : details[message.message_id] ? (
+                          <MessageDetailPanel detail={details[message.message_id]} />
+                        ) : (
+                          <p className="py-2 text-xs text-[#71717a]">
+                            Detail is unavailable.
+                          </p>
+                        )}
                       </Td>
                     </Tr>
                   )}
@@ -463,7 +548,10 @@ export default function DlpMessagesTab({ canManage }: Props) {
         <ReviewDialog
           review={review}
           onClose={() => setReview(null)}
-          onComplete={async () => { await load(false, null) }}
+          onComplete={async () => {
+            setDetails({})
+            await load(false, null)
+          }}
         />
       )}
     </div>

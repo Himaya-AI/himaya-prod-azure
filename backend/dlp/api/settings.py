@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.dlp.api.deps import require_dlp_admin
+from backend.dlp.api.deps import require_dlp_admin, require_dlp_enterprise
 from backend.dlp.api.schemas import (
     TenantSettingsResponse,
     TenantSettingsUpdate,
@@ -19,14 +19,13 @@ from backend.dlp.persistence.models import (
     DlpTenantConfig,
 )
 from backend.models.db_models import User
-from backend.routers.auth import get_current_user
 
 router = APIRouter()
 
 
 @router.get("/settings", response_model=TenantSettingsResponse)
 async def get_settings(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_dlp_enterprise),
     session: AsyncSession = Depends(get_db),
 ) -> TenantSettingsResponse:
     config = await session.get(DlpTenantConfig, current_user.org_id)

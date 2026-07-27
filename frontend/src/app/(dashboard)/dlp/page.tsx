@@ -219,12 +219,12 @@ export default function DlpPage() {
           >
             <Icon size={13} className={tab === key ? 'text-[#3b6ef6]' : 'text-current'} />
             {label}
-            {key === 'messages' && (status.message_counts.held ?? 0) > 0 && (
+            {key === 'messages' && (status.reviewable_count ?? 0) > 0 && (
               <span
-                title="Messages currently in held state"
+                title="Held messages awaiting review"
                 className="rounded-full border border-orange-500/30 bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-bold text-orange-400"
               >
-                {status.message_counts.held}
+                {status.reviewable_count}
               </span>
             )}
           </button>

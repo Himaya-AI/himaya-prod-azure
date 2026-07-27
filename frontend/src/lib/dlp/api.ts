@@ -2,9 +2,9 @@ import { AxiosError } from 'axios'
 
 import api from '@/lib/api'
 import type {
+  DlpMessageDetail,
   DlpMessageList,
   DlpMessageListParams,
-  DlpMessageSummary,
   DlpReviewActionRequest,
   DlpReviewActionResponse,
   DlpStatus,
@@ -51,13 +51,18 @@ export async function publishDlpPolicy(): Promise<PolicyVersion> {
 export async function listDlpMessages(
   params: DlpMessageListParams = {},
 ): Promise<DlpMessageList> {
-  return (await api.get<DlpMessageList>(`${BASE}/messages`, { params })).data
+  const query: Record<string, string | number | boolean> = {}
+  if (params.state) query.state = params.state
+  if (params.reviewable === true) query.reviewable = true
+  if (params.before) query.before = params.before
+  if (params.limit != null) query.limit = params.limit
+  return (await api.get<DlpMessageList>(`${BASE}/messages`, { params: query })).data
 }
 
 export async function getDlpMessage(
   messageId: string,
-): Promise<DlpMessageSummary> {
-  return (await api.get<DlpMessageSummary>(`${BASE}/messages/${messageId}`)).data
+): Promise<DlpMessageDetail> {
+  return (await api.get<DlpMessageDetail>(`${BASE}/messages/${messageId}`)).data
 }
 
 export async function releaseDlpMessage(

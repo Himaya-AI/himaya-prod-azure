@@ -20,6 +20,7 @@ class DlpStatusResponse(BaseModel):
     classifier_url_configured: bool
     legacy_independent: bool = True
     message_counts: dict[str, int] = Field(default_factory=dict)
+    reviewable_count: int = 0
     failed_outbox_commands: int = 0
 
 
@@ -72,6 +73,7 @@ class DlpMessageSummary(BaseModel):
     intended_action: str | None = None
     effective_action: str | None = None
     explanation: str | None = None
+    reviewable: bool = False
 
 
 class MessageListResponse(BaseModel):
@@ -79,6 +81,59 @@ class MessageListResponse(BaseModel):
 
     items: list[DlpMessageSummary]
     next_cursor: datetime | None = None
+
+
+class DlpFindingSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detector: str
+    entity_type: str
+    confidence: float
+
+
+class DlpPartSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    part_index: int
+    content_type: str
+    filename: str | None = None
+    extraction_status: str
+    limitation_code: str | None = None
+    limitation_detail: str | None = None
+
+
+class DlpExtractionLimitation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    code: str
+    detail: str
+
+
+class DlpReviewHistoryItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["release", "stop"]
+    reason: str
+    actor_user_id: UUID
+    created_at: datetime
+
+
+class DlpMessageDetail(DlpMessageSummary):
+    model_config = ConfigDict(extra="forbid")
+
+    policy_version: str | None = None
+    matched_rule_ids: list[str] = Field(default_factory=list)
+    findings: list[DlpFindingSummary] = Field(default_factory=list)
+    extraction_limitations: list[DlpExtractionLimitation] = Field(
+        default_factory=list
+    )
+    parts: list[DlpPartSummary] = Field(default_factory=list)
+    subject: str | None = None
+    sanitized_preview: str | None = None
+    preview_available: bool = False
+    review_history: list[DlpReviewHistoryItem] = Field(
+        default_factory=list
+    )
 
 
 class ReviewActionRequest(BaseModel):

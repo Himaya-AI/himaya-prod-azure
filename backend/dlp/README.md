@@ -123,18 +123,22 @@ relayed. The classifier stub exists only for local contract testing.
 
 ## Control-plane API
 
-All routes are authenticated and tenant-scoped under `/api/dlp/v2`:
+All routes are authenticated, enterprise-tier gated, and tenant-scoped under
+`/api/dlp/v2`:
 
-- `GET /status`
+- `GET /status` (includes `reviewable_count`)
 - `GET|PUT /settings`
 - `GET /policy`, `GET|PUT /policy/draft`, `POST /policy/publish`
-- `GET /messages`, `GET /messages/{message_id}`
+- `GET /messages` (`state`, `reviewable=true`, cursor via `before`)
+- `GET /messages/{message_id}` (rich detail: findings, limitations, bounded preview)
 - `POST /messages/{message_id}/release`
 - `POST /messages/{message_id}/stop`
 
 Settings, policy mutations, release, and stop require an administrator role.
 Published policies are immutable. Review actions require an idempotency key
-and atomically create an audit record plus outbox command.
+and atomically create an audit record plus outbox command. Message detail never
+returns raw MIME or secret match text; preview download is best-effort and
+bounded.
 
 ## Safety rules
 

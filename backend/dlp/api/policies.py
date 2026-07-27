@@ -9,7 +9,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
-from backend.dlp.api.deps import require_dlp_admin
+from backend.dlp.api.deps import require_dlp_admin, require_dlp_enterprise
 from backend.dlp.api.schemas import (
     PolicyDraftRequest,
     PolicyVersionResponse,
@@ -23,14 +23,13 @@ from backend.dlp.policy import (
     policy_to_document,
 )
 from backend.models.db_models import User
-from backend.routers.auth import get_current_user
 
 router = APIRouter()
 
 
 @router.get("/policy", response_model=PolicyVersionResponse)
 async def get_active_policy(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_dlp_enterprise),
     session: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
     config = await session.get(DlpTenantConfig, current_user.org_id)
@@ -55,7 +54,7 @@ async def get_active_policy(
     "/policy/draft", response_model=PolicyVersionResponse | None
 )
 async def get_policy_draft(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_dlp_enterprise),
     session: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse | None:
     draft = await _latest_draft(session, current_user.org_id)

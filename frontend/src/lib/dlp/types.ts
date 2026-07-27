@@ -9,6 +9,7 @@ export interface DlpStatus {
   classifier_url_configured: boolean
   legacy_independent: boolean
   message_counts: Record<string, number>
+  reviewable_count?: number
   failed_outbox_commands: number
 }
 
@@ -70,6 +71,7 @@ export interface DlpMessageSummary {
   intended_action: string | null
   effective_action: string | null
   explanation: string | null
+  reviewable: boolean
 }
 
 export interface DlpMessageList {
@@ -79,8 +81,48 @@ export interface DlpMessageList {
 
 export interface DlpMessageListParams {
   state?: string
+  reviewable?: boolean
   before?: string
   limit?: number
+}
+
+export interface DlpFindingSummary {
+  detector: string
+  entity_type: string
+  confidence: number
+}
+
+export interface DlpPartSummary {
+  part_index: number
+  content_type: string
+  filename: string | null
+  extraction_status: string
+  limitation_code: string | null
+  limitation_detail: string | null
+}
+
+export interface DlpExtractionLimitation {
+  code: string
+  detail: string
+}
+
+export interface DlpReviewHistoryItem {
+  action: 'release' | 'stop'
+  reason: string
+  actor_user_id: string
+  created_at: string
+}
+
+export interface DlpMessageDetail extends DlpMessageSummary {
+  policy_version: string | null
+  matched_rule_ids: string[]
+  findings: DlpFindingSummary[]
+  extraction_limitations: DlpExtractionLimitation[]
+  parts: DlpPartSummary[]
+  subject: string | null
+  sanitized_preview: string | null
+  preview_available: boolean
+  review_history: DlpReviewHistoryItem[]
 }
 
 export interface DlpReviewActionRequest {
