@@ -35,7 +35,7 @@ import uuid
 from datetime import datetime, timezone
 
 import httpx
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 logger = logging.getLogger(__name__)
 
@@ -358,6 +358,65 @@ async def _raise_alert(db, org_id: str, f: dict) -> None:
         raw_data={"kind": f["kind"], "target": f["target"], "is_external": f["is_external"],
                   "risk": f["risk"], "detail": f.get("detail") or {}},
     ))
+
+    # Best-effort admin email notification. Never let a delivery failure break
+    # the scan/commit — email is a side channel on top of the in-app SaasAlert.
+    try:
+        await _notify_admins_exfil(db, org_id, f, sev, kind_label)
+    except Exception as e:
+        logger.warning(f"exfil: admin email notification failed for org {org_id}: {e}")
+
+
+async def _notify_admins_exfil(db, org_id: str, f: dict, sev: str, kind_label: str) -> None:
+    """Email the org's active admins about a newly-detected exfil mechanism.
+
+    Reuses the shared transactional path (Azure Communication Email → SES
+    fallback) via email_service.send_threat_alert, matching how the mail
+    pipeline notifies admins of quarantined threats.
+    """
+    from backend.models.db_models import Organization, User
+    from backend.services.email_service import send_threat_alert
+
+    org_uuid = uuid.UUID(org_id) if isinstance(org_id, str) else org_id
+
+    org = (await db.execute(
+        select(Organization).where(Organization.id == org_uuid)
+    )).scalar_one_or_none()
+    org_name = org.name if org else "Your Organization"
+
+    admins = (await db.execute(
+        select(User).where(
+            User.org_id == org_uuid,
+            User.role == "admin",
+            User.is_active.is_(True),
+        )
+    )).scalars().all()
+
+    admin_emails = [a.email for a in admins if a.email]
+    if not admin_emails:
+        logger.info(f"exfil: no active admin email for org {org_id}; skipping email (SaasAlert still raised)")
+        return
+
+    # Map exfil severity → risk_score bucket the threat-alert template renders.
+    risk_score = {"critical": 95, "high": 82}.get(sev, 65)
+    threat_type = f"Email Exfiltration ({kind_label}) → {f['target']}"
+    detection_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    for email in admin_emails:
+        try:
+            await asyncio.to_thread(
+                send_threat_alert,
+                to_email=email,
+                org_name=org_name,
+                threat_type=threat_type,
+                risk_score=risk_score,
+                recipient=f["mailbox"],
+                action="DETECTED — review & remediate in Posture → Exfil Monitor",
+                detection_time=detection_time,
+            )
+            logger.info(f"exfil: admin alert emailed to {email} for org {org_id} ({threat_type})")
+        except Exception as e:
+            logger.warning(f"exfil: failed emailing admin {email} for org {org_id}: {e}")
 
 
 # ── Remediation ──────────────────────────────────────────────────────────────
