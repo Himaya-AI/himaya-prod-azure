@@ -309,6 +309,18 @@ function RuleEditor({
   )
 }
 
+function policyIdentity(activePolicy: PolicyVersion, draftPolicy: PolicyVersion | null) {
+  return [
+    activePolicy.id ?? 'active',
+    activePolicy.version,
+    activePolicy.status,
+    activePolicy.published_at ?? '',
+    draftPolicy?.id ?? 'no-draft',
+    draftPolicy?.version ?? '',
+    draftPolicy?.status ?? '',
+  ].join(':')
+}
+
 export default function DlpPolicyTab({
   activePolicy,
   draftPolicy,
@@ -321,15 +333,28 @@ export default function DlpPolicyTab({
   const [expandedRule, setExpandedRule] = useState<string | null>(source.rules[0]?.rule_id ?? null)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [syncedIdentity, setSyncedIdentity] = useState(
+    () => policyIdentity(activePolicy, draftPolicy),
+  )
+
+  const dirty = JSON.stringify(document) !== savedSnapshot
 
   useEffect(() => {
+    const nextIdentity = policyIdentity(activePolicy, draftPolicy)
+    // Keep local edits when the parent refreshes the same draft/active policy.
+    if (dirty && nextIdentity === syncedIdentity) return
+
     const next = draftPolicy?.document ?? activePolicy.document
     setDocument(cloneDocument(next))
     setSavedSnapshot(JSON.stringify(next))
-    setExpandedRule(next.rules[0]?.rule_id ?? null)
-  }, [activePolicy, draftPolicy])
-
-  const dirty = JSON.stringify(document) !== savedSnapshot
+    setSyncedIdentity(nextIdentity)
+    setExpandedRule((current) => {
+      if (current && next.rules.some((rule) => rule.rule_id === current)) {
+        return current
+      }
+      return next.rules[0]?.rule_id ?? null
+    })
+  }, [activePolicy, draftPolicy, dirty, syncedIdentity])
   const duplicateIds = useMemo(() => {
     const seen = new Set<string>()
     return document.rules
@@ -385,6 +410,7 @@ export default function DlpPolicyTab({
       const saved = await saveDlpPolicyDraft(document)
       setDocument(cloneDocument(saved.document))
       setSavedSnapshot(JSON.stringify(saved.document))
+      setSyncedIdentity(policyIdentity(activePolicy, saved))
       toast.success(`Policy draft v${saved.version} saved.`)
       await onChanged()
     } catch (error) {
@@ -402,6 +428,9 @@ export default function DlpPolicyTab({
     setPublishing(true)
     try {
       const published = await publishDlpPolicy()
+      setDocument(cloneDocument(published.document))
+      setSavedSnapshot(JSON.stringify(published.document))
+      setSyncedIdentity(policyIdentity(published, null))
       toast.success(`Policy v${published.version} published.`)
       await onChanged()
     } catch (error) {

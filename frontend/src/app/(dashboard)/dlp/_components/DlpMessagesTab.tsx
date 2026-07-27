@@ -1,6 +1,7 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
+import { AxiosError } from 'axios'
 import {
   AlertTriangle,
   ChevronDown,
@@ -43,9 +44,13 @@ const FILTERS = [
   { value: 'reviewable', label: 'Held / reviewable' },
   { value: 'received', label: 'Received' },
   { value: 'decided', label: 'Decided' },
+  { value: 'held', label: 'Held' },
   { value: 'release_requested', label: 'Release requested' },
   { value: 'stop_requested', label: 'Stop requested' },
 ]
+
+const REVIEWABLE_PAGE_STATES = ['decided', 'held'] as const
+const REVIEWABLE_FETCH_LIMIT = 100
 
 function actionVariant(action: string | null) {
   if (action === 'stop') return 'danger' as const
@@ -100,7 +105,12 @@ function ReviewDialog({
       await onComplete()
       onClose()
     } catch (error) {
+      const status = error instanceof AxiosError ? error.response?.status : undefined
       toast.error(getDlpErrorMessage(error, 'Could not queue the review action.'))
+      if (status === 409) {
+        await onComplete()
+        onClose()
+      }
     } finally {
       setSubmitting(false)
     }
@@ -190,6 +200,40 @@ function ReviewDialog({
   )
 }
 
+async function fetchReviewablePage(before?: string | null) {
+  const responses = await Promise.all(
+    REVIEWABLE_PAGE_STATES.map((state) =>
+      listDlpMessages({
+        state,
+        before: before ?? undefined,
+        limit: REVIEWABLE_FETCH_LIMIT,
+      }),
+    ),
+  )
+
+  const merged = [...new Map(
+    responses
+      .flatMap((response) => response.items)
+      .filter(isReviewable)
+      .map((item) => [item.message_id, item]),
+  ).values()].sort(
+    (left, right) =>
+      new Date(right.received_at).getTime() - new Date(left.received_at).getTime(),
+  )
+
+  const cursors = responses
+    .map((response) => response.next_cursor)
+    .filter((cursor): cursor is string => Boolean(cursor))
+    .sort(
+      (left, right) => new Date(right).getTime() - new Date(left).getTime(),
+    )
+
+  return {
+    items: merged,
+    next_cursor: cursors[0] ?? null,
+  }
+}
+
 export default function DlpMessagesTab({ canManage }: Props) {
   const [messages, setMessages] = useState<DlpMessageSummary[]>([])
   const [filter, setFilter] = useState('')
@@ -200,16 +244,19 @@ export default function DlpMessagesTab({ canManage }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
   const [review, setReview] = useState<PendingReview | null>(null)
 
-  const load = useCallback(async (append = false) => {
+  const load = useCallback(async (append = false, cursor: string | null = null) => {
     if (append) setLoadingMore(true)
     else setLoading(true)
     setError(null)
     try {
-      const response = await listDlpMessages({
-        state: filter && filter !== 'reviewable' ? filter : undefined,
-        before: append ? nextCursor ?? undefined : undefined,
-        limit: 50,
-      })
+      const response = filter === 'reviewable'
+        ? await fetchReviewablePage(append ? cursor : null)
+        : await listDlpMessages({
+            state: filter || undefined,
+            before: append ? cursor ?? undefined : undefined,
+            limit: 50,
+          })
+
       setMessages((current) => {
         const combined = append ? [...current, ...response.items] : response.items
         return [...new Map(combined.map((item) => [item.message_id, item])).values()]
@@ -221,20 +268,14 @@ export default function DlpMessagesTab({ canManage }: Props) {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [filter, nextCursor])
+  }, [filter])
 
   useEffect(() => {
     setMessages([])
     setNextCursor(null)
-    void load(false)
-    // nextCursor is intentionally excluded: a cursor update must not reload page one.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter])
-
-  const visibleMessages = useMemo(
-    () => filter === 'reviewable' ? messages.filter(isReviewable) : messages,
-    [filter, messages],
-  )
+    setExpanded(null)
+    void load(false, null)
+  }, [filter, load])
 
   return (
     <div className="space-y-4">
@@ -255,7 +296,15 @@ export default function DlpMessagesTab({ canManage }: Props) {
               <option key={item.value} value={item.value}>{item.label}</option>
             ))}
           </select>
-          <Button variant="outline" size="sm" onClick={() => void load(false)} loading={loading}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setNextCursor(null)
+              void load(false, null)
+            }}
+            loading={loading}
+          >
             <RefreshCw size={13} /> Refresh
           </Button>
         </div>
@@ -270,12 +319,21 @@ export default function DlpMessagesTab({ canManage }: Props) {
         </div>
       )}
 
+      {filter === 'reviewable' && (
+        <p className="text-xs text-[#71717a]">
+          Showing held decisions from <code>decided</code> and <code>held</code> states.
+          Server-side reviewable filtering is not available yet.
+        </p>
+      )}
+
       <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#13131a]">
         {error ? (
           <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
             <AlertTriangle size={20} className="text-red-400" />
             <p className="text-sm text-red-300">{error}</p>
-            <Button variant="outline" size="sm" onClick={() => void load(false)}>Retry</Button>
+            <Button variant="outline" size="sm" onClick={() => void load(false, null)}>
+              Retry
+            </Button>
           </div>
         ) : loading ? (
           <div className="space-y-2 p-4">
@@ -283,7 +341,7 @@ export default function DlpMessagesTab({ canManage }: Props) {
               <div key={index} className="h-12 animate-pulse rounded-lg bg-white/[0.03]" />
             ))}
           </div>
-        ) : visibleMessages.length === 0 ? (
+        ) : messages.length === 0 ? (
           <div className="flex flex-col items-center px-4 py-14 text-center">
             <Mail size={23} className="text-[#52525b]" />
             <p className="mt-3 text-sm text-[#71717a]">No messages match this filter.</p>
@@ -300,9 +358,9 @@ export default function DlpMessagesTab({ canManage }: Props) {
               </Tr>
             </Thead>
             <Tbody>
-              {visibleMessages.map((message) => (
+              {messages.map((message) => (
                 <Fragment key={message.message_id}>
-                  <Tr key={message.message_id}>
+                  <Tr>
                     <Td className="whitespace-nowrap align-top text-xs">
                       {new Date(message.received_at).toLocaleString()}
                     </Td>
@@ -365,7 +423,7 @@ export default function DlpMessagesTab({ canManage }: Props) {
                     </Td>
                   </Tr>
                   {expanded === message.message_id && (
-                    <Tr key={`${message.message_id}-detail`} className="hover:bg-transparent">
+                    <Tr className="hover:bg-transparent">
                       <Td colSpan={5} className="bg-white/[0.015]">
                         <div className="grid gap-3 py-1 md:grid-cols-3">
                           <div>
@@ -391,7 +449,11 @@ export default function DlpMessagesTab({ canManage }: Props) {
 
       {!loading && !error && nextCursor && (
         <div className="flex justify-center">
-          <Button variant="outline" onClick={() => void load(true)} loading={loadingMore}>
+          <Button
+            variant="outline"
+            onClick={() => void load(true, nextCursor)}
+            loading={loadingMore}
+          >
             Load more
           </Button>
         </div>
@@ -401,7 +463,7 @@ export default function DlpMessagesTab({ canManage }: Props) {
         <ReviewDialog
           review={review}
           onClose={() => setReview(null)}
-          onComplete={async () => { await load(false) }}
+          onComplete={async () => { await load(false, null) }}
         />
       )}
     </div>
