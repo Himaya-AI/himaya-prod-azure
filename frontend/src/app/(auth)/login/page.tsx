@@ -12,7 +12,7 @@ import { toast } from '@/components/ui/Toast'
 
 const LOGIN_STRINGS = {
   en: {
-    subtitle: 'Sign in to view your email security workspace',
+    subtitle: 'Sign in to view your workspace security governance',
     emailLabel: 'Email',
     emailPlaceholder: 'you@company.com',
     passwordLabel: 'Password',
@@ -26,7 +26,7 @@ const LOGIN_STRINGS = {
     legalAnd: 'and',
   },
   ar: {
-    subtitle: 'سجّل دخولك للوصول إلى بيئة أمان البريد الإلكتروني',
+    subtitle: 'سجّل دخولك لعرض حوكمة أمان مساحة العمل',
     emailLabel: 'البريد الإلكتروني',
     emailPlaceholder: 'you@company.com',
     passwordLabel: 'كلمة المرور',
