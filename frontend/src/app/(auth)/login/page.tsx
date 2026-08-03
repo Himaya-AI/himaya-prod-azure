@@ -20,6 +20,7 @@ const LOGIN_STRINGS = {
     forgotPassword: 'Forgot password?',
     langToggle: 'العربية',
     invalidCreds: 'Invalid email or password.',
+    serviceUnavailable: 'Service temporarily unavailable. Please try again shortly.',
     privacyPolicy: 'Privacy Policy',
     termsOfService: 'Terms of Service',
     legalPrefix: 'By signing in, you agree to our',
@@ -34,6 +35,7 @@ const LOGIN_STRINGS = {
     forgotPassword: 'نسيت كلمة المرور؟',
     langToggle: 'English',
     invalidCreds: 'البريد الإلكتروني أو كلمة المرور غير صحيحة.',
+    serviceUnavailable: 'الخدمة غير متاحة مؤقتًا. يرجى المحاولة مرة أخرى بعد قليل.',
     privacyPolicy: 'سياسة الخصوصية',
     termsOfService: 'شروط الخدمة',
     legalPrefix: 'بتسجيل الدخول، فإنك توافق على',
@@ -82,8 +84,24 @@ export default function LoginPage() {
       } catch {}
       router.push('/dashboard')
     } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { detail?: string } } }
-      toast.error(axiosErr?.response?.data?.detail ?? s.invalidCreds, 7000)
+      const axiosErr = err as {
+        response?: { status?: number; data?: unknown }
+      }
+      const response = axiosErr?.response
+      const isUnavailable =
+        !response ||
+        (response.status ?? 0) >= 500 ||
+        (response.data !== undefined &&
+          response.data !== null &&
+          typeof response.data !== 'object')
+      const detail =
+        response?.data &&
+        typeof response.data === 'object' &&
+        'detail' in response.data &&
+        typeof response.data.detail === 'string'
+          ? response.data.detail
+          : undefined
+      toast.error(isUnavailable ? s.serviceUnavailable : (detail ?? s.invalidCreds), 7000)
     }
     setLoading(false)
   }
