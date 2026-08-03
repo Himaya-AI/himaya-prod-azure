@@ -1495,11 +1495,20 @@ async def lifespan(app: FastAPI):
                 logger.warning(f"AWS scan loop error: {_ale}")
             await _aio.sleep(AWS_SCAN_INTERVAL)
     
-    try:
-        asyncio.create_task(_aws_security_scan_loop())
-        logger.info("AWS Security auto-scan loop started (5 min interval)")
-    except Exception as _awse:
-        logger.warning(f"AWS scan loop start failed: {_awse}")
+    # Keep the high-frequency legacy AWS scan independently disableable for
+    # incident mitigation. Manual scans and the unified CSPM/DSPM loop remain
+    # available when this loop is disabled.
+    if os.getenv("HELIOS_AWS_SECURITY_AUTOLOOP", "1") == "1":
+        try:
+            asyncio.create_task(_aws_security_scan_loop())
+            logger.info("AWS Security auto-scan loop started (2 min interval)")
+        except Exception as _awse:
+            logger.warning(f"AWS scan loop start failed: {_awse}")
+    else:
+        logger.info(
+            "AWS Security auto-scan loop DISABLED "
+            "(HELIOS_AWS_SECURITY_AUTOLOOP=0). Manual scans remain available."
+        )
 
     # ── SaaS Security watchdog (restarts on crash, 5 min interval) ─────────────
     async def _saas_worker_watchdog():
