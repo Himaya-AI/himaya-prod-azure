@@ -1,14 +1,19 @@
 """
 Himaya AWS Security Service — scans AWS resources for data inventory and security issues.
 Supports: S3, EFS, EBS, RDS
+
+boto3 is synchronous. Every public async entry point delegates its complete
+scanner body to the dedicated CSPM executor so scans cannot block the request
+event loop or consume the default executor used by auth's bcrypt offload.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Any
 from dataclasses import dataclass, field
+
+from backend.services.cspm.executor import run_blocking
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +86,9 @@ class AWSSecurityService:
 
     async def test_connection(self) -> dict:
         """Test AWS credentials by calling STS GetCallerIdentity."""
+        return await run_blocking(self._test_connection_sync)
+
+    def _test_connection_sync(self) -> dict:
         try:
             import boto3
             sts = boto3.client(
@@ -89,8 +97,7 @@ class AWSSecurityService:
                 aws_secret_access_key=self.secret_access_key,
                 region_name=self.default_region,
             )
-            loop = asyncio.get_event_loop()
-            identity = await loop.run_in_executor(None, sts.get_caller_identity)
+            identity = sts.get_caller_identity()
             return {
                 "success": True,
                 "account_id": identity.get("Account"),
@@ -107,15 +114,17 @@ class AWSSecurityService:
 
     async def scan_s3_buckets(self) -> tuple[list[AWSResource], list[SecurityFinding]]:
         """Scan all S3 buckets for data inventory and security issues."""
+        return await run_blocking(self._scan_s3_buckets_sync)
+
+    def _scan_s3_buckets_sync(self) -> tuple[list[AWSResource], list[SecurityFinding]]:
         resources: list[AWSResource] = []
         findings: list[SecurityFinding] = []
 
         try:
             s3 = self._get_client("s3")
-            loop = asyncio.get_event_loop()
             
             # List all buckets
-            response = await loop.run_in_executor(None, s3.list_buckets)
+            response = s3.list_buckets()
             buckets = response.get("Buckets", [])
             
             for bucket in buckets:
@@ -124,9 +133,7 @@ class AWSSecurityService:
                 
                 # Get bucket location
                 try:
-                    loc_resp = await loop.run_in_executor(
-                        None, lambda: s3.get_bucket_location(Bucket=bucket_name)
-                    )
+                    loc_resp = s3.get_bucket_location(Bucket=bucket_name)
                     region = loc_resp.get("LocationConstraint") or "us-east-1"
                 except Exception:
                     region = "us-east-1"
@@ -135,9 +142,7 @@ class AWSSecurityService:
                 encryption_enabled = False
                 encryption_type = None
                 try:
-                    enc_resp = await loop.run_in_executor(
-                        None, lambda: s3.get_bucket_encryption(Bucket=bucket_name)
-                    )
+                    enc_resp = s3.get_bucket_encryption(Bucket=bucket_name)
                     rules = enc_resp.get("ServerSideEncryptionConfiguration", {}).get("Rules", [])
                     if rules:
                         encryption_enabled = True
@@ -148,9 +153,7 @@ class AWSSecurityService:
                 # Check public access
                 public_access = False
                 try:
-                    acl_resp = await loop.run_in_executor(
-                        None, lambda: s3.get_bucket_acl(Bucket=bucket_name)
-                    )
+                    acl_resp = s3.get_bucket_acl(Bucket=bucket_name)
                     for grant in acl_resp.get("Grants", []):
                         grantee = grant.get("Grantee", {})
                         if grantee.get("URI") in (
@@ -164,9 +167,7 @@ class AWSSecurityService:
 
                 # Check block public access
                 try:
-                    block_resp = await loop.run_in_executor(
-                        None, lambda: s3.get_public_access_block(Bucket=bucket_name)
-                    )
+                    block_resp = s3.get_public_access_block(Bucket=bucket_name)
                     config = block_resp.get("PublicAccessBlockConfiguration", {})
                     if not all([
                         config.get("BlockPublicAcls"),
@@ -185,13 +186,11 @@ class AWSSecurityService:
                     from datetime import timedelta
                     if created:
                         # Look for CreateBucket event around creation time
-                        ct_resp = await loop.run_in_executor(
-                            None, lambda: ct.lookup_events(
-                                LookupAttributes=[{"AttributeKey": "ResourceName", "AttributeValue": bucket_name}],
-                                StartTime=created - timedelta(hours=1),
-                                EndTime=created + timedelta(hours=1),
-                                MaxResults=5,
-                            )
+                        ct_resp = ct.lookup_events(
+                            LookupAttributes=[{"AttributeKey": "ResourceName", "AttributeValue": bucket_name}],
+                            StartTime=created - timedelta(hours=1),
+                            EndTime=created + timedelta(hours=1),
+                            MaxResults=5,
                         )
                         for event in ct_resp.get("Events", []):
                             if event.get("EventName") == "CreateBucket":
@@ -252,6 +251,9 @@ class AWSSecurityService:
 
     async def scan_efs_filesystems(self, regions: list[str] = None) -> tuple[list[AWSResource], list[SecurityFinding]]:
         """Scan EFS filesystems for data inventory and security issues."""
+        return await run_blocking(self._scan_efs_filesystems_sync, regions)
+
+    def _scan_efs_filesystems_sync(self, regions: list[str] = None) -> tuple[list[AWSResource], list[SecurityFinding]]:
         resources: list[AWSResource] = []
         findings: list[SecurityFinding] = []
         regions = regions or [self.default_region]
@@ -259,9 +261,8 @@ class AWSSecurityService:
         for region in regions:
             try:
                 efs = self._get_client("efs", region)
-                loop = asyncio.get_event_loop()
                 
-                response = await loop.run_in_executor(None, efs.describe_file_systems)
+                response = efs.describe_file_systems()
                 filesystems = response.get("FileSystems", [])
                 
                 for fs in filesystems:
@@ -312,6 +313,9 @@ class AWSSecurityService:
 
     async def scan_ebs_volumes(self, regions: list[str] = None) -> tuple[list[AWSResource], list[SecurityFinding]]:
         """Scan EBS volumes and snapshots for data inventory and security issues."""
+        return await run_blocking(self._scan_ebs_volumes_sync, regions)
+
+    def _scan_ebs_volumes_sync(self, regions: list[str] = None) -> tuple[list[AWSResource], list[SecurityFinding]]:
         resources: list[AWSResource] = []
         findings: list[SecurityFinding] = []
         regions = regions or [self.default_region]
@@ -319,10 +323,9 @@ class AWSSecurityService:
         for region in regions:
             try:
                 ec2 = self._get_client("ec2", region)
-                loop = asyncio.get_event_loop()
                 
                 # Scan volumes
-                vol_response = await loop.run_in_executor(None, ec2.describe_volumes)
+                vol_response = ec2.describe_volumes()
                 volumes = vol_response.get("Volumes", [])
                 
                 for vol in volumes:
@@ -368,9 +371,7 @@ class AWSSecurityService:
                         ))
 
                 # Scan snapshots
-                snap_response = await loop.run_in_executor(
-                    None, lambda: ec2.describe_snapshots(OwnerIds=["self"])
-                )
+                snap_response = ec2.describe_snapshots(OwnerIds=["self"])
                 snapshots = snap_response.get("Snapshots", [])
                 
                 for snap in snapshots:
@@ -381,10 +382,8 @@ class AWSSecurityService:
                     # Check if snapshot is public
                     public_access = False
                     try:
-                        attr_resp = await loop.run_in_executor(
-                            None, lambda: ec2.describe_snapshot_attribute(
-                                SnapshotId=snap_id, Attribute="createVolumePermission"
-                            )
+                        attr_resp = ec2.describe_snapshot_attribute(
+                            SnapshotId=snap_id, Attribute="createVolumePermission"
                         )
                         for perm in attr_resp.get("CreateVolumePermissions", []):
                             if perm.get("Group") == "all":
@@ -437,6 +436,9 @@ class AWSSecurityService:
 
     async def scan_rds_instances(self, regions: list[str] = None) -> tuple[list[AWSResource], list[SecurityFinding]]:
         """Scan RDS instances for data inventory and security issues."""
+        return await run_blocking(self._scan_rds_instances_sync, regions)
+
+    def _scan_rds_instances_sync(self, regions: list[str] = None) -> tuple[list[AWSResource], list[SecurityFinding]]:
         resources: list[AWSResource] = []
         findings: list[SecurityFinding] = []
         regions = regions or [self.default_region]
@@ -444,9 +446,8 @@ class AWSSecurityService:
         for region in regions:
             try:
                 rds = self._get_client("rds", region)
-                loop = asyncio.get_event_loop()
                 
-                response = await loop.run_in_executor(None, rds.describe_db_instances)
+                response = rds.describe_db_instances()
                 instances = response.get("DBInstances", [])
                 
                 for db in instances:
@@ -618,6 +619,9 @@ class AWSSecurityService:
         Scan CloudTrail for sensitive admin actions.
         Detects: IAM changes, security group changes, KMS operations, etc.
         """
+        return await run_blocking(self._scan_cloudtrail_events_sync, regions)
+
+    def _scan_cloudtrail_events_sync(self, regions: list[str]) -> list[SecurityFinding]:
         findings: list[SecurityFinding] = []
         
         SENSITIVE_EVENTS = {
@@ -737,6 +741,9 @@ class AWSSecurityService:
         Scan IAM users for security issues.
         Checks: MFA status, access key age, console access, inactive users.
         """
+        return await run_blocking(self._scan_iam_users_sync)
+
+    def _scan_iam_users_sync(self) -> tuple[list[AWSResource], list[SecurityFinding]]:
         resources: list[AWSResource] = []
         findings: list[SecurityFinding] = []
         
@@ -925,6 +932,9 @@ class AWSSecurityService:
         Scan IAM roles for security issues and last used info.
         Checks: Role last used, trust policy, attached policies.
         """
+        return await run_blocking(self._scan_iam_roles_sync)
+
+    def _scan_iam_roles_sync(self) -> tuple[list[AWSResource], list[SecurityFinding]]:
         resources: list[AWSResource] = []
         findings: list[SecurityFinding] = []
         
@@ -1026,13 +1036,15 @@ class AWSSecurityService:
         Scan EC2 instances with launch info from CloudTrail.
         Tracks: who launched the instance, when, and current state.
         """
+        return await run_blocking(self._scan_ec2_instances_sync, regions)
+
+    def _scan_ec2_instances_sync(self, regions: list[str]) -> tuple[list[AWSResource], list[SecurityFinding]]:
         resources: list[AWSResource] = []
         findings: list[SecurityFinding] = []
         
         for region in regions:
             try:
                 ec2 = self._get_client("ec2", region)
-                loop = asyncio.get_event_loop()
                 
                 paginator = ec2.get_paginator("describe_instances")
                 page_iterator = paginator.paginate()
