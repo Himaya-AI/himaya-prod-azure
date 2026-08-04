@@ -196,11 +196,15 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
     }
   }
 
-  // Launch interactive EC2 session
+  // Launch interactive Azure Container Instances (ACI) session
   const launchSession = async () => {
     setSessionLoading(true)
     try {
-      const res = await api.post('/api/sandbox/session', { threat_id: threatId })
+      // This endpoint front-loads attachment downloads + S3 uploads before
+      // returning the session_id, which can take far longer than the global
+      // 15s axios timeout. Override the timeout for just this request so the
+      // launch doesn't abort with "timeout of 15000ms exceeded".
+      const res = await api.post('/api/sandbox/session', { threat_id: threatId }, { timeout: 120000 })
       setSession(res.data)
       // Start polling for ready status
       sessionPollRef.current = setInterval(async () => {
@@ -234,9 +238,9 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
   }, [])
 
   const SESSION_STATUS_STEPS = [
-    { key: 'launching', label: 'Allocating isolated EC2 instance' },
-    { key: 'starting',  label: 'Instance starting — loading OS' },
-    { key: 'booting',   label: 'Installing desktop + noVNC' },
+    { key: 'launching', label: 'Allocating isolated Azure sandbox' },
+    { key: 'starting',  label: 'Container group starting' },
+    { key: 'booting',   label: 'Booting desktop + noVNC' },
     { key: 'ready',     label: 'Session ready' },
   ]
   const sessionStepIdx = SESSION_STATUS_STEPS.findIndex(s => s.key === session?.status)
@@ -367,7 +371,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
             {!session && (
               <>
                 <p className="text-xs text-slate-400">
-                  Spins up an isolated EC2 instance with a monitored Linux desktop. Opens the email in
+                  Spins up an isolated Azure container with a monitored Linux desktop. Opens the email in
                   Firefox inside the sandbox — links are fully clickable, network activity is logged.
                   Session auto-terminates after {30} minutes.
                 </p>
@@ -375,7 +379,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
                   {[
                     ['Desktop', 'Isolated desktop', 'No access to production systems'],
                     ['Network', 'Network monitored', 'All DNS + TCP activity logged'],
-                    ['Timer', '30 min sessions', 'Auto-terminates, EC2 billed per use'],
+                    ['Timer', '30 min sessions', 'Auto-terminates; Azure billed per use'],
                   ].map(([, title, desc]) => (
                     <div key={title} className="bg-[#060f1a] rounded-lg p-2 border border-[#1a2d5a]/40">
                       <div className="font-medium text-slate-300 text-xs mb-0.5">{title}</div>
@@ -399,9 +403,9 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
                 <p className="text-xs text-amber-300 font-medium mb-1">Infrastructure setup required</p>
                 <p className="text-xs text-amber-400/70 leading-relaxed">{session.message}</p>
                 <p className="text-xs text-slate-500 mt-2">
-                  Set <code className="bg-black/30 px-1 rounded">SANDBOX_AMI_ID</code>,{' '}
-                  <code className="bg-black/30 px-1 rounded">SANDBOX_SG_ID</code>, and{' '}
-                  <code className="bg-black/30 px-1 rounded">SANDBOX_SUBNET_ID</code> in ECS task env vars.
+                  Set <code className="bg-black/30 px-1 rounded">AZURE_SUBSCRIPTION_ID</code>,{' '}
+                  <code className="bg-black/30 px-1 rounded">AZURE_RESOURCE_GROUP</code>, and (optionally){' '}
+                  <code className="bg-black/30 px-1 rounded">SANDBOX_ACI_IMAGE</code> in the backend env vars.
                 </p>
               </div>
             )}
@@ -463,7 +467,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
                         Sandbox desktop is ready
                       </p>
                       <p className="text-xs text-slate-400 leading-relaxed">
-                        The isolated EC2 desktop is running with the email loaded in Firefox.
+                        The isolated Azure sandbox desktop is running with the email loaded in Firefox.
                         Click below to open the live session — it launches in a new browser tab
                         (required because the sandbox uses HTTP on port 6080).
                       </p>
@@ -497,7 +501,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
 
                 <p className="text-xs text-slate-500">
                   ⚠️ Isolated environment — no access to production systems. All network activity
-                  is logged and uploaded to S3 when session ends.
+                  is logged and uploaded to Azure Blob Storage when session ends.
                 </p>
               </div>
             )}
@@ -505,7 +509,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
             {session && session.status === 'terminated' && (
               <div className="rounded-lg bg-slate-800/40 border border-slate-700/30 p-4 text-center">
                 <p className="text-sm text-slate-300 font-medium mb-1">Session terminated</p>
-                <p className="text-xs text-slate-500 mb-3">EC2 instance destroyed. Activity logs saved.</p>
+                <p className="text-xs text-slate-500 mb-3">Azure sandbox container destroyed. Activity logs saved.</p>
                 <button
                   onClick={() => setSession(null)}
                   className="px-4 py-1.5 rounded text-xs bg-[#3b6ef6]/20 text-[#3b6ef6] border border-[#3b6ef6]/30 hover:bg-[#3b6ef6]/30 transition-colors"
@@ -518,18 +522,18 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
             {session && session.status === 'error' && (
               <div className="rounded-lg bg-red-900/20 border border-red-700/30 p-4">
                 <p className="text-xs text-red-400 font-semibold mb-1.5">Session launch failed</p>
-                {session.message?.includes('AccessDenied') ? (
+                {(session.message?.includes('AuthorizationFailed') || session.message?.includes('Forbidden')) ? (
                   <div className="space-y-2">
                     <p className="text-xs text-red-300">
-                      AWS AccessDeniedException — the backend IAM role lacks ECS permissions.
+                      Azure AuthorizationFailed — the backend managed identity lacks permission to create Container Instances.
                     </p>
                     <div className="bg-black/30 rounded p-2.5 text-[11px] font-mono text-slate-400 space-y-0.5">
-                      <div>Required: <span className="text-amber-300">ecs:RunTask</span></div>
-                      <div>Required: <span className="text-amber-300">iam:PassRole</span> (on task execution role)</div>
-                      <div>Cluster: <span className="text-slate-300">himaya</span></div>
+                      <div>Required role: <span className="text-amber-300">Contributor</span> (or ACI Contributor)</div>
+                      <div>Scope: <span className="text-amber-300">resource group</span></div>
+                      <div>Resource group: <span className="text-slate-300">rg-himaya-prod</span></div>
                     </div>
                     <p className="text-[11px] text-slate-500 leading-relaxed">
-                      Attach <code className="bg-black/20 px-0.5 rounded">AmazonECSTaskExecutionRolePolicy</code> to the backend task role and ensure <code className="bg-black/20 px-0.5 rounded">iam:PassRole</code> is granted for the sandbox task execution role.
+                      Assign the <code className="bg-black/20 px-0.5 rounded">Contributor</code> role to the backend managed identity on the sandbox resource group so it can create/delete <code className="bg-black/20 px-0.5 rounded">Microsoft.ContainerInstance</code> groups.
                     </p>
                   </div>
                 ) : (

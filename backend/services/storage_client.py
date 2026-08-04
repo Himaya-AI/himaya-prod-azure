@@ -117,6 +117,58 @@ class StorageClient:
 
         raise RuntimeError("No storage provider available")
 
+    async def generate_download_url(
+        self,
+        container: str,
+        key: str,
+        expires_seconds: int = 1800,
+        download_filename: Optional[str] = None,
+    ) -> str:
+        """
+        Return a time-limited, read-only download URL for a blob/object.
+
+        Azure: issues a short-lived user-delegation SAS (works with managed
+        identity / DefaultAzureCredential — no account key required).
+        S3 fallback: issues a presigned GET URL.
+        """
+        await self._ensure_client()
+
+        if self._provider == "azure":
+            from datetime import datetime, timedelta, timezone
+            from azure.storage.blob import BlobSasPermissions, generate_blob_sas
+
+            start = datetime.now(timezone.utc) - timedelta(minutes=5)
+            expiry = datetime.now(timezone.utc) + timedelta(seconds=expires_seconds)
+
+            # User-delegation key is required for SAS when authenticating via
+            # DefaultAzureCredential (no shared account key available).
+            udk = await self._azure_client.get_user_delegation_key(start, expiry)
+
+            content_disposition = (
+                f'attachment; filename="{download_filename}"' if download_filename else None
+            )
+            sas = generate_blob_sas(
+                account_name=self._azure_account,
+                container_name=container,
+                blob_name=key,
+                user_delegation_key=udk,
+                permission=BlobSasPermissions(read=True),
+                start=start,
+                expiry=expiry,
+                content_disposition=content_disposition,
+            )
+            return f"https://{self._azure_account}.blob.core.windows.net/{container}/{key}?{sas}"
+
+        if self._provider == "s3" and self._s3_client:
+            params = {"Bucket": container, "Key": key}
+            if download_filename:
+                params["ResponseContentDisposition"] = f'attachment; filename="{download_filename}"'
+            return self._s3_client.generate_presigned_url(
+                "get_object", Params=params, ExpiresIn=expires_seconds
+            )
+
+        raise RuntimeError("No storage provider available")
+
     async def close(self) -> None:
         if self._azure_client:
             await self._azure_client.close()

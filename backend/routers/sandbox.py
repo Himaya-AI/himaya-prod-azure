@@ -441,7 +441,8 @@ async def create_interactive_session(
             # The live API fetch (Graph/Gmail) is the source of truth.
             if t.email_message_id:
                 try:
-                    import boto3 as _boto3, base64 as _b64, os as _os_s
+                    import base64 as _b64, os as _os_s
+                    from backend.services.storage_client import storage_client as _storage
                     from backend.models.db_models import OrgIntegration
                     from backend.services.baseline_ingestion import _decrypt as _dec_s, _refresh_m365_token, _get_service_account_headers_sync
                     import asyncio as _asyncio_att
@@ -486,8 +487,15 @@ async def create_interactive_session(
 
                     logger.info(f"Sandbox attachment fetch: provider={_provider} headers_set={bool(_gmail_headers)} msg_id={t.email_message_id[:30] if t.email_message_id else None}")
                     if _gmail_headers:
-                        _s3 = _boto3.client("s3", region_name="us-west-2")
-                        _bucket = _os_s.getenv("SANDBOX_S3_BUCKET", "himaya-evidence")
+                        # Azure Blob Storage (managed-identity SAS download URLs).
+                        _container = _os_s.getenv("AZURE_STORAGE_CONTAINER", "himaya-evidence")
+
+                        async def _store_att(_name: str, _data: bytes) -> str:
+                            _sk = f"sandbox-attachments/{t.id}/{_name}"
+                            await _storage.upload(container=_container, key=_sk, data=_data)
+                            return await _storage.generate_download_url(
+                                _container, _sk, expires_seconds=1800, download_filename=_name
+                            )
                         import httpx as _hx_att
                         async with _hx_att.AsyncClient(timeout=30) as _hc:
                             if _provider == "google":
@@ -526,11 +534,7 @@ async def create_interactive_session(
                                         elif _ap.get("data"):
                                             _abytes = _b64.urlsafe_b64decode(_ap["data"] + "==")
                                         if _abytes:
-                                            _sk = f"sandbox-attachments/{t.id}/{_aname}"
-                                            _s3.put_object(Bucket=_bucket, Key=_sk, Body=_abytes,
-                                                           ContentDisposition=f'attachment; filename="{_aname}"')
-                                            _pu = _s3.generate_presigned_url("get_object",
-                                                Params={"Bucket": _bucket, "Key": _sk}, ExpiresIn=1800)
+                                            _pu = await _store_att(_aname, _abytes)
                                             presigned_attachments.append({"name": _aname, "url": _pu, "size": len(_abytes), "too_large": False})
                                         else:
                                             presigned_attachments.append({"name": _aname, "url": None, "size": _ap["size"], "too_large": False})
@@ -557,11 +561,7 @@ async def create_interactive_session(
                                             _cb64 = _ar2.json().get("contentBytes", "")
                                             if _cb64:
                                                 _abytes = _b64.b64decode(_cb64)
-                                                _sk = f"sandbox-attachments/{t.id}/{_aname}"
-                                                _s3.put_object(Bucket=_bucket, Key=_sk, Body=_abytes,
-                                                               ContentDisposition=f'attachment; filename="{_aname}"')
-                                                _pu = _s3.generate_presigned_url("get_object",
-                                                    Params={"Bucket": _bucket, "Key": _sk}, ExpiresIn=1800)
+                                                _pu = await _store_att(_aname, _abytes)
                                                 presigned_attachments.append({"name": _aname, "url": _pu, "size": len(_abytes), "too_large": False})
                 except Exception as _ae:
                     logger.warning(f"Sandbox: attachment fetch failed (non-fatal): {_ae}")
