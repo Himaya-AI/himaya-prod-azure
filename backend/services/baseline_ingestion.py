@@ -23,7 +23,7 @@ from typing import Optional
 import httpx
 import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select, text, or_
 
 from backend.database import AsyncSessionLocal
 from backend.models.db_models import OrgIntegration, Organization, User
@@ -35,8 +35,16 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 
 async def _upsert_directory_users(db: AsyncSession, org_id: str, users: list, provider: str,
-                                    aliases_count: int = 0, shared_count: int = 0):
-    """Upsert directory users, deactivate removed users, update per-provider counts."""
+                                    aliases_count: int = 0, shared_count: int = 0,
+                                    authoritative: bool = True):
+    """Upsert directory users, deactivate removed users, update per-provider counts.
+
+    ``authoritative`` MUST be True only when ``users`` is a COMPLETE directory
+    listing for this provider covering the whole domain. Pass False for partial
+    / intentionally-scoped lists (a single admin mailbox after a directory-API
+    failure, or a group-scoped subset) so we never mass-deactivate real
+    mailboxes off a bad or partial read.
+    """
     if not users:
         return
 
@@ -65,21 +73,35 @@ async def _upsert_directory_users(db: AsyncSession, org_id: str, users: list, pr
                 directory_provider=provider,
             ))
 
-    # Deactivate users removed from this provider's directory
-    # Scoped strictly to users enrolled by THIS provider to prevent cross-provider deactivation
-    if active_emails:
-        all_users_result = await db.execute(
+    # Deactivate mailboxes that vanished from this provider's directory.
+    # Scoped by the DOMAINS this listing actually covered so we:
+    #   - also catch legacy rows with directory_provider IS NULL (previously
+    #     these were never deactivated, so deleted mailboxes lingered forever
+    #     in the People / Inbox pages), and
+    #   - never touch a different provider's / different domain's mailboxes.
+    # Only runs on an authoritative (complete, unscoped) listing to avoid
+    # mass-deactivation off a partial API read.
+    if authoritative and active_emails:
+        active_domains = {e.rsplit("@", 1)[-1] for e in active_emails if "@" in e}
+        stale_result = await db.execute(
             select(User).where(
                 User.org_id == org_id,
                 User.role == "user",
                 User.is_active == True,
-                User.directory_provider == provider,
+                or_(User.directory_provider == provider,
+                    User.directory_provider.is_(None)),
             )
         )
-        for stale in all_users_result.scalars().all():
-            if stale.email.lower() not in active_emails:
-                logger.info(f"Deactivating removed user {stale.email} (not in {provider} directory)")
+        for stale in stale_result.scalars().all():
+            se = (stale.email or "").lower()
+            if not se or se in active_emails:
+                continue
+            # Only deactivate within domains this provider authoritatively listed.
+            if se.rsplit("@", 1)[-1] in active_domains:
+                logger.info(f"Deactivating removed mailbox {stale.email} (not in {provider} directory)")
                 stale.is_active = False
+                if not stale.directory_provider:
+                    stale.directory_provider = provider
 
     # Update per-provider OrgIntegration counts (guarded — columns added via migration)
     try:
@@ -279,9 +301,12 @@ async def _ingest_m365(
         except Exception as _ge:
             logger.warning(f"M365 groups fetch failed (non-fatal): {_ge}")
 
-        # Save directory users to DB with alias/shared counts
+        # Save directory users to DB with alias/shared counts.
+        # Group-scoped listings are intentionally partial — don't deactivate
+        # out-of-scope mailboxes off them.
         await _upsert_directory_users(db, org_id, users, "m365",
-                                       aliases_count=m365_aliases, shared_count=m365_shared)
+                                       aliases_count=m365_aliases, shared_count=m365_shared,
+                                       authoritative=(scope_group_id is None))
         await redis.set(f"baseline:{org_id}:m365:status", "running", ex=7200)
         await redis.set(f"baseline:{org_id}:m365:mailboxes", total_users, ex=30*24*3600)
 
@@ -595,9 +620,11 @@ async def _ingest_google(
             else:
                 logger.warning(f"Google baseline: group {scope_group_id} returned 0 members — keeping full user list")
 
+        _used_admin_fallback = False
         if not users:
             # Last resort: scan just the authenticated admin's mailbox via userinfo
             logger.warning(f"Directory listing failed for org {org_id} — falling back to admin mailbox only")
+            _used_admin_fallback = True
             try:
                 me_resp = await client.get(
                     "https://www.googleapis.com/oauth2/v2/userinfo",
@@ -626,9 +653,14 @@ async def _ingest_google(
         # (users with delegated access or group emails serve as shared inboxes)
         google_shared = sum(1 for u in users if u.get("isAdmin") is False and u.get("isMailboxSetup") is True and u.get("isEnrolledIn2Sv") is False)
 
-        # Save directory users to DB (now tracks aliases/shared counts too)
+        # Save directory users to DB (now tracks aliases/shared counts too).
+        # Only authoritative (safe to deactivate stale mailboxes) when this is a
+        # complete, unscoped directory listing — never on the admin-only fallback
+        # or a group-scoped subset.
+        _google_authoritative = (scope_group_id is None) and (not _used_admin_fallback)
         await _upsert_directory_users(db, org_id, users, "google",
-                                       aliases_count=google_aliases, shared_count=google_shared)
+                                       aliases_count=google_aliases, shared_count=google_shared,
+                                       authoritative=_google_authoritative)
 
         # Per-provider baseline Redis keys
         await redis.set(f"baseline:{org_id}:google:status", "running", ex=7200)

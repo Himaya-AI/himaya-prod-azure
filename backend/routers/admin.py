@@ -1695,6 +1695,110 @@ async def gmail_trash_loop_emails(
 # New: Per-org live metrics
 # ---------------------------------------------------------------------------
 
+@router.get("/sync-health", dependencies=[Depends(verify_admin_key)])
+async def sync_health(db: AsyncSession = Depends(get_db)):
+    """Delta-sync (inbox scanning) health across all active email integrations.
+
+    /workers/health covers the SaaS/AWS/DLP/posture workers but NOT the email
+    delta-sync loop that scans Gmail/Outlook mailboxes. This surfaces whether
+    that loop is actually running per customer in prod, using the Redis signals
+    the loop already writes: ``delta_sync:{org}:{provider}:last_at`` and
+    ``sync_history:{org}``. A mailbox integration whose last delta is older than
+    ``stale_after_seconds`` is flagged unhealthy (scanning likely stalled).
+    """
+    import json as _json
+    from datetime import timezone as _tz
+
+    stale_after = int(os.getenv("SYNC_HEALTH_STALE_AFTER_SEC", "300"))
+
+    rows = (await db.execute(text(
+        """
+        SELECT oi.org_id, oi.provider, oi.status,
+               COALESCE(oi.mailbox_count, 0) AS mailbox_count,
+               COALESCE(oi.groups_count, 0) AS groups_count,
+               oi.last_baseline_at, oi.scope_group_id,
+               o.name AS org_name, o.domain AS org_domain
+        FROM org_integrations oi
+        JOIN organizations o ON o.id = oi.org_id
+        WHERE oi.status = 'active'
+        ORDER BY o.name, oi.provider
+        """
+    ))).fetchall()
+
+    r = None
+    redis_reachable = False
+    try:
+        import redis.asyncio as aioredis
+        r = aioredis.from_url(os.getenv("REDIS_URL", "redis://localhost:6379"), decode_responses=True)
+        await r.ping()
+        redis_reachable = True
+    except Exception:
+        redis_reachable = False
+
+    now_ts = datetime.now().timestamp()
+    integrations = []
+    healthy_count = 0
+    for row in rows:
+        org_id = str(row.org_id)
+        provider = row.provider
+        last_delta_at = None
+        seconds_since = None
+        recent_runs = []
+        if redis_reachable and r is not None:
+            try:
+                _last = await r.get(f"delta_sync:{org_id}:{provider}:last_at")
+                if _last:
+                    _ts = float(_last)
+                    last_delta_at = datetime.fromtimestamp(_ts, tz=_tz.utc).isoformat()
+                    _delta = now_ts - _ts
+                    seconds_since = round(_delta, 1) if _delta >= 0 else None
+                _hist = await r.lrange(f"sync_history:{org_id}", 0, 4)
+                for h in _hist:
+                    try:
+                        recent_runs.append(_json.loads(h))
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        is_healthy = seconds_since is not None and seconds_since <= stale_after
+        if is_healthy:
+            healthy_count += 1
+        integrations.append({
+            "org_id": org_id,
+            "org_name": row.org_name,
+            "org_domain": row.org_domain,
+            "provider": provider,
+            "status": row.status,
+            "mailbox_count": int(row.mailbox_count or 0),
+            "groups_count": int(row.groups_count or 0),
+            "scope_group_id": row.scope_group_id,
+            "last_baseline_at": row.last_baseline_at.isoformat() if row.last_baseline_at else None,
+            "last_delta_at": last_delta_at,
+            "seconds_since_delta": seconds_since,
+            "healthy": is_healthy,
+            "recent_runs": recent_runs,
+        })
+
+    if r is not None:
+        try:
+            await r.aclose()
+        except Exception:
+            pass
+
+    total = len(integrations)
+    return {
+        "generated_at": datetime.now(_tz.utc).isoformat(),
+        "redis_reachable": redis_reachable,
+        "stale_after_seconds": stale_after,
+        "summary": {
+            "active_integrations": total,
+            "healthy": healthy_count,
+            "stale": total - healthy_count,
+        },
+        "integrations": integrations,
+    }
+
+
 @router.get("/orgs/{org_id}/metrics", dependencies=[Depends(verify_admin_key)])
 async def get_org_metrics(org_id: str, db: AsyncSession = Depends(get_db)):
     """Live metrics for a single org — inboxes, email counts, costs, auto-triage status."""

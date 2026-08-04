@@ -237,7 +237,12 @@ async def _delta_sync_integration_snap(db, redis, integration):
                     logger.warning(f"Google delta: group {_google_scope_gid} returned 0 members — keeping full user list")
 
             if users:
-                await _upsert_directory_users(db, org_id, users, "google")
+                # Group-scoped listings are intentionally partial — only allow
+                # stale-mailbox deactivation on a complete (unscoped) directory.
+                await _upsert_directory_users(
+                    db, org_id, users, "google",
+                    authoritative=(_google_scope_gid is None),
+                )
                 # Explicitly stamp mailbox_count so the UI reflects it immediately
                 # (_upsert_directory_users does this too but has its own try/except —
                 # belt-and-suspenders so reconnect shows count on next delta cycle)
@@ -757,17 +762,45 @@ async def _delta_sync_integration_snap(db, redis, integration):
                 _scope_gid = integration.get("scope_group_id") or None
                 if _scope_gid:
                     _usr_url = (f"{GRAPH_API_BASE}/groups/{_scope_gid}/members"
-                                f"?$select=mail,userPrincipalName,displayName,accountEnabled&$top=200")
+                                f"?$select=mail,userPrincipalName,displayName,accountEnabled&$top=999")
                 else:
                     _usr_url = (f"{GRAPH_API_BASE}/users?$select=id,mail,displayName,userPrincipalName,"
-                                "accountEnabled,assignedLicenses,proxyAddresses&$top=200")
-                _usr_resp = await client.get(_usr_url, headers=headers)
-                logger.info(f"M365 delta: user dir refresh status={_usr_resp.status_code} for org {org_id}")
-                if _usr_resp.status_code == 200:
-                    _all_users = _usr_resp.json().get("value", [])
+                                "accountEnabled,assignedLicenses,proxyAddresses&$top=999")
+                # Paginate the FULL directory. Previously this was a single
+                # $top=200 page, so orgs with >200 mailboxes — and any newly
+                # added mailbox landing beyond page 1 — were never discovered
+                # in delta and only appeared on the 15-day rebaseline.
+                _all_users = []
+                _dir_ok = False
+                _page_url = _usr_url
+                _pages = 0
+                while _page_url and _pages < 50:
+                    _usr_resp = await client.get(_page_url, headers=headers)
+                    if _usr_resp.status_code != 200:
+                        if _pages == 0:
+                            logger.warning(
+                                f"M365 delta: user dir refresh failed status={_usr_resp.status_code} "
+                                f"for org {org_id} — new mailboxes won't be discovered. Check the M365 "
+                                f"token has User.Read.All / Directory.Read.All (may need re-consent)."
+                            )
+                        break
+                    _dir_ok = True
+                    _usr_body = _usr_resp.json()
+                    _all_users.extend(_usr_body.get("value", []))
+                    _page_url = _usr_body.get("@odata.nextLink")
+                    _pages += 1
+                if _dir_ok:
                     _active_users = [u for u in _all_users if u.get("accountEnabled", True) and (u.get("mail") or u.get("userPrincipalName"))]
-                    logger.info(f"M365 delta: {len(_active_users)} active users found for org {org_id}")
-                    await _upsert_directory_users(db, org_id, _active_users, "m365")
+                    logger.info(
+                        f"M365 delta: {len(_active_users)} active users across {_pages} page(s) for org {org_id}"
+                        + (f" (scoped to group {_scope_gid})" if _scope_gid else "")
+                    )
+                    # Group-scoped listings are intentionally partial — only allow
+                    # stale-mailbox deactivation on a complete (unscoped) directory.
+                    await _upsert_directory_users(
+                        db, org_id, _active_users, "m365",
+                        authoritative=(_scope_gid is None),
+                    )
                     # Explicitly stamp mailbox_count immediately after directory sync
                     # so UI shows correct count on next poll (belt-and-suspenders)
                     try:
