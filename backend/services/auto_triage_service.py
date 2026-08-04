@@ -1443,7 +1443,7 @@ def _build_triage_rollup_html(
                style="display:block;border:0;outline:0;height:auto;" />
         </td>
         <td style="padding-left:14px;">
-          <div style="color:#3b6ef6;font-size:12px;font-weight:700;letter-spacing:.04em;">HELIOS ANALYSIS</div>
+          <div style="color:#3b6ef6;font-size:12px;font-weight:700;letter-spacing:.04em;">HIMAYA ANALYSIS</div>
           <div style="color:#64748b;font-size:11px;margin-top:2px;">AUTO-TRIAGE REPORT — PAST 24 HOURS</div>
         </td>
       </tr>

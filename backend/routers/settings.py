@@ -373,7 +373,8 @@ async def invite_user(
             org_name = _org.name if _org else "Your Organization"
             _se(to=req.email.lower(),
                 subject=f"Your Himaya access credentials — {org_name}",
-                html_body=f"""<div style="font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;background:#111117;border-radius:12px;padding:32px;border:1px solid #1e293b;">
+                html_body=f"""<div style="font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;background:#0d1b2e;border-radius:12px;padding:32px;border:1px solid #1a2744;">
+                  <img src="cid:himaya-logo" alt="Himaya" width="150" style="display:block;max-width:150px;height:auto;border:0;margin-bottom:20px;" />
                   <h2 style="color:#e2e8f0;">Access credentials resent</h2>
                   <p style="color:#64748b;">Your login details for <strong style="color:#e2e8f0;">{org_name}</strong> on Himaya:</p>
                   <div style="background:#0d1117;border-radius:8px;padding:16px;border:1px solid #1e293b;margin:16px 0;">
@@ -411,11 +412,9 @@ async def invite_user(
         org = org_result.scalar_one_or_none()
         org_name = org.name if org else "Your Organization"
         html = f"""
-        <div style="font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;background:#111117;border-radius:12px;padding:32px;border:1px solid #1e293b;">
+        <div style="font-family:system-ui,sans-serif;max-width:520px;margin:40px auto;background:#0d1b2e;border-radius:12px;padding:32px;border:1px solid #1a2744;">
           <div style="margin-bottom:24px;">
-            <div style="width:40px;height:40px;background:linear-gradient(135deg,#3b6ef6,#8b5cf6);border-radius:8px;display:inline-flex;align-items:center;justify-content:center;margin-bottom:12px;">
-              <span style="color:white;font-size:20px;font-weight:900;">H</span>
-            </div>
+            <img src="cid:himaya-logo" alt="Himaya" width="150" style="display:block;max-width:150px;height:auto;border:0;margin-bottom:16px;" />
             <h2 style="color:#e2e8f0;font-size:18px;margin:0;">You've been invited to Himaya</h2>
             <p style="color:#64748b;font-size:13px;margin-top:6px;">{org_name} has added you as a {req.role}.</p>
           </div>

@@ -359,7 +359,7 @@ class ForgotPasswordRequest(_BaseModel):
 @router.post("/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
     """Send password reset link to user's email."""
-    from backend.services.email_service import send_email
+    from backend.services.email_service import send_password_reset
     import redis as sync_redis, secrets as sec
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalar_one_or_none()
@@ -372,13 +372,7 @@ async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends
 
     _frontend = os.getenv("FRONTEND_URL", "https://app.himaya.ai")
     reset_url = f"{_frontend}/set-password?token={token}"
-    html = f"""<div style="font-family:sans-serif;padding:40px;background:#0a0a0f;color:#f9fafb;">
-        <h2>Reset your password</h2>
-        <p>Click the link below to set a new password. This link expires in 1 hour.</p>
-        <a href="{reset_url}" style="background:#6d28d9;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;display:inline-block;margin-top:16px;">Set New Password</a>
-        <p style="color:#6b7280;margin-top:24px;font-size:12px;">If you didn't request this, ignore this email.</p>
-    </div>"""
-    send_email(user.email, "Reset your Himaya password", html)
+    send_password_reset(user.email, reset_url, expires_hint="1 hour")
     return {"message": "If that email exists, a reset link has been sent."}
 
 

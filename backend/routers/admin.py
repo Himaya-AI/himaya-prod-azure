@@ -2039,6 +2039,8 @@ async def setup_new_org(req: NewOrgRequest, db: AsyncSession = Depends(get_db)):
     <tr><td align="center">
       <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:#0d1b2e;border-radius:16px;border:1px solid #1a2744;overflow:hidden;">
         <tr><td style="background:#0d1b2e;padding:32px 40px 24px;text-align:center;border-bottom:2px solid #3b6ef6;">
+          <img src="cid:himaya-logo" alt="Himaya" width="160"
+               style="display:block;margin:0 auto 16px;max-width:160px;height:auto;border:0;outline:none;text-decoration:none;" />
           <h2 style="margin:0;color:#ffffff;font-size:22px;">Welcome to Himaya</h2>
           <p style="margin:8px 0 0;color:#a1a1aa;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Your account is ready</p>
         </td></tr>

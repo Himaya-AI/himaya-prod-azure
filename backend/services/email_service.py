@@ -215,6 +215,77 @@ def send_admin_otp(to_email: str, otp: str) -> bool:
     return send_email(to_email, "Himaya — Admin Login Code", html, text)
 
 
+def send_password_reset(to_email: str, reset_url: str, expires_hint: str = "1 hour") -> bool:
+    """Send a branded password-reset / set-password email.
+
+    Uses the shared Himaya brand shell (inline logo + footer) so the reset
+    email matches every other transactional email instead of the old bare
+    unbranded HTML that shipped from the auth router.
+    """
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:{BG};font-family:{FONT};">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:{BG};padding:48px 20px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;background:{CARD};border-radius:16px;border:1px solid {BORDER};overflow:hidden;">
+
+        <!-- Header -->
+        <tr><td style="background:{CARD};padding:36px 40px 28px;text-align:center;border-bottom:2px solid {BLUE};">
+          {LOGO_HTML}
+          <p style="margin:12px 0 0;color:{MUTED};font-size:11px;letter-spacing:2px;text-transform:uppercase;font-family:{FONT};">
+            Password Reset
+          </p>
+        </td></tr>
+
+        <!-- Body -->
+        <tr><td style="padding:40px;">
+          <h2 style="margin:0 0 8px;color:{WHITE};font-size:20px;font-weight:700;font-family:{FONT};">
+            Reset your password
+          </h2>
+          <p style="margin:0 0 28px;color:{MUTED};font-size:14px;line-height:1.7;font-family:{FONT};">
+            We received a request to set a new password for your Himaya account.
+            Click the button below to choose a new password. This link expires in
+            <strong style="color:{WHITE};">{expires_hint}</strong>.
+          </p>
+
+          <!-- CTA -->
+          <table cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-bottom:28px;">
+            <tr><td align="center">
+              <a href="{reset_url}"
+                 style="display:inline-block;background:{BLUE};color:{WHITE};text-decoration:none;
+                        padding:14px 44px;border-radius:10px;font-size:15px;font-weight:700;
+                        letter-spacing:0.2px;font-family:{FONT};">
+                Set New Password
+              </a>
+            </td></tr>
+          </table>
+
+          <p style="margin:0;color:{MUTED};font-size:12px;line-height:1.6;font-family:{FONT};">
+            If you didn't request this, you can safely ignore this email — your
+            password won't change. For help, contact
+            <a href="mailto:support@himaya.ai" style="color:{BLUE};text-decoration:none;">support@himaya.ai</a>.
+          </p>
+        </td></tr>
+
+        {_footer()}
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+    text = (
+        f"Himaya — Password Reset\n\n"
+        f"We received a request to set a new password for your Himaya account.\n\n"
+        f"Set a new password: {reset_url}\n\n"
+        f"This link expires in {expires_hint}.\n\n"
+        f"If you didn't request this, ignore this email — your password won't change.\n\n"
+        f"© 2026 Himaya Technologies Group Inc. — app.himaya.ai"
+    )
+    return send_email(to_email, "Reset your Himaya password", html, text)
+
+
 def send_threat_alert(to_email: str, org_name: str, threat_type: str,
                       risk_score: int, recipient: str, action: str,
                       detection_time: Optional[str] = None) -> bool:
