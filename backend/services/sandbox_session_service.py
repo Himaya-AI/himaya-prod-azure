@@ -8,9 +8,9 @@ throwaway isolated browser, streamed to the browser over noVNC.
 Architecture:
   1. Analyst clicks "Launch Interactive Session"
   2. Backend creates an ACI container group (SANDBOX_ACI_IMAGE) with a public IP
-     + DNS label, exposing port 6080 (noVNC).
+     + DNS label, exposing the noVNC port (default 6901).
   3. Backend polls until the group is Running and the FQDN/IP is assigned.
-  4. noVNC URL = http://{fqdn}:6080/vnc.html?autoconnect=true&resize=scale
+  4. noVNC URL = http://{fqdn}:6901/vnc.html?autoconnect=true&resize=scale
   5. Session auto-terminates after SANDBOX_SESSION_TIMEOUT_MINUTES (default 30),
      deleting the container group.
 
@@ -41,8 +41,14 @@ logger = logging.getLogger(__name__)
 # Public noVNC desktop image. A custom image can pre-render the email via the
 # EMAIL_HTML_B64 env var; the default public image gives an isolated Firefox
 # desktop the analyst drives manually. Override with SANDBOX_ACI_IMAGE.
-SANDBOX_ACI_IMAGE  = os.getenv("SANDBOX_ACI_IMAGE", "dorowu/ubuntu-desktop-lxde-vnc:latest")
-SANDBOX_NOVNC_PORT = int(os.getenv("SANDBOX_NOVNC_PORT", "6080"))
+#
+# consol/ubuntu-xfce-vnc serves noVNC on HTTP port 6901 at
+# /vnc.html?password=<VNC_PW> and reads the password from the VNC_PW env var
+# (set below), matching the streaming URL we construct. The container listens
+# on 6901 directly (no host port remap), which is required for ACI since it
+# cannot remap ports the way `docker run -p 6080:80` does.
+SANDBOX_ACI_IMAGE  = os.getenv("SANDBOX_ACI_IMAGE", "consol/ubuntu-xfce-vnc:latest")
+SANDBOX_NOVNC_PORT = int(os.getenv("SANDBOX_NOVNC_PORT", "6901"))
 SESSION_TIMEOUT    = int(os.getenv("SANDBOX_SESSION_TIMEOUT_MINUTES", "30"))
 SANDBOX_CPU        = float(os.getenv("SANDBOX_ACI_CPU", "1"))
 SANDBOX_MEM_GB     = float(os.getenv("SANDBOX_ACI_MEMORY_GB", "2"))
