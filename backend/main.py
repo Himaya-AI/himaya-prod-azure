@@ -735,25 +735,64 @@ async def lifespan(app: FastAPI):
     except Exception as _saas_dd_e:
         logger.warning(f"saas_alerts dedup startup step failed (non-fatal): {_saas_dd_e}")
 
-    # Ensure tenant admin password hash is in sync with settings (prevents login breakage after re-provision)
-    try:
-        from backend.utils.hashing import hash_password, verify_password
-        async with AsyncSessionLocal() as _pw_session:
-            from backend.models.db_models import User
-            from sqlalchemy import select as _sel
-            _res = await _pw_session.execute(_sel(User).where(User.email == settings.VENDOR_ADMIN_EMAIL))
-            _admin_user = _res.scalar_one_or_none()
-            if _admin_user and _admin_user.password_hash:
-                # Only re-sync if the current hash doesn't verify — avoids unnecessary writes
-                if not verify_password(settings.VENDOR_ADMIN_PASSWORD, _admin_user.password_hash):
+    # Bootstrap the vendor-admin password ONLY when the account has no password
+    # yet (first provision / recovery). We intentionally do NOT overwrite an
+    # existing hash: previously this ran on EVERY restart and reset the admin
+    # back to VENDOR_ADMIN_PASSWORD, silently clobbering any custom password the
+    # admin set in the app — which locked adnan out with "invalid credentials"
+    # after every deploy. Emergency recovery is still possible by nulling the
+    # password_hash column in the DB, which re-triggers this bootstrap seed.
+    # Retry with backoff to handle DB lock timeouts during startup.
+    import asyncio
+    from backend.utils.hashing import hash_password
+    _pw_max_retries = 5
+    _pw_retry_delay = 2  # seconds
+    for _pw_attempt in range(_pw_max_retries):
+        try:
+            async with AsyncSessionLocal() as _pw_session:
+                from backend.models.db_models import User
+                from sqlalchemy import select as _sel
+                _res = await _pw_session.execute(_sel(User).where(User.email == settings.VENDOR_ADMIN_EMAIL))
+                _admin_user = _res.scalar_one_or_none()
+                if _admin_user and not _admin_user.password_hash:
+                    # No password on file → seed the env-provided bootstrap password.
                     _admin_user.password_hash = hash_password(settings.VENDOR_ADMIN_PASSWORD)
                     _admin_user.is_active = True
                     await _pw_session.commit()
-                    logger.warning(f"startup: re-synced password hash for {settings.VENDOR_ADMIN_EMAIL} (was stale)")
+                    logger.warning(f"startup: bootstrapped password for {settings.VENDOR_ADMIN_EMAIL} (had none)")
                 else:
-                    logger.info(f"startup: password hash OK for {settings.VENDOR_ADMIN_EMAIL}")
-    except Exception as _pw_e:
-        logger.warning(f"startup: password sync check failed (non-fatal): {_pw_e}")
+                    logger.info(f"startup: password present for {settings.VENDOR_ADMIN_EMAIL}; leaving user-set password untouched")
+                break  # Success, exit retry loop
+        except Exception as _pw_e:
+            if _pw_attempt < _pw_max_retries - 1:
+                logger.warning(f"startup: password bootstrap attempt {_pw_attempt + 1}/{_pw_max_retries} failed (retrying in {_pw_retry_delay}s): {_pw_e}")
+                await asyncio.sleep(_pw_retry_delay)
+                _pw_retry_delay *= 2  # Exponential backoff
+            else:
+                logger.warning(f"startup: password bootstrap failed after {_pw_max_retries} attempts (non-fatal): {_pw_e}")
+
+    # Ensure durable password-reset token table exists. Reset tokens moved OFF
+    # Redis (which has intermittent connect/read timeouts on Azure Managed
+    # Redis) and into Postgres so the forgot-password → set-password round-trip
+    # never fails with a spurious "Invalid or expired token".
+    try:
+        async with AsyncSessionLocal() as _prt:
+            from sqlalchemy import text as _prt_text
+            await _prt.execute(_prt_text("""
+                CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                    token TEXT PRIMARY KEY,
+                    user_id UUID NOT NULL,
+                    expires_at TIMESTAMPTZ NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                );
+            """))
+            await _prt.execute(_prt_text(
+                "CREATE INDEX IF NOT EXISTS idx_prt_user ON password_reset_tokens(user_id);"
+            ))
+            await _prt.commit()
+        logger.info("password_reset_tokens table ensured")
+    except Exception as _prt_e:
+        logger.warning(f"password_reset_tokens setup failed (non-fatal): {_prt_e}")
 
     # Store background task references to prevent GC and enable exception logging
     _background_tasks = []
