@@ -469,7 +469,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
                       <p className="text-xs text-slate-400 leading-relaxed">
                         The isolated Azure sandbox desktop is running with the email loaded in Firefox.
                         Click below to open the live session — it launches in a new browser tab
-                        (required because the sandbox uses HTTP on port 6901).
+                        (required because the sandbox uses HTTP on port 6080).
                       </p>
                     </div>
                   </div>
