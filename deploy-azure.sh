@@ -47,6 +47,21 @@ docker buildx build \
     --push \
     ./frontend
 
+# ── Sandbox (interactive live-session desktop) ───────────────────────────────
+# Custom noVNC desktop image used by the ACI live-session feature. It renders
+# the suspicious email + attachment download links and preinstalls file
+# inspection tools (LibreOffice, Evince, unzip/p7zip, tcpdump/tshark, Wine).
+# Rarely changes; safe to rebuild on every deploy. Referenced by the backend
+# via SANDBOX_ACI_IMAGE=${ACR_NAME}.azurecr.io/himaya-sandbox:latest.
+echo "Building sandbox image..."
+docker buildx build \
+    --platform linux/amd64 \
+    --file sandbox/Dockerfile \
+    --tag "${ACR_NAME}.azurecr.io/himaya-sandbox:latest" \
+    --tag "${ACR_NAME}.azurecr.io/himaya-sandbox:$(git rev-parse --short HEAD || echo latest)" \
+    --push \
+    ./sandbox
+
 # ── Deploy to Container Apps ─────────────────────────────────────────────────
 echo "Deploying backend..."
 az containerapp update \

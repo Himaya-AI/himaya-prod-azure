@@ -6,9 +6,16 @@ if [ -n "$VNC_PASSWORD" ]; then
     VNC_PASSWORD="$VNC_PASSWORD" python3 /tmp/make_vnc_passwd.py
 fi
 
-# Write email HTML — prefer Azure Blob key, then S3 key, then inline b64
+# Write email HTML — prefer a short-lived SAS URL (no creds needed), then an
+# Azure Blob key (managed identity), then an S3 key, then inline base64.
 mkdir -p /sandbox/email
-if [ -n "$EMAIL_BLOB_KEY" ] && [ -n "$AZURE_STORAGE_ACCOUNT" ]; then
+if [ -n "$EMAIL_HTML_URL" ]; then
+    if curl -fsSL "$EMAIL_HTML_URL" -o /sandbox/email/index.html; then
+        echo "Email HTML fetched from SAS URL"
+    else
+        echo "Email HTML SAS URL fetch failed" >&2
+    fi
+elif [ -n "$EMAIL_BLOB_KEY" ] && [ -n "$AZURE_STORAGE_ACCOUNT" ]; then
     # Fetch from Azure Blob using managed identity or anonymous SAS URL
     python3 -c "
 import os, sys
