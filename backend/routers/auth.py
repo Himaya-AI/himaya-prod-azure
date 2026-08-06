@@ -358,40 +358,67 @@ class ForgotPasswordRequest(_BaseModel):
 
 @router.post("/forgot-password")
 async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
-    """Send password reset link to user's email."""
+    """Send password reset link to user's email.
+
+    The one-time token is stored in Postgres (``password_reset_tokens``), NOT
+    Redis. Azure Managed Redis exhibits intermittent connect/read timeouts in
+    prod; the old Redis-backed flow silently dropped the token, so users who
+    clicked a valid reset link got "Invalid or expired token" on submit.
+    Postgres is durable and shared across replicas, so the token always
+    round-trips regardless of Redis health.
+    """
+    import logging as _logging
     from backend.services.email_service import send_password_reset
-    import redis as sync_redis, secrets as sec
+    import secrets as sec
+    from sqlalchemy import text as _text
+
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalar_one_or_none()
     if not user:
         return {"message": "If that email exists, a reset link has been sent."}
 
     token = sec.token_urlsafe(32)
-    r = sync_redis.from_url(settings.REDIS_URL)
-    r.setex(f"pwd_reset:{token}", 3600, str(user.id))
+    # One active token per user; expiry computed server-side to avoid any
+    # client/DB timezone skew (TIMESTAMPTZ + now()).
+    await db.execute(_text("DELETE FROM password_reset_tokens WHERE user_id = :uid"),
+                     {"uid": str(user.id)})
+    await db.execute(_text(
+        "INSERT INTO password_reset_tokens (token, user_id, expires_at) "
+        "VALUES (:token, :uid, now() + interval '1 hour')"
+    ), {"token": token, "uid": str(user.id)})
+    await db.commit()
 
     _frontend = os.getenv("FRONTEND_URL", "https://app.himaya.ai")
     reset_url = f"{_frontend}/set-password?token={token}"
-    send_password_reset(user.email, reset_url, expires_hint="1 hour")
+    try:
+        send_password_reset(user.email, reset_url, expires_hint="1 hour")
+    except Exception as _e:
+        _logging.getLogger(__name__).warning(f"forgot-password: email send failed for {user.email}: {_e}")
     return {"message": "If that email exists, a reset link has been sent."}
 
 
 @router.post("/set-password")
 async def set_password(req: SetPasswordRequest, db: AsyncSession = Depends(get_db)):
-    """Set a new password using a reset/activation token."""
-    import redis as sync_redis
-    r = sync_redis.from_url(settings.REDIS_URL)
-    user_id = r.get(f"pwd_reset:{req.token}")
-    if not user_id:
-        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    """Set a new password using a reset/activation token (Postgres-backed)."""
+    from sqlalchemy import text as _text
 
-    result = await db.execute(select(User).where(User.id == user_id.decode()))
+    row = (await db.execute(_text(
+        "SELECT user_id FROM password_reset_tokens "
+        "WHERE token = :token AND expires_at > now()"
+    ), {"token": req.token})).first()
+    if not row:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    user_id = str(row[0])
+
+    result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     user.password_hash = await hash_password_async(req.new_password)
     user.is_active = True
+    # Single-use: burn the token now that it's been consumed.
+    await db.execute(_text("DELETE FROM password_reset_tokens WHERE token = :token"),
+                     {"token": req.token})
     await db.commit()
-    r.delete(f"pwd_reset:{req.token}")
     return {"message": "Password set successfully. You can now log in."}
