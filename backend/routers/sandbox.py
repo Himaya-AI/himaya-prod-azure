@@ -369,12 +369,11 @@ async def create_interactive_session(
             # ── Blocked email notice ────────────────────────────────────────
             if t.action_taken in ('BLOCK_DELETE', 'BLOCK'):
                 block_notice = """
-<!DOCTYPE html><html><body style='margin:0;padding:0;font-family:Arial'>
-<div style='background:#1a1a2e;color:#fff;padding:14px 20px;font-size:13px'>
-  <b>🔒 Himaya Live Sandbox</b>
+<!DOCTYPE html><html><body style='margin:0;padding:0;font-family:Arial,sans-serif'>
+<div style='background:#0e1a2e;padding:12px 20px;border-bottom:1px solid #1f3350'>
+  <img src="himaya_logo.png" alt="Himaya" style="height:24px;display:block">
 </div>
-<div style='padding:32px 24px;text-align:center'>
-  <div style='font-size:48px;margin-bottom:16px'>🚫</div>
+<div style='padding:40px 24px;text-align:center'>
   <div style='background:#cc3300;color:#fff;padding:16px 24px;border-radius:8px;max-width:480px;margin:0 auto'>
     <b>Email Permanently Blocked &amp; Deleted</b><br>
     <span style='font-size:13px;margin-top:8px;display:block'>This email was permanently blocked and deleted. Email body is not available for sandbox analysis.</span>
@@ -392,12 +391,15 @@ async def create_interactive_session(
 
             # ── Header bar ─────────────────────────────────────────────────
             header = f"""
-<div style='background:#1a1a2e;color:#fff;padding:14px 20px;font-family:Arial;font-size:13px'>
-  <div><b>🔒 Himaya Live Sandbox</b> — interact with links/attachments to observe behaviour</div>
-  <div style='margin-top:6px;color:#aaa'>
-    <b>From:</b> {t.sender or 'Unknown'} &nbsp;|&nbsp;
-    <b>Subject:</b> {t.subject or '(no subject)'} &nbsp;|&nbsp;
-    <b>Risk:</b> {t.risk_score or 'N/A'}
+<div style='background:#0e1a2e;color:#fff;padding:12px 20px;font-family:Arial,sans-serif;font-size:13px;border-bottom:1px solid #1f3350'>
+  <div style='display:flex;align-items:center'>
+    <img src="himaya_logo.png" alt="Himaya" style="height:24px;display:block;margin-right:12px">
+    <span style='color:#8ea3bd'>Live Sandbox — interact with links and attachments to observe behaviour</span>
+  </div>
+  <div style='margin-top:8px;color:#8ea3bd'>
+    <b style='color:#c7d2e0'>From:</b> {t.sender or 'Unknown'} &nbsp;|&nbsp;
+    <b style='color:#c7d2e0'>Subject:</b> {t.subject or '(no subject)'} &nbsp;|&nbsp;
+    <b style='color:#c7d2e0'>Risk:</b> {t.risk_score or 'N/A'}
   </div>
 </div>"""
 
@@ -426,7 +428,7 @@ async def create_interactive_session(
                 )
                 url_section = f"""
 <div style='padding:16px 20px;font-family:Arial'>
-  <h3 style='margin:0 0 10px;color:#cc3300'>⚠ Detected URLs — click to observe network activity</h3>
+  <h3 style='margin:0 0 10px;color:#cc3300'>Detected URLs — click to observe network activity</h3>
   <ul style='margin:0;padding-left:20px'>{url_links}</ul>
 </div><hr>"""
 
@@ -573,7 +575,7 @@ async def create_interactive_session(
             if presigned_attachments:
                 att_instruction_banner = """
 <div style='background:#fff3cd;border:1px solid #ffc107;border-radius:6px;padding:10px 16px;margin:0 20px 12px;font-family:Arial;font-size:12px;color:#856404'>
-  <b>💡 How to analyse attachments:</b> Click the download link below, save the file, then open it from the <b>Downloads folder</b> inside this browser session.
+  <b>How to analyse attachments:</b> Click the download link below to save the file, then open it from the <b>File Manager</b> (right-click the desktop &rarr; File Manager) inside this session.
 </div>"""
                 att_rows = ""
                 for _pa in presigned_attachments:
@@ -635,8 +637,9 @@ async def create_interactive_session(
   <b>Himaya AI Analysis:</b> {t.ai_explanation_en or 'N/A'}
 </div>"""
 
+            # Layout order: header, email body first, then detected links, then attachments
             email_html = f"""<!DOCTYPE html><html><body style='margin:0;padding:0'>
-{header}{url_section}{att_section}{body_section}{ai_footer}
+{header}{body_section}{url_section}{att_section}{ai_footer}
 </body></html>"""
 
     session = await create_sandbox_session(
