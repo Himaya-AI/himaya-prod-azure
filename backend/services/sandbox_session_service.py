@@ -286,9 +286,11 @@ async def _launch_aci_session(session_id: str, vnc_password: str, email_b64: str
         host = fqdn or public_ip
         # Give noVNC a few seconds to bind inside the container
         await asyncio.sleep(15)
+        # Chrome-free Himaya viewer (himaya.html) — full-screen RFB canvas with no
+        # noVNC toolbar/logo. VNC runs with SecurityTypes None so no password is
+        # needed; the page connects directly over websockify.
         streaming_url = (
-            f"http://{host}:{SANDBOX_NOVNC_PORT}/vnc.html"
-            f"?autoconnect=true&resize=scale&password={vnc_password}"
+            f"http://{host}:{SANDBOX_NOVNC_PORT}/himaya.html"
         )
         await _update({
             "status":        "ready",

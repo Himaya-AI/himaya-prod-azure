@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Himaya Secure Session</title>
+  <link rel="icon" type="image/png" href="himaya_logo.png">
+  <style>
+    :root { --bg:#0b1424; --panel:#0e1a2e; --muted:#8ea3bd; --accent:#3b82f6; }
+    html, body { margin:0; height:100%; background:var(--bg); overflow:hidden;
+                 font-family:'Segoe UI', Roboto, Arial, sans-serif; }
+    #screen { width:100vw; height:100vh; background:var(--bg); }
+    /* Full-screen status overlay shown until the remote desktop connects */
+    #overlay {
+      position:fixed; inset:0; z-index:10; background:var(--bg);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      transition:opacity .45s ease; text-align:center;
+    }
+    #overlay.hidden { opacity:0; pointer-events:none; }
+    #overlay img { width:220px; max-width:55vw; margin-bottom:26px; }
+    #overlay .msg { color:var(--muted); font-size:15px; letter-spacing:.3px; }
+    #overlay .sub { color:#5b6b82; font-size:12px; margin-top:10px; letter-spacing:.4px; }
+    #overlay .spinner {
+      margin-top:22px; width:26px; height:26px; border:3px solid #1f3350;
+      border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="screen"></div>
+  <div id="overlay">
+    <img src="himaya_logo.png" alt="Himaya">
+    <div class="msg" id="msg">Establishing secure isolated session&hellip;</div>
+    <div class="sub">Himaya Secure Sandbox &middot; Isolated Analysis Environment</div>
+    <div class="spinner"></div>
+  </div>
+
+  <script type="module">
+    import RFB from './core/rfb.js';
+
+    const overlay = document.getElementById('overlay');
+    const msg = document.getElementById('msg');
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${location.host}/websockify`;
+
+    // VNC server runs with SecurityTypes None, so no credentials are required.
+    let rfb;
+    let retries = 0;
+
+    function connect() {
+      rfb = new RFB(document.getElementById('screen'), url);
+      rfb.scaleViewport = true;    // fit remote desktop to the viewport
+      rfb.resizeSession = false;
+      rfb.background = '#0b1424';
+      rfb.showDotCursor = true;
+
+      rfb.addEventListener('connect', () => {
+        overlay.classList.add('hidden');
+      });
+
+      rfb.addEventListener('disconnect', () => {
+        overlay.classList.remove('hidden');
+        if (retries < 15) {
+          retries += 1;
+          msg.textContent = 'Reconnecting to secure session\u2026';
+          setTimeout(connect, 2000);
+        } else {
+          msg.textContent = 'Session ended.';
+        }
+      });
+    }
+
+    connect();
+  </script>
+</body>
+</html>
