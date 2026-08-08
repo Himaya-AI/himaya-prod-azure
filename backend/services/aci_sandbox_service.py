@@ -9,8 +9,10 @@ Same result contract as the legacy EC2 sandbox (EC2DetonationResult) so
 callers and the triage dossier stay unchanged.
 """
 import asyncio
+import base64
 import json
 import logging
+import os
 import re
 import uuid
 
@@ -19,89 +21,35 @@ from backend.services.ec2_sandbox_service import EC2DetonationResult, _compute_v
 
 logger = logging.getLogger(__name__)
 
-SANDBOX_IMAGE = "python:3.12-slim"
+# Custom Himaya detonator image (built from ./sandbox/detonator) preloaded with
+# open-source analysis tooling: Playwright/Chromium (real URL detonation),
+# ClamAV, YARA, oletools, pdf structural analysis, 7z/exiftool/file/strings.
+DETONATOR_IMAGE  = os.getenv("DETONATOR_ACI_IMAGE", "himayaprodacr.azurecr.io/himaya-detonator:latest")
+DETONATOR_CPU    = float(os.getenv("DETONATOR_ACI_CPU", "2"))
+DETONATOR_MEM_GB = float(os.getenv("DETONATOR_ACI_MEMORY_GB", "4"))
+
+# ACR pull credentials (shared with the interactive sandbox image).
+ACR_SERVER   = os.getenv("SANDBOX_ACR_SERVER", "")
+ACR_USERNAME = os.getenv("SANDBOX_ACR_USERNAME", "")
+ACR_PASSWORD = os.getenv("SANDBOX_ACR_PASSWORD", "")
+
 POLL_INTERVAL = 5   # seconds between container state checks
 RESULTS_START = "___SANDBOX_RESULTS_START___"
 RESULTS_END = "___SANDBOX_RESULTS_END___"
 
 
-def _build_detonation_script(urls: list, attachment_filenames: list) -> str:
-    """Pure-stdlib Python detonation script executed inside the ACI container."""
-    return f"""
-import json, re, ssl, urllib.request
-
-URLS = {json.dumps(urls)}
-ATTACHMENTS = {json.dumps(attachment_filenames)}
-
-url_results = []
-attachment_results = []
-
-class RedirectRecorder(urllib.request.HTTPRedirectHandler):
-    chain = []
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        RedirectRecorder.chain.append(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-for url in URLS:
-    result = {{
-        "url": url, "status_code": None, "redirect_chain": [],
-        "final_url": "", "page_snippet": "", "suspicious_indicators": [], "error": "",
-    }}
-    RedirectRecorder.chain = []
-    try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        opener = urllib.request.build_opener(
-            RedirectRecorder, urllib.request.HTTPSHandler(context=ctx)
-        )
-        req = urllib.request.Request(url, headers={{"User-Agent": "Mozilla/5.0"}})
-        resp = opener.open(req, timeout=15)
-        result["status_code"] = resp.status
-        result["final_url"] = resp.geturl()
-        result["redirect_chain"] = list(RedirectRecorder.chain)
-        body = resp.read(2048).decode("utf-8", errors="ignore")
-        result["page_snippet"] = body[:500]
-
-        indicators = []
-        body_lower = body.lower()
-        if any(kw in body_lower for kw in ["login", "password", "credential", "verify your account"]):
-            indicators.append("credential-harvesting-page")
-        if any(kw in body_lower for kw in ["download", ".exe", ".zip", "payload"]):
-            indicators.append("payload-delivery-page")
-        if len(result["redirect_chain"]) > 2:
-            indicators.append("redirect-chain-length-" + str(len(result["redirect_chain"])))
-        domain = re.search(r"https?://([^/]+)", result["final_url"] or url)
-        if domain:
-            d = domain.group(1)
-            if re.search(r"\\d{{4,}}", d) or len(d) > 40:
-                indicators.append("suspicious-domain-pattern")
-        result["suspicious_indicators"] = indicators
-    except Exception as e:
-        result["error"] = str(e)[:300]
-    url_results.append(result)
-
-MACRO_EXTS = {{".docm", ".xlsm", ".pptm", ".dotm", ".xltm", ".potm"}}
-HIGH_RISK_EXTS = {{".exe", ".msi", ".bat", ".cmd", ".ps1", ".vbs", ".js", ".jar", ".scr", ".pif"}}
-
-for filename in ATTACHMENTS:
-    result = {{
-        "filename": filename, "file_type": "", "strings_preview": "",
-        "macro_detected": False, "macro_vba_snippet": "", "error": "",
-    }}
-    ext = ("." + filename.rsplit(".", 1)[-1]).lower() if "." in filename else ""
-    result["file_type"] = ext
-    if ext in MACRO_EXTS:
-        result["macro_detected"] = True
-        result["macro_vba_snippet"] = "Macro-enabled Office format detected: " + ext
-    elif ext in HIGH_RISK_EXTS:
-        result["strings_preview"] = "High-risk executable/script extension: " + ext
-    attachment_results.append(result)
-
-print("{RESULTS_START}")
-print(json.dumps({{"url_results": url_results, "attachment_results": attachment_results}}))
-print("{RESULTS_END}")
-"""
+def _build_job(urls: list, attachments: list) -> str:
+    """Base64-encode the detonation job (urls + attachment SAS URLs) for the
+    container to read from the DETONATION_JOB env var."""
+    job = {
+        "urls": [u for u in (urls or []) if isinstance(u, str) and u.startswith("http")],
+        "attachments": [
+            {"name": a.get("name", "attachment"), "url": a.get("url", "")}
+            for a in (attachments or [])
+            if isinstance(a, dict) and a.get("url")
+        ],
+    }
+    return base64.b64encode(json.dumps(job).encode()).decode()
 
 
 async def detonate_in_aci(
@@ -110,11 +58,17 @@ async def detonate_in_aci(
     attachment_names: list,
     attachment_data: dict,
     org_id: str,
-    timeout_seconds: int = 120,
+    timeout_seconds: int = 180,
+    attachments: list = None,
 ) -> EC2DetonationResult:
     """
-    Main entry point: launch an ephemeral ACI container group, run URL /
-    attachment detonation inside it, parse results from logs, delete the group.
+    Main entry point: launch an ephemeral ACI container group running the Himaya
+    detonator image, which detonates URLs in real Chromium and analyzes
+    attachment bytes with ClamAV/YARA/oletools/pdf/7z, parse the results from
+    the container logs, then delete the group.
+
+    `attachments` is a list of {"name", "url"} where url is a short-lived SAS the
+    container downloads. `attachment_names` remains for metadata-only fallback.
     """
     try:
         from azure.identity import DefaultAzureCredential
@@ -124,6 +78,7 @@ async def detonate_in_aci(
             ContainerGroup,
             ContainerGroupRestartPolicy,
             EnvironmentVariable,
+            ImageRegistryCredential,
             OperatingSystemTypes,
             ResourceRequests,
             ResourceRequirements,
@@ -149,28 +104,49 @@ async def detonate_in_aci(
     try:
         client = await asyncio.to_thread(_make_client)
 
-        script = _build_detonation_script(urls, attachment_names)
+        job_b64 = _build_job(urls, attachments or [])
+        env_vars = [
+            EnvironmentVariable(name="THREAT_ID", value=threat_id),
+            EnvironmentVariable(name="DETONATION_JOB", secure_value=job_b64),
+        ]
+
+        # Private ACR pull credentials for the detonator image.
+        image_host = DETONATOR_IMAGE.split("/", 1)[0]
+        acr_server = ACR_SERVER or (image_host if ".azurecr.io" in image_host else "")
+        registry_creds = []
+        if acr_server and ACR_USERNAME and ACR_PASSWORD:
+            registry_creds.append(ImageRegistryCredential(
+                server=acr_server, username=ACR_USERNAME, password=ACR_PASSWORD,
+            ))
+        elif ".azurecr.io" in image_host:
+            logger.warning(
+                "aci_sandbox: detonator image is on private ACR but "
+                "SANDBOX_ACR_USERNAME/PASSWORD are unset — image pull will fail."
+            )
+
         container = Container(
             name="detonator",
-            image=SANDBOX_IMAGE,
-            command=["python", "-c", script],
+            image=DETONATOR_IMAGE,
             resources=ResourceRequirements(
-                requests=ResourceRequests(cpu=0.5, memory_in_gb=0.5)
+                requests=ResourceRequests(cpu=DETONATOR_CPU, memory_in_gb=DETONATOR_MEM_GB)
             ),
-            environment_variables=[EnvironmentVariable(name="THREAT_ID", value=threat_id)],
+            environment_variables=env_vars,
         )
         group = ContainerGroup(
             location=settings.AZURE_REGION,
             containers=[container],
             os_type=OperatingSystemTypes.LINUX,
             restart_policy=ContainerGroupRestartPolicy.NEVER,
+            image_registry_credentials=registry_creds or None,
         )
 
-        logger.info(f"aci_sandbox: launching {group_name} (urls={len(urls)}, attachments={len(attachment_names)})")
+        _n_att = len(attachments or []) or len(attachment_names or [])
+        logger.info(f"aci_sandbox: launching {group_name} image={DETONATOR_IMAGE} (urls={len(urls)}, attachments={_n_att})")
         poller = await asyncio.to_thread(
             client.container_groups.begin_create_or_update, rg, group_name, group
         )
-        await asyncio.to_thread(poller.result, 60)
+        # Detonator image is large (~2 GB) — allow time for the first pull.
+        await asyncio.to_thread(poller.result, 300)
 
         # Poll until the container terminates or timeout
         raw: dict = {}

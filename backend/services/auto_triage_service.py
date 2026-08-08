@@ -341,11 +341,10 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
         feed_ip_matches: list[str] = []
 
         try:
-            import redis.asyncio as aioredis
-            from backend.config import settings as _cfg
             from backend.services.threat_feeds_service import check_url_in_feeds, check_ip_in_feeds
+            from backend.utils.redis_client import get_redis
 
-            _redis = aioredis.from_url(_cfg.REDIS_URL, decode_responses=True)
+            _redis = get_redis()
             try:
                 for url in all_urls:
                     hit, feeds = await check_url_in_feeds(url, redis=_redis)
@@ -357,7 +356,7 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
                     if hit:
                         feed_ip_matches.extend(feeds)
             finally:
-                await _redis.aclose()
+                pass  # shared pooled Redis client — do not close
         except Exception as e:
             logger.debug(f"Threat feed checks failed (non-fatal): {e}")
 
@@ -386,19 +385,44 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
             finding = analyze_attachment(fname, body_preview)
             attachment_findings.append({"filename": fname, **finding})
 
-        # ── 5b. EC2 Sandbox Detonation (if URLs or attachments present) ──────────
+        # ── 5b. Sandbox detonation (real OSS tooling in an ephemeral ACI VM) ─────
         ec2_sandbox_result = None
         if all_urls or all_attachments:
+            # Fetch the original attachment bytes from the provider and stage them
+            # to Blob so the detonator container can download and analyze them
+            # (ClamAV/YARA/oletools/pdf/7z). Without this the container only sees
+            # filenames.
+            staged_attachments: list = []
+            if all_attachments:
+                try:
+                    from backend.services.attachment_fetch import fetch_threat_attachments
+                    import uuid as _fa_uuid
+                    from sqlalchemy import select as _fa_sel
+                    async with AsyncSessionLocal() as _fa_db:
+                        _fa_res = await _fa_db.execute(_fa_sel(Threat).where(
+                            Threat.id == _fa_uuid.UUID(threat_id),
+                            Threat.org_id == _fa_uuid.UUID(org_id),
+                        ))
+                        _fa_threat = _fa_res.scalar_one_or_none()
+                        if _fa_threat:
+                            _fetched = await fetch_threat_attachments(_fa_db, _fa_threat)
+                            staged_attachments = [a for a in _fetched if a.get("url")]
+                except Exception as _fa_e:
+                    logger.warning(f"auto_triage: attachment staging failed (non-fatal): {_fa_e}")
             try:
                 from backend.services.aci_sandbox_service import detonate_in_aci
-                logger.info(f"auto_triage: launching ACI sandbox for {threat_id} (urls={len(all_urls)}, attachments={len(all_attachments)})")
+                logger.info(
+                    f"auto_triage: launching ACI detonator for {threat_id} "
+                    f"(urls={len(all_urls)}, attachments_staged={len(staged_attachments)}/{len(all_attachments)})"
+                )
                 ec2_sandbox_result = await detonate_in_aci(
                     threat_id=threat_id,
                     urls=all_urls,
                     attachment_names=all_attachments,
                     attachment_data={},
                     org_id=org_id,
-                    timeout_seconds=90,
+                    timeout_seconds=180,
+                    attachments=staged_attachments,
                 )
                 if ec2_sandbox_result and not ec2_sandbox_result.error:
                     logger.info(f"auto_triage: EC2 sandbox verdict={ec2_sandbox_result.verdict} for {threat_id}")
@@ -486,7 +510,9 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
         feed_hits = len(feed_url_matches) + len(feed_ip_matches)
         graph_s = graph_history.get("graph_score", 0) or 0
         attachment_risk = sum(1 for f in attachment_findings if f.get("risk") in ("HIGH", "MEDIUM"))
-        ec2_malicious = 1 if ec2_sandbox_result and getattr(ec2_sandbox_result, "verdict", "") == "MALICIOUS" else 0
+        _ec2_verdict = getattr(ec2_sandbox_result, "verdict", "") if ec2_sandbox_result else ""
+        ec2_malicious = 1 if _ec2_verdict == "MALICIOUS" else 0
+        ec2_suspicious = 1 if _ec2_verdict == "SUSPICIOUS" else 0
         is_user_reported_boost = 10 if is_user_reported else 0
 
         # Claude's confidence is a primary content signal —
@@ -498,7 +524,7 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
         content_s = min(100, (
             vt_malicious * 25 + vt_suspicious * 10 +
             vt_domain_malicious * 20 + feed_hits * 15 +
-            attachment_risk * 15 + ec2_malicious * 30 +
+            attachment_risk * 15 + ec2_malicious * 30 + ec2_suspicious * 15 +
             claude_content_boost  # LLM body analysis score
         ))
         reputation_s = min(100, max(
@@ -515,6 +541,11 @@ async def investigate_threat(threat_id: str, org_id: str) -> dict:
             computed_risk = max(computed_risk, 70)
         elif verdict == "MARK_AS_SPAM":
             computed_risk = max(computed_risk, 40)
+        # Hard sandbox evidence overrides soft content scoring
+        if ec2_malicious:
+            computed_risk = max(computed_risk, 80)
+        elif ec2_suspicious:
+            computed_risk = max(computed_risk, 55)
 
         # Build sandbox audit record to persist permanently in DB
         sandbox_audit = None
@@ -1168,13 +1199,14 @@ async def run_auto_triage_loop(org_id: str) -> None:
     Processes up to 5 threats per cycle on a 2-minute interval.
     Each org gets its own loop task when toggled on.
     """
-    import redis.asyncio as aioredis
-    from backend.config import settings as _cfg
+    from backend.utils.redis_client import get_redis
 
     logger.info(f"auto_triage: loop started for org={org_id}")
 
     while True:
-        _redis = aioredis.from_url(_cfg.REDIS_URL, decode_responses=True)
+        # Shared, hardened Redis client (bounded timeouts) — a Redis hiccup
+        # no longer stalls this per-org loop for the OS TCP timeout.
+        _redis = get_redis()
         try:
             enabled = await _redis.get(f"auto_triage:enabled:{org_id}")
             if not enabled:
@@ -1231,7 +1263,7 @@ async def run_auto_triage_loop(org_id: str) -> None:
         except Exception as e:
             logger.error(f"auto_triage: loop error for org={org_id}: {e}", exc_info=True)
         finally:
-            await _redis.aclose()
+            pass  # shared pooled Redis client — do not close
 
         await asyncio.sleep(120)  # 2-minute interval
 

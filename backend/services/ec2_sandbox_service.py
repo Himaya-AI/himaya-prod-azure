@@ -298,21 +298,34 @@ def _resolve_instance_profile() -> Optional[dict]:
 def _compute_verdict(raw: dict) -> str:
     """
     Derive a verdict string from the results JSON.
-    - MALICIOUS: any URL hit (200/301/302) with suspicious_indicators, OR any macro attachment
-    - CLEAN:     results present, nothing suspicious
-    - TIMEOUT:   results unavailable / parse failure
+
+    The Himaya detonator computes its own per-item `severity` and a top-level
+    `verdict` from OSS-tool signals (ClamAV/YARA/oletools/pdf/Chromium). Prefer
+    that; fall back to the legacy heuristics for older/partial payloads.
     """
+    v = raw.get("verdict")
+    if v in ("MALICIOUS", "SUSPICIOUS", "CLEAN", "TIMEOUT", "UNAVAILABLE"):
+        return v
+
     url_results = raw.get("url_results", [])
     attachment_results = raw.get("attachment_results", [])
 
+    # Prefer per-item severity when the detonator provides it
+    sev = [r.get("severity") for r in (url_results + attachment_results) if r.get("severity")]
+    if "malicious" in sev:
+        return "MALICIOUS"
+    if "suspicious" in sev:
+        return "SUSPICIOUS"
+    if sev:
+        return "CLEAN"
+
+    # ── Legacy fallback (no severity fields) ──────────────────────────────
     for ur in url_results:
         if ur.get("status_code") in (200, 301, 302) and ur.get("suspicious_indicators"):
             return "MALICIOUS"
-
     for ar in attachment_results:
         if ar.get("macro_detected"):
             return "MALICIOUS"
-
     if url_results or attachment_results:
         return "CLEAN"
 
