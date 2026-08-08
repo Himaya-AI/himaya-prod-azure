@@ -1,7 +1,7 @@
 # Debian 12 (Bookworm) — proper .deb packages for Firefox + TigerVNC (no snap stubs)
 FROM debian:bookworm-slim
-LABEL maintainer="helios-sandbox"
-LABEL description="Helios isolated email sandbox — TigerVNC + noVNC + Firefox + tcpdump"
+LABEL maintainer="himaya-sandbox"
+LABEL description="Himaya isolated email sandbox — TigerVNC + noVNC + Firefox + tcpdump"
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DISPLAY=:1
@@ -48,6 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tshark \
     less \
     nano \
+    feh \
+    imagemagick \
     && rm -rf /var/lib/apt/lists/*
 
 # ── Configure Wine silently (no GUI popups on first run) ──────────────────────
@@ -64,6 +66,22 @@ RUN mkdir -p /opt/novnc/utils/websockify && \
     tar -xz -C /opt/novnc --strip-components=1 && \
     ln -sf /usr/lib/python3/dist-packages/websockify /opt/novnc/utils/websockify && \
     chmod +x /opt/novnc/utils/launch.sh 2>/dev/null || true
+
+# ── Himaya branding: custom chrome-free viewer + logo (hides all noVNC branding) ─
+# himaya.html embeds the noVNC core RFB client full-screen with no toolbar/logo.
+# It becomes the default landing page so vnc.html (and its noVNC logo) is bypassed.
+COPY himaya_logo.png /opt/novnc/himaya_logo.png
+COPY himaya.html /opt/novnc/himaya.html
+RUN cp /opt/novnc/himaya.html /opt/novnc/index.html && \
+    cp /opt/novnc/himaya_logo.png /usr/share/pixmaps/himaya_logo.png
+
+# ── Enterprise desktop wallpaper (dark canvas + centered Himaya logo) ─────────
+RUN convert -size 1280x800 xc:'#0b1424' \
+      \( /opt/novnc/himaya_logo.png -resize 360x \) -gravity center -geometry +0-30 -composite \
+      -font /usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf \
+      -gravity south -fill '#5b6b82' -pointsize 16 \
+      -annotate +0+70 'Himaya Secure Sandbox   -   Isolated Analysis Environment' \
+      /usr/share/pixmaps/himaya-wallpaper.png
 
 # ── Openbox config + right-click application menu ─────────────────────────
 RUN mkdir -p /root/.config/openbox /root/Downloads
@@ -86,12 +104,10 @@ COPY supervisord.conf /etc/supervisor/conf.d/sandbox.conf
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# ── Email HTML landing dir ─────────────────────────────────────────────────────
-RUN mkdir -p /sandbox/email && \
-    echo '<html><body style="font-family:Arial,sans-serif;padding:40px;color:#333">' \
-         '<h2>🔒 Helios Sandbox</h2>' \
-         '<p>Email content will be loaded here when a session is started.</p>' \
-         '</body></html>' > /sandbox/email/index.html
+# ── Email HTML landing dir (enterprise placeholder, shown until email loads) ──
+RUN mkdir -p /sandbox/email
+COPY landing.html /sandbox/email/index.html
+COPY himaya_logo.png /sandbox/email/himaya_logo.png
 
 EXPOSE 6080 5901
 
