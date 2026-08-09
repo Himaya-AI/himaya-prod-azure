@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.config_cache.snapshot import FileTenantConfigCache
 from app.domain.models import DeliveryOutcome, RelayRequest, RelayResult
 from app.logging_setup import get_logger
@@ -9,14 +11,35 @@ from app.spool.mta_spool import FilesystemSpoolStore
 
 log = get_logger(__name__)
 
+RETURN_MARKER_HEADER = b"X-Himaya-DLP-Return: 1\r\n"
+
+# Header section regexes operate on bytes to avoid re-serializing the message.
+_HEADER_END = re.compile(rb"\r?\n\r?\n")
+_X_HIMAYA_LINE = re.compile(rb"(?im)^x-himaya-[^\r\n]*\r?\n(?:[ \t][^\r\n]*\r?\n)*")
+
 
 def build_egress_copy(original_mime: bytes) -> bytes:
     """Egress transmission copy derived from immutable original.
 
-    Local/MVP returns the original bytes unchanged. Later we add only approved
-    loop-prevention transport headers — never reconstruct body/attachments.
+    Byte-surgical header edit: removes any pre-existing X-Himaya-* header
+    lines from the header block, then prepends the Himaya return marker so
+    M365 route rules can bypass the gateway on the return hop.
+
+    Unlike parse-and-reserialize, this never rewrites existing headers,
+    encodings, DKIM signatures, or the body — it only touches the header
+    block at the byte level. On any anomaly, falls back to prepending the
+    marker before the untouched message.
     """
-    return original_mime
+    match = _HEADER_END.search(original_mime)
+    if match is None:
+        # No header/body separator: prepend marker ahead of the whole blob.
+        return RETURN_MARKER_HEADER + original_mime
+
+    header_block = original_mime[: match.start()]
+    body = original_mime[match.start():]
+    # Strip existing X-Himaya-* headers (with their continuation folds).
+    header_block = _X_HIMAYA_LINE.sub(b"", header_block)
+    return RETURN_MARKER_HEADER + header_block + body
 
 
 class RelayDispatcher:
