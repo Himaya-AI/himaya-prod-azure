@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     health_host: str = "0.0.0.0"
     health_port: int = 8080
 
+    smtp_tls_cert_file: Path | None = None
+    smtp_tls_key_file: Path | None = None
+    smtp_require_starttls: bool = False
+
     spool_dir: Path = Path("/var/dlp/spool")
     data_dir: Path = Path("/var/dlp/data")
     queue_dir: Path = Path("/var/dlp/queues")

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ssl
+from pathlib import Path
 import asyncio
 import uuid
 from email.utils import parseaddr
@@ -102,6 +104,16 @@ class DlpSMTPHandler:
         )
         return f"250 OK id={message_id}"
 
+def build_smtp_tls_context(cert_file: Path, key_file: Path) -> ssl.SSLContext:
+    if not cert_file.is_file():
+        raise FileNotFoundError(f"SMTP TLS cert not found: {cert_file}")
+    if not key_file.is_file():
+        raise FileNotFoundError(f"SMTP TLS key not found: {key_file}")
+
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    context.load_cert_chain(certfile=str(cert_file), keyfile=str(key_file))
+    return context
 
 class SmtpEdge:
     def __init__(self, handler: DlpSMTPHandler, settings: Settings) -> None:
@@ -110,17 +122,30 @@ class SmtpEdge:
         self._controller: Controller | None = None
 
     def start(self) -> None:
+        tls_context = None
+        require_starttls = False
+
+        cert_file = self.settings.smtp_tls_cert_file
+        key_file = self.settings.smtp_tls_key_file
+        if cert_file and key_file:
+            tls_context = build_smtp_tls_context(cert_file, key_file)
+            require_starttls = bool(self.settings.smtp_require_starttls)
+
         self._controller = Controller(
             self.handler,
             hostname=self.settings.smtp_host,
             port=self.settings.smtp_port,
             ready_timeout=10,
+            tls_context=tls_context,
+            require_starttls=require_starttls,
         )
         self._controller.start()
         log.info(
             "smtp.listening",
             host=self.settings.smtp_host,
             port=self.settings.smtp_port,
+            starttls_enabled=tls_context is not None,
+            require_starttls=require_starttls,
         )
 
     def stop(self) -> None:

@@ -3,14 +3,16 @@ services:
     build: .
     container_name: dlp-gateway
     env_file:
-      - .env.example
+      - .env
     ports:
-      - "2525:2525"
+      - "25:2525"
       - "8080:8080"
     volumes:
-      - dlp_spool:/var/dlp/spool
-      - dlp_data:/var/dlp/data
-      - dlp_queues:/var/dlp/queues
+      - /var/dlp/spool:/var/dlp/spool
+      - /var/dlp/data:/var/dlp/data
+      - /var/dlp/queues:/var/dlp/queues
+      - /opt/dlp-gateway/certs/fullchain.pem:/certs/fullchain.pem:ro
+      - /opt/dlp-gateway/certs/privkey.pem:/certs/privkey.pem:ro
     depends_on:
       - mailhog
       - azurite
@@ -35,7 +37,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  dlp_spool:
-  dlp_data:
-  dlp_queues:
   azurite_data:

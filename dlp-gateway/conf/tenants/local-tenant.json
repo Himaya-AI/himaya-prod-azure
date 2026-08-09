@@ -3,10 +3,14 @@
   "org_id": "00000000-0000-4000-8000-000000000001",
   "provider_deployment_id": "00000000-0000-4000-8000-000000000002",
   "provider": "local",
-  "routing_hostname": "local.smtp.dlp.himaya.test",
+  "routing_hostname": "test.smtp.dlp.himaya.ai",
   "status": "enabled",
   "mode": "monitor",
-  "accepted_sender_domains": ["example.test", "himaya.test"],
+  "accepted_sender_domains": [
+    "example.test",
+    "himaya.test",
+    "sana085.onmicrosoft.com"
+  ],
   "relay": {
     "host": "mailhog",
     "port": 1025,
