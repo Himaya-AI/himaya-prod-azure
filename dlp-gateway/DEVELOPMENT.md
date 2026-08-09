@@ -154,10 +154,32 @@ python -m pytest -q
 
 ---
 
+## Step 9 — Loop-prevention egress headers + re-entry reject ✅
+
+**Goal:** Stamp a return marker on the egress copy and reject any SMTP re-entry that still carries it (`550`), so EXO does not retry-loop into the gateway.
+
+**Delivered:**
+
+- Egress copy stamps `X-Himaya-DLP-Return: 1` (byte-surgical; immutable spool MIME unchanged)
+- SMTP intake rejects marker presence with `550` **before** stripping `X-Himaya-*`
+- Spoofed first-hop marker is also rejected (intentional for staging)
+- Unit tests for marker detect / body false-positive / edge `550`
+
+**Ops (already in place for staging):** M365 mail-flow exception when `X-Himaya-DLP-Return` contains `1`. Connector-scoped bypass remains the stronger production shape later.
+
+**Verify:**
+
+```bash
+cd dlp-gateway
+python -m pytest -q
+```
+
+---
+
 ## Upcoming
 
 | Step | Goal |
 | --- | --- |
-| 9 | Loop-prevention egress headers + re-entry reject |
 | 10 | Delivery outcome events + uncertain/retry hardening |
 | 11 | Broader M365 staging matrix + CI |
+| 12 | Production loop hardening (connector-scoped bypass, signed headers) |

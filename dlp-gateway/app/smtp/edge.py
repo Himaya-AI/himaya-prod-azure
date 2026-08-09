@@ -12,7 +12,10 @@ from aiosmtpd.smtp import Envelope, Session, SMTP
 from app.config import Settings
 from app.domain.models import SpoolRecord
 from app.logging_setup import get_logger
-from app.smtp.headers import strip_untrusted_himaya_headers
+from app.smtp.headers import (
+    has_himaya_return_marker,
+    strip_untrusted_himaya_headers,
+)
 from app.smtp.tenant_resolver import TenantResolver
 from app.smtp.trust import TrustPolicy
 from app.spool.mta_spool import FilesystemSpoolStore, sha256_hex
@@ -70,6 +73,16 @@ class DlpSMTPHandler:
             content = content.encode("utf-8", errors="replace")
         if len(content) > self.settings.max_message_bytes:
             return "552 Message size exceeds limit"
+
+        # Loop guard: reject before strip so the marker cannot be erased then accepted.
+        if has_himaya_return_marker(content):
+            log.warning(
+                "smtp.reject_return_reentry",
+                mail_from=sender,
+                peer=peer,
+                org_id=tenant.org_id,
+            )
+            return "550 Loop detected: Himaya return marker present"
 
         mime_bytes = strip_untrusted_himaya_headers(content)
         message_id = uuid.uuid4()

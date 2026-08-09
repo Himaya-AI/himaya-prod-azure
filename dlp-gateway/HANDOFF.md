@@ -44,6 +44,7 @@ Gateway does **not** classify. Classifier does **not** send gateway commands.
 | Local Docker stack (gateway + MailHog + Azurite) | Done |
 | SMTP accept + durable spool (`250` only after save) | Done |
 | Strip untrusted `X-Himaya-*` headers | Done |
+| Egress return marker + SMTP re-entry `550` | Done (staging) |
 | Tenant config from local JSON (no DB on SMTP path) | Done |
 | Save immutable MIME to Azurite (Blob) | Done |
 | Publish `dlp.message.captured.v1` | Done |
