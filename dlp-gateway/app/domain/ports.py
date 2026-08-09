@@ -5,6 +5,7 @@ from typing import Protocol, runtime_checkable
 from app.domain.models import (
     CaptureEvent,
     GatewayCommand,
+    RelayRequest,
     RelayResult,
     SpoolRecord,
 )
@@ -63,8 +64,23 @@ class TenantConfigCache(Protocol):
     def resolve_for_sender(self, envelope_from: str, routing_hostname: str | None = None):
         ...
 
+    def resolve_by_org_id(self, org_id: str):
+        ...
+
 
 @runtime_checkable
 class ProviderRelayAdapter(Protocol):
-    def submit(self, mime_bytes: bytes, envelope_from: str, envelope_to: list[str]) -> RelayResult:
+    def submit(self, request: RelayRequest) -> RelayResult:
+        ...
+
+
+@runtime_checkable
+class RelayCertificateProvider(Protocol):
+    def get_certificate(
+        self,
+        org_id: str,
+        cert_path: str,
+        key_path: str,
+        expected_thumbprint: str | None = None,
+    ):
         ...

@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "org_id": "00000000-0000-4000-8000-000000000001",
+  "provider_deployment_id": "00000000-0000-4000-8000-000000000002",
+  "provider": "m365",
+  "routing_hostname": "test.smtp.dlp.himaya.ai",
+  "status": "enabled",
+  "mode": "monitor",
+  "accepted_sender_domains": [
+    "sana085.onmicrosoft.com"
+  ],
+  "relay": {
+    "adapter": "microsoft",
+    "mx_host": "sana085.mail.protection.outlook.com",
+    "port": 25,
+    "use_tls": true,
+    "require_starttls": true,
+    "ehlo_hostname": "REPLACE_WITH_CERT_DOMAIN",
+    "tls_sender_certificate_name": "REPLACE_WITH_CERT_DOMAIN",
+    "client_cert_path": "/certs/m365-client-fullchain.pem",
+    "client_key_path": "/certs/m365-client-privkey.pem",
+    "certificate_thumbprint": null,
+    "connection_timeout_seconds": 20,
+    "command_timeout_seconds": 60
+  },
+  "config_version": 2,
+  "valid_from": "2026-01-01T00:00:00Z",
+  "valid_until": "2099-01-01T00:00:00Z"
+}

@@ -13,7 +13,7 @@ from app.events.bus import FilesystemEventBus
 from app.events.publisher import EventPublisher
 from app.health.server import create_health_server
 from app.logging_setup import configure_logging, get_logger
-from app.relay.adapters.local_sink import SmtpSinkRelayAdapter
+from app.relay.adapters import build_default_registry
 from app.relay.dispatcher import RelayDispatcher
 from app.smtp.edge import DlpSMTPHandler, SmtpEdge
 from app.smtp.tenant_resolver import TenantResolver
@@ -46,12 +46,11 @@ def build_app():
     )
     capture = CaptureWorker(spool, mime_store, publisher)
     auto_allow = AutoAllowWorker(bus, enabled=settings.force_allow)
-    relay_adapter = SmtpSinkRelayAdapter(
-        host=settings.relay_host,
-        port=settings.relay_port,
-        use_tls=settings.relay_use_tls,
+    adapters = build_default_registry(
+        default_local_host=settings.relay_host,
+        default_local_port=settings.relay_port,
     )
-    relay = RelayDispatcher(spool, relay_adapter)
+    relay = RelayDispatcher(spool, adapters, cache)
     commands = CommandConsumer(bus, CommandProcessor(spool, relay))
     workers = WorkerSupervisor(
         capture,
@@ -64,7 +63,11 @@ def build_app():
     smtp = SmtpEdge(handler, settings)
 
     def health_payload() -> dict:
-        tenant_ok = cache.resolve_for_sender("user@example.test") is not None
+        tenant = cache.resolve_for_sender("user@example.test")
+        if tenant is None:
+            tenant = cache.resolve_for_sender("test@sana085.onmicrosoft.com")
+        tenant_ok = tenant is not None
+        relay_adapter = tenant.relay.adapter if tenant else None
         return {
             "ok": tenant_ok and settings.spool_dir.exists(),
             "service": "dlp-gateway",
@@ -72,6 +75,8 @@ def build_app():
             "force_allow": settings.force_allow,
             "smtp_port": settings.smtp_port,
             "tenant_config_loaded": tenant_ok,
+            "relay_adapter": relay_adapter,
+            "provider": tenant.provider if tenant else None,
         }
 
     return settings, smtp, workers, health_payload

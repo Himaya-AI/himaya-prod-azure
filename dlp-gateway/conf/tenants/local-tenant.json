@@ -12,6 +12,7 @@
     "sana085.onmicrosoft.com"
   ],
   "relay": {
+    "adapter": "local",
     "host": "mailhog",
     "port": 1025,
     "use_tls": false

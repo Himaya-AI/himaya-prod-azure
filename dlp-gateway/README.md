@@ -37,6 +37,17 @@ python scripts/send_test_mail.py
 
 Open http://localhost:8025 to confirm the message arrived at the sink.
 
+## Microsoft return (AWS staging)
+
+Local default still relays to MailHog (`relay.adapter=local`).
+
+To enable Exchange Online return:
+
+1. Use `conf/tenants/staging-m365.json.example` as the tenant snapshot
+2. Mount return client cert/key (see compose volumes `m365-client-*.pem`)
+3. Set `relay.adapter=microsoft` and `mx_host` to the tenant MX
+4. Keep intake STARTTLS cert separate from the return client cert
+
 ## Core principles
 
 1. Return SMTP `250` only after durable spool `fsync`.

@@ -124,10 +124,40 @@ python -m pytest -q
 
 ---
 
+## Step 8 — Microsoft provider-return adapter ✅
+
+**Goal:** Relay allowed/released mail to Exchange Online MX with tenant client certificate (AWS staging), while keeping MailHog for local.
+
+**Delivered:**
+
+- `RelayRequest` / richer `RelayResult` + `SmtpStage` / `PARTIAL`
+- Tenant relay config: `adapter`, `mx_host`, client cert paths, EHLO/TLS name
+- `FilesystemRelayCertificateProvider` (PEM on disk; KV/Secrets Manager later)
+- Phase-aware SMTP transport (`EHLO` → `STARTTLS` + client cert → `MAIL/RCPT/DATA`)
+- Real `Microsoft365RelayAdapter`
+- `RelayAdapterRegistry` selects local vs microsoft per tenant
+- Example config: `conf/tenants/staging-m365.json.example`
+
+**Enable on AWS:**
+
+1. Place return client cert/key at `/opt/dlp-gateway/certs/m365-client-*.pem`
+2. Copy `staging-m365.json.example` → active tenant JSON and set cert domain fields
+3. Rebuild/restart gateway
+4. Send test mail; confirm `relay.finished` with `adapter=microsoft` and inbox delivery
+
+**Verify:**
+
+```bash
+cd dlp-gateway
+python -m pytest -q
+```
+
+---
+
 ## Upcoming
 
 | Step | Goal |
 | --- | --- |
-| 8 | Broader spool/reconciliation recovery |
-| 9 | Broader integration tests in CI |
-| 10 | Staging M365 adapter (not local) |
+| 9 | Loop-prevention egress headers + re-entry reject |
+| 10 | Delivery outcome events + uncertain/retry hardening |
+| 11 | Broader M365 staging matrix + CI |

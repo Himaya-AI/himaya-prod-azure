@@ -55,6 +55,11 @@ class SpoolRecord(BaseModel):
     stop_reason: str | None = None
     relay_smtp_code: int | None = None
     relay_detail: str | None = None
+    relay_smtp_stage: str | None = None
+    relay_remote_host: str | None = None
+    relay_cert_thumbprint: str | None = None
+    relay_accepted_recipients: list[str] = Field(default_factory=list)
+    relay_refused_recipients: list[str] = Field(default_factory=list)
 
 
 class CaptureEvent(BaseModel):
@@ -89,7 +94,34 @@ class DeliveryOutcome(str, Enum):
     ACCEPTED = "accepted"
     DEFERRED = "deferred"
     FAILED = "failed"
+    PARTIAL = "partial"
     UNCERTAIN = "uncertain"
+
+
+class SmtpStage(str, Enum):
+    CONNECT = "connect"
+    EHLO = "ehlo"
+    STARTTLS = "starttls"
+    MAIL_FROM = "mail_from"
+    RCPT_TO = "rcpt_to"
+    DATA_STARTED = "data_started"
+    DATA_SENT = "data_sent"
+    FINAL_RESPONSE = "final_response_received"
+
+
+class RelayRequest(BaseModel):
+    """Normalized submit request for provider relay adapters."""
+
+    message_id: UUID
+    org_id: str
+    provider: str
+    provider_deployment_id: str
+    envelope_from: str
+    envelope_to: list[str]
+    mime_bytes: bytes
+    attempt_id: UUID = Field(default_factory=uuid4)
+    # Opaque tenant relay settings resolved by the dispatcher.
+    relay_config: dict[str, Any] = Field(default_factory=dict)
 
 
 class RelayResult(BaseModel):
@@ -97,3 +129,10 @@ class RelayResult(BaseModel):
     smtp_code: int | None = None
     smtp_message: str | None = None
     detail: str | None = None
+    smtp_stage: SmtpStage | None = None
+    accepted_recipients: list[str] = Field(default_factory=list)
+    refused_recipients: list[str] = Field(default_factory=list)
+    remote_host: str | None = None
+    certificate_thumbprint: str | None = None
+    attempt_started_at: datetime | None = None
+    attempt_finished_at: datetime | None = None

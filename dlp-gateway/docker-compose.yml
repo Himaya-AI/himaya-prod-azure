@@ -13,6 +13,10 @@ services:
       - /var/dlp/queues:/var/dlp/queues
       - /opt/dlp-gateway/certs/fullchain.pem:/certs/fullchain.pem:ro
       - /opt/dlp-gateway/certs/privkey.pem:/certs/privkey.pem:ro
+      # Optional Microsoft return client certs (adapter=microsoft). Leave commented until the
+      # host PEMs exist — bind-mounting missing paths creates empty dirs and breaks AWS/local staging.
+      # - /opt/dlp-gateway/certs/m365-client-fullchain.pem:/certs/m365-client-fullchain.pem:ro
+      # - /opt/dlp-gateway/certs/m365-client-privkey.pem:/certs/m365-client-privkey.pem:ro
     depends_on:
       - mailhog
       - azurite
