@@ -176,10 +176,54 @@ python -m pytest -q
 
 ---
 
+## Step 10 — Delivery events + uncertain/retry hardening ✅
+
+**Goal:** Report every provider submission durably without replaying SMTP when
+event publication fails, and never blindly retry ambiguous or partial outcomes.
+
+**Delivered:**
+
+- `dlp.message.delivery.v1` contract mirrored by gateway and backend
+- Write-ahead, spool-backed delivery-event outbox with atomic metadata updates
+  and at-least-once publication
+- Per-attempt ID/count, trigger command ID, SMTP diagnostics, and timestamps
+- Interrupted `submitting` recovery → `outcome_uncertain`
+- `partially_accepted` state; whole-envelope retry is rejected
+- `outcome_uncertain` retry is rejected pending provider reconciliation
+- Deferred-only automatic retry via backend outbox (`1m → 5m → 15m`, bounded)
+- Failed delivery requires explicit `manual_override`; relay attempt ceiling
+- Filesystem and Azure Service Bus delivery queue adapters
+- Backend idempotent delivery consumer, renewed message locks, delayed
+  settlement on transient failures, and message-event persistence
+
+**Production queue settings:**
+
+```text
+MESSAGE_BUS=service_bus
+FORCE_ALLOW=false
+CAPTURE_QUEUE_NAME=dlp-capture
+COMMAND_QUEUE_NAME=dlp-commands
+DELIVERY_QUEUE_NAME=dlp-delivery
+```
+
+Create all three Azure Service Bus queues before switching the AWS gateway.
+Use a scoped Service Bus credential or workload identity; do not commit it.
+
+**Verify:**
+
+```bash
+cd dlp-gateway
+python -m pytest -q
+
+cd ..
+python -m pytest -q backend/tests -k "dlp_v2 or delivery_consumer"
+```
+
+---
+
 ## Upcoming
 
 | Step | Goal |
 | --- | --- |
-| 10 | Delivery outcome events + uncertain/retry hardening |
 | 11 | Broader M365 staging matrix + CI |
 | 12 | Production loop hardening (connector-scoped bypass, signed headers) |

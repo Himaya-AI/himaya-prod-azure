@@ -29,9 +29,16 @@ class CommandNotReadyError(UnknownMessageError):
 
 
 class CommandProcessor:
-    def __init__(self, spool: FilesystemSpoolStore, relay: RelayDispatcher) -> None:
+    def __init__(
+        self,
+        spool: FilesystemSpoolStore,
+        relay: RelayDispatcher,
+        *,
+        max_relay_attempts: int = 4,
+    ) -> None:
         self.spool = spool
         self.relay = relay
+        self.max_relay_attempts = max_relay_attempts
 
     def process(self, command: GatewayCommand) -> CommandProcessingStatus:
         mid = str(command.message_id)
@@ -95,9 +102,19 @@ class CommandProcessor:
                     f"{command.command_type.value} is invalid from "
                     f"{record.state.value}"
                 )
-            self.spool.update_state(mid, MessageState.ALLOW_PENDING.value)
-            self.relay.relay_message(mid)
-            self.spool.record_command_processed(mid, str(command.command_id))
+            if command.command_type == CommandType.RETRY:
+                if record.relay_attempt_count >= self.max_relay_attempts:
+                    raise CommandRejectedError(
+                        "Maximum provider relay attempts reached"
+                    )
+                if (
+                    record.state == MessageState.FAILED
+                    and command.metadata.get("manual_override") is not True
+                ):
+                    raise CommandRejectedError(
+                        "Failed delivery requires manual_override retry"
+                    )
+            self.relay.relay_message(mid, str(command.command_id))
             return CommandProcessingStatus.APPLIED
 
         if command.command_type == CommandType.STOP:

@@ -9,7 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.dlp.contracts import CaptureEvent, GatewayCommand
+from backend.dlp.contracts import (
+    CaptureEvent,
+    DeliveryEvent,
+    GatewayCommand,
+)
 from backend.dlp.persistence.models import (
     DlpClassificationResult,
     DlpCommandOutbox,
@@ -72,6 +76,23 @@ class MessageEventRepository:
         self._session = session
 
     async def record_capture(self, event: CaptureEvent) -> bool:
+        statement = (
+            insert(DlpMessageEvent)
+            .values(
+                message_id=event.message_id,
+                event_key=event.deduplication_key,
+                event_type=event.event_type,
+                payload=event.model_dump(mode="json"),
+                occurred_at=event.occurred_at,
+            )
+            .on_conflict_do_nothing(index_elements=["event_key"])
+            .returning(DlpMessageEvent.id)
+        )
+        return (
+            await self._session.execute(statement)
+        ).scalar_one_or_none() is not None
+
+    async def record_delivery(self, event: DeliveryEvent) -> bool:
         statement = (
             insert(DlpMessageEvent)
             .values(

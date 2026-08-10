@@ -5,14 +5,14 @@ from app.commands.processor import (
     CommandRejectedError,
     UnknownMessageError,
 )
-from app.events.bus import FilesystemEventBus
+from app.domain.ports import EventBus
 from app.logging_setup import get_logger
 
 log = get_logger(__name__)
 
 
 class CommandConsumer:
-    def __init__(self, bus: FilesystemEventBus, processor: CommandProcessor) -> None:
+    def __init__(self, bus: EventBus, processor: CommandProcessor) -> None:
         self.bus = bus
         self.processor = processor
 
@@ -44,4 +44,12 @@ class CommandConsumer:
                     command_id=str(command.command_id),
                     message_id=str(command.message_id),
                 )
+                try:
+                    self.bus.retry_command(command)
+                except Exception:
+                    log.exception(
+                        "command.retry_settlement_failed",
+                        command_id=str(command.command_id),
+                        message_id=str(command.message_id),
+                    )
         return len(commands)

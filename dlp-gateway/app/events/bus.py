@@ -6,7 +6,7 @@ import time
 import uuid
 from pathlib import Path
 
-from app.domain.models import CaptureEvent, GatewayCommand
+from app.domain.models import CaptureEvent, DeliveryEvent, GatewayCommand
 from app.logging_setup import get_logger
 
 log = get_logger(__name__)
@@ -26,6 +26,10 @@ class FilesystemEventBus:
             "commands/processing",
             "commands/done",
             "commands/dead",
+            "deliveries/ready",
+            "deliveries/processing",
+            "deliveries/done",
+            "deliveries/dead",
         ):
             (self.root / name).mkdir(parents=True, exist_ok=True)
 
@@ -43,6 +47,20 @@ class FilesystemEventBus:
 
     def publish_command(self, command: GatewayCommand) -> None:
         self._enqueue("commands", command.model_dump(mode="json"))
+
+    def publish_delivery(self, event: DeliveryEvent) -> None:
+        self._enqueue("deliveries", event.model_dump(mode="json"))
+
+    def consume_deliveries(
+        self, max_items: int = 10
+    ) -> list[DeliveryEvent]:
+        return [
+            DeliveryEvent.model_validate(item)
+            for item in self._dequeue("deliveries", max_items)
+        ]
+
+    def ack_delivery(self, event: DeliveryEvent) -> None:
+        self._ack("deliveries", str(event.event_id))
 
     def consume_commands(self, max_items: int = 10) -> list[GatewayCommand]:
         return [
@@ -73,7 +91,7 @@ class FilesystemEventBus:
     def recover_stale(
         self, kind: str, stale_after_seconds: int
     ) -> int:
-        if kind not in {"captures", "commands"}:
+        if kind not in {"captures", "commands", "deliveries"}:
             raise ValueError(f"Unsupported queue kind: {kind}")
         now = time.time()
         recovered = 0
@@ -88,6 +106,9 @@ class FilesystemEventBus:
             log.warning("bus.recovered_stale", kind=kind, count=recovered)
         return recovered
 
+    def close(self) -> None:
+        return None
+
     def _enqueue(self, kind: str, payload: dict) -> None:
         name = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
         tmp = self.root / kind / "ready" / f".{name}"
@@ -98,6 +119,7 @@ class FilesystemEventBus:
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmp, final)
+        self._fsync_dir(final.parent)
         log.info("bus.enqueued", kind=kind, file=name)
 
     def _dequeue(self, kind: str, max_items: int) -> list[dict]:
@@ -146,3 +168,13 @@ class FilesystemEventBus:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
+
+    @staticmethod
+    def _fsync_dir(path: Path) -> None:
+        if os.name == "nt":
+            return
+        descriptor = os.open(str(path), os.O_RDONLY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)

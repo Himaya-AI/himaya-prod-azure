@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.domain.models import DeliveryOutcome, SmtpStage
+from app.domain.models import DeliveryOutcome, MessageState, SmtpStage
 
 
 def classify_smtp_result(
@@ -21,11 +21,11 @@ def classify_smtp_result(
     return DeliveryOutcome.FAILED
 
 
-def spool_state_for_outcome(outcome: DeliveryOutcome) -> str:
+def spool_state_for_outcome(outcome: DeliveryOutcome) -> MessageState:
     return {
-        DeliveryOutcome.ACCEPTED: "provider_accepted",
-        DeliveryOutcome.DEFERRED: "deferred",
-        DeliveryOutcome.FAILED: "failed",
-        DeliveryOutcome.PARTIAL: "failed",
-        DeliveryOutcome.UNCERTAIN: "outcome_uncertain",
+        DeliveryOutcome.ACCEPTED: MessageState.PROVIDER_ACCEPTED,
+        DeliveryOutcome.DEFERRED: MessageState.DEFERRED,
+        DeliveryOutcome.FAILED: MessageState.FAILED,
+        DeliveryOutcome.PARTIAL: MessageState.PARTIALLY_ACCEPTED,
+        DeliveryOutcome.UNCERTAIN: MessageState.OUTCOME_UNCERTAIN,
     }[outcome]

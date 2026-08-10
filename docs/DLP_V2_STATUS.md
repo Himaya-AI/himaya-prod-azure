@@ -30,6 +30,7 @@ Short handoff for the greenfield DLP stack. For architecture and module details,
 SMTP → gateway capture → blob + capture event
   → backend.dlp worker → MIME extract → classifier → policy
   → decision + outbox command → gateway allow/stop/release
+  → provider outcome → durable delivery event → backend state/retry outbox
 ```
 
 ### Control-plane APIs (`/api/dlp/v2`)
@@ -51,6 +52,8 @@ Independent Alembic chain (`python -m backend.dlp.migrate`): messages, parts, cl
 
 - Compose: `docker-compose.dlp.yml` (Postgres, Azurite, MailHog, gateway, migrate, classifier stub, worker)
 - Unit/integration: `backend/tests/test_dlp_v2_*.py`, `dlp-gateway/tests/`
+- Delivery safety: spool-backed event outbox, partial/uncertain retry guards,
+  bounded deferred retries, and interrupted-submit recovery
 - Live e2e (gated): `DLP_E2E=1` + `backend/tests/integration/test_dlp_local_e2e.py`  
   - Clean mail → allow + relayed to MailHog  
   - Credit-card mail → stop + not relayed
@@ -94,6 +97,7 @@ DSPM `cross_cloud_dlp` is **not** legacy email DLP; keep it. Only stop depending
 |---|---|---|
 | Next | **Frontend → v2** | Rewire or rebuild `/dlp` to `/api/dlp/v2` |
 | Next | **Deploy / test with legacy enforcement off** | Gateway + migrate + API + worker; prove allow/hold/stop in target env |
+| Next | **Provision delivery queue / staging matrix** | Create `dlp-delivery`; test accepted, deferred, failed, partial, uncertain, and duplicate-event paths |
 | Later | **Remove legacy DLP** | Unmount/delete old routers, services, loops, `infra/dlp`, obsolete tests; rewire `drafts` / `saas_security` off `dlp_service` |
 | Later | **Legacy table cleanup** | Drop/archive old `dlp_*` tables only after nothing needs that data |
 | Optional | **Deeper e2e** | Monitor mode, failure/recovery, hold/release beyond the current allow/stop smoke test |

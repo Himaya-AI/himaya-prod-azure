@@ -48,11 +48,16 @@ Gateway does **not** classify. Classifier does **not** send gateway commands.
 | Tenant config from local JSON (no DB on SMTP path) | Done |
 | Save immutable MIME to Azurite (Blob) | Done |
 | Publish `dlp.message.captured.v1` | Done |
+| Publish durable `dlp.message.delivery.v1` outcomes | Done |
+| Partial/uncertain retry guards + stale-submit recovery | Done |
+| Microsoft 365 provider-return relay | Done (AWS staging) |
+| Filesystem + Azure Service Bus queue adapters | Done |
 | Local auto-allow (`FORCE_ALLOW=true`) | Done (temporary stub) |
 | Relay original MIME to MailHog | Done |
 | Health check `:8080/healthz` | Done |
 
-**Still later on gateway:** crash recovery hardening, Service Bus, real Microsoft 365 relay, Google.
+**Still later on gateway:** broader M365 failure/deliverability matrix,
+production signed loop headers/connector-scoped bypass, and Google.
 
 **Backend / classifier still needed:** extraction client path, classifier API wiring, policy → commands, review APIs, Enable DLP, turn off `FORCE_ALLOW`.
 

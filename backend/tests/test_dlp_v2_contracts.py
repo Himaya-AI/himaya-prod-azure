@@ -10,8 +10,11 @@ from backend.dlp.contracts import (
     CaptureEvent,
     ClassifyResponse,
     CommandType,
+    DeliveryEvent,
+    DeliveryOutcome,
     GatewayCommand,
     GatewayMessageState,
+    SmtpStage,
 )
 
 
@@ -52,6 +55,29 @@ def test_capture_event_rejects_unversioned_extra_fields() -> None:
 
     with pytest.raises(ValidationError):
         CaptureEvent.model_validate(payload)
+
+
+def test_delivery_event_matches_gateway_wire_shape() -> None:
+    now = datetime.now(timezone.utc)
+    attempt_id = uuid4()
+    event = DeliveryEvent(
+        event_id=uuid4(),
+        message_id=uuid4(),
+        org_id=str(uuid4()),
+        provider="m365",
+        provider_deployment_id=str(uuid4()),
+        attempt_id=attempt_id,
+        attempt_number=1,
+        outcome=DeliveryOutcome.UNCERTAIN,
+        resulting_state=GatewayMessageState.OUTCOME_UNCERTAIN,
+        smtp_stage=SmtpStage.DATA_STARTED,
+        remote_host="tenant.mail.protection.outlook.com",
+        occurred_at=now,
+    )
+
+    assert event.event_type == "dlp.message.delivery.v1"
+    assert event.deduplication_key.endswith(str(attempt_id))
+    assert event.model_dump(mode="json")["outcome"] == "uncertain"
 
 
 def test_gateway_command_serializes_gateway_enum_values() -> None:

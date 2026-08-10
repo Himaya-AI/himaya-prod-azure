@@ -40,8 +40,13 @@ accepted_in_spool
   → captured
   → allow|hold|stop command   (from backend/dlp after classifier findings)
   → submitting
-  → provider_accepted | deferred | failed | outcome_uncertain
+  → provider_accepted | deferred | failed | partially_accepted | outcome_uncertain
 ```
+
+Every provider attempt is finalized into the spool together with a
+`dlp.message.delivery.v1` outbox item. A separate publisher sends that event
+at least once; queue publication failure never causes SMTP to run again.
+Duplicate delivery events are expected and deduplicated by `attempt_id`.
 
 ## Local vs production adapters
 

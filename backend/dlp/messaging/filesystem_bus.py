@@ -9,8 +9,12 @@ import time
 import uuid
 from pathlib import Path
 
-from backend.dlp.contracts import CaptureEvent, GatewayCommand
-from backend.dlp.messaging.ports import ReceivedCapture
+from backend.dlp.contracts import (
+    CaptureEvent,
+    DeliveryEvent,
+    GatewayCommand,
+)
+from backend.dlp.messaging.ports import ReceivedCapture, ReceivedDelivery
 
 
 class FilesystemDlpMessageBus:
@@ -28,6 +32,10 @@ class FilesystemDlpMessageBus:
             "commands/processing",
             "commands/done",
             "commands/dead",
+            "deliveries/ready",
+            "deliveries/processing",
+            "deliveries/done",
+            "deliveries/dead",
         ):
             (root / name).mkdir(parents=True, exist_ok=True)
 
@@ -58,6 +66,35 @@ class FilesystemDlpMessageBus:
     ) -> None:
         await asyncio.to_thread(
             self._dead_letter, "captures", receipt, reason
+        )
+
+    async def receive_deliveries(
+        self, max_messages: int = 10, wait_seconds: int = 5
+    ) -> list[ReceivedDelivery]:
+        deadline = time.monotonic() + max(wait_seconds, 0)
+        while True:
+            received = await asyncio.to_thread(
+                self._dequeue_deliveries, max_messages
+            )
+            if received or time.monotonic() >= deadline:
+                return received
+            await asyncio.sleep(0.1)
+
+    async def complete_delivery(self, receipt: str) -> None:
+        await asyncio.to_thread(
+            self._move_receipt, "deliveries", receipt, "done"
+        )
+
+    async def abandon_delivery(self, receipt: str) -> None:
+        await asyncio.to_thread(
+            self._move_receipt, "deliveries", receipt, "ready"
+        )
+
+    async def dead_letter_delivery(
+        self, receipt: str, reason: str
+    ) -> None:
+        await asyncio.to_thread(
+            self._dead_letter, "deliveries", receipt, reason
         )
 
     async def publish_command(self, command: GatewayCommand) -> None:
@@ -98,6 +135,37 @@ class FilesystemDlpMessageBus:
                 continue
             received.append(
                 ReceivedCapture(event=event, receipt=destination.name)
+            )
+        return received
+
+    def _dequeue_deliveries(
+        self, max_messages: int
+    ) -> list[ReceivedDelivery]:
+        ready = self.root / "deliveries" / "ready"
+        processing = self.root / "deliveries" / "processing"
+        received: list[ReceivedDelivery] = []
+        for path in sorted(ready.glob("*.json"))[:max_messages]:
+            destination = processing / path.name
+            try:
+                os.replace(path, destination)
+            except FileNotFoundError:
+                continue
+            try:
+                event = DeliveryEvent.model_validate_json(
+                    destination.read_text(encoding="utf-8")
+                )
+            except Exception as exc:
+                self._dead_letter(
+                    "deliveries",
+                    destination.name,
+                    f"invalid delivery event: {exc}",
+                )
+                continue
+            received.append(
+                ReceivedDelivery(
+                    event=event,
+                    receipt=destination.name,
+                )
             )
         return received
 
@@ -142,17 +210,23 @@ class FilesystemDlpMessageBus:
         self._fsync_dir(target_dir)
 
     def _recover_stale(self) -> int:
-        processing = self.root / "captures" / "processing"
-        ready = self.root / "captures" / "ready"
         now = time.time()
         recovered = 0
-        for path in processing.glob("*.json"):
-            if now - path.stat().st_mtime < self.reclaim_after_seconds:
-                continue
-            os.replace(path, ready / path.name)
-            recovered += 1
-        if recovered:
-            self._fsync_dir(ready)
+        for kind in ("captures", "deliveries"):
+            processing = self.root / kind / "processing"
+            ready = self.root / kind / "ready"
+            kind_recovered = 0
+            for path in processing.glob("*.json"):
+                if (
+                    now - path.stat().st_mtime
+                    < self.reclaim_after_seconds
+                ):
+                    continue
+                os.replace(path, ready / path.name)
+                recovered += 1
+                kind_recovered += 1
+            if kind_recovered:
+                self._fsync_dir(ready)
         return recovered
 
     def _safe_receipt_path(

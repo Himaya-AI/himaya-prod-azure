@@ -13,6 +13,7 @@ from cryptography.x509.oid import NameOID
 from app.config_cache.snapshot import FileTenantConfigCache
 from app.domain.models import (
     DeliveryOutcome,
+    MessageState,
     RelayRequest,
     RelayResult,
     SmtpStage,
@@ -126,7 +127,10 @@ def test_classify_uncertain_after_data() -> None:
         classify_smtp_result(None, connection_lost_after_data=True)
         == DeliveryOutcome.UNCERTAIN
     )
-    assert spool_state_for_outcome(DeliveryOutcome.PARTIAL) == "failed"
+    assert (
+        spool_state_for_outcome(DeliveryOutcome.PARTIAL)
+        == MessageState.PARTIALLY_ACCEPTED
+    )
 
 
 def test_tenant_snapshot_parses_microsoft_relay(tmp_path: Path) -> None:
@@ -319,6 +323,50 @@ def test_mixed_rcpt_data_450_is_deferred_not_partial(monkeypatch: Any) -> None:
     assert result.smtp_code == 450
 
 
+def test_connection_failure_before_data_is_deferred(
+    monkeypatch: Any,
+) -> None:
+    def _fail_connect(*_args: Any, **_kwargs: Any):
+        raise ConnectionError("connect failed")
+
+    monkeypatch.setattr(
+        "app.relay.smtp_transport.smtplib.SMTP", _fail_connect
+    )
+    result = PhaseAwareSmtpTransport().submit(
+        host="mx.example.test",
+        port=25,
+        envelope_from="a@example.test",
+        envelope_to=["b@external.test"],
+        mime_bytes=b"From: a\r\n\r\nbody\r\n",
+        require_starttls=False,
+    )
+    assert result.outcome == DeliveryOutcome.DEFERRED
+    assert result.smtp_stage == SmtpStage.CONNECT
+
+
+def test_connection_loss_during_data_is_uncertain(
+    monkeypatch: Any,
+) -> None:
+    class _DisconnectDuringData(_ScriptedSmtp):
+        def data(self, msg: bytes) -> tuple[int, bytes]:
+            raise ConnectionError("final response lost")
+
+    monkeypatch.setattr(
+        "app.relay.smtp_transport.smtplib.SMTP",
+        _DisconnectDuringData,
+    )
+    result = PhaseAwareSmtpTransport().submit(
+        host="mx.example.test",
+        port=25,
+        envelope_from="a@example.test",
+        envelope_to=["b@external.test"],
+        mime_bytes=b"From: a\r\n\r\nbody\r\n",
+        require_starttls=False,
+    )
+    assert result.outcome == DeliveryOutcome.UNCERTAIN
+    assert result.smtp_stage == SmtpStage.DATA_STARTED
+
+
 def test_dispatcher_persists_relay_diagnostic_fields(tmp_path: Path) -> None:
     spool = FilesystemSpoolStore(tmp_path / "spool")
     mime = b"From: a\r\nTo: b\r\n\r\nhello\r\n"
@@ -395,3 +443,7 @@ def test_dispatcher_persists_relay_diagnostic_fields(tmp_path: Path) -> None:
     assert loaded.relay_cert_thumbprint == "abc123"
     assert loaded.relay_accepted_recipients == ["ok@external.test"]
     assert loaded.relay_refused_recipients == ["bad@external.test"]
+    assert loaded.state == MessageState.PARTIALLY_ACCEPTED
+    assert loaded.relay_attempt_count == 1
+    assert loaded.relay_attempt_id is not None
+    assert len(spool.list_pending_delivery_events()) == 1

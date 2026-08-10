@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from app.domain.models import CommandType, GatewayCommand
-from app.events.bus import FilesystemEventBus
+from app.domain.ports import EventBus
 from app.logging_setup import get_logger
 
 log = get_logger(__name__)
@@ -13,7 +13,7 @@ class AutoAllowWorker:
     Replace with backend/dlp classification + policy workers in production.
     """
 
-    def __init__(self, bus: FilesystemEventBus, enabled: bool = True) -> None:
+    def __init__(self, bus: EventBus, enabled: bool = True) -> None:
         self.bus = bus
         self.enabled = enabled
 

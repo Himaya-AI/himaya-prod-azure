@@ -10,7 +10,9 @@ from app.commands.processor import CommandProcessor
 from app.config import get_settings
 from app.config_cache.snapshot import FileTenantConfigCache
 from app.events.bus import FilesystemEventBus
+from app.events.delivery_worker import DeliveryEventPublisherWorker
 from app.events.publisher import EventPublisher
+from app.events.service_bus import AzureServiceBusEventBus
 from app.health.server import create_health_server
 from app.logging_setup import configure_logging, get_logger
 from app.relay.adapters import build_default_registry
@@ -34,7 +36,22 @@ def build_app():
     settings.queue_dir.mkdir(parents=True, exist_ok=True)
 
     spool = FilesystemSpoolStore(settings.spool_dir)
-    bus = FilesystemEventBus(settings.queue_dir)
+    if settings.message_bus == "service_bus":
+        if settings.force_allow:
+            raise ValueError(
+                "FORCE_ALLOW must be false when using Service Bus"
+            )
+        bus = AzureServiceBusEventBus(
+            capture_queue_name=settings.capture_queue_name,
+            command_queue_name=settings.command_queue_name,
+            delivery_queue_name=settings.delivery_queue_name,
+            connection_string=settings.service_bus_connection_string,
+            fully_qualified_namespace=(
+                settings.service_bus_fully_qualified_namespace
+            ),
+        )
+    else:
+        bus = FilesystemEventBus(settings.queue_dir)
     publisher = EventPublisher(bus)
     cache = FileTenantConfigCache(settings.tenant_config_path)
     resolver = TenantResolver(cache)
@@ -51,11 +68,20 @@ def build_app():
         default_local_port=settings.relay_port,
     )
     relay = RelayDispatcher(spool, adapters, cache)
-    commands = CommandConsumer(bus, CommandProcessor(spool, relay))
+    commands = CommandConsumer(
+        bus,
+        CommandProcessor(
+            spool,
+            relay,
+            max_relay_attempts=settings.relay_max_attempts,
+        ),
+    )
+    delivery_events = DeliveryEventPublisherWorker(spool, publisher)
     workers = WorkerSupervisor(
         capture,
         auto_allow,
         commands,
+        delivery_events,
         reclaim_after_sec=settings.queue_reclaim_seconds,
     )
 

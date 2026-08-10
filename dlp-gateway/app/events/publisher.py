@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from app.domain.models import CaptureEvent, GatewayCommand
-from app.events.bus import FilesystemEventBus
+from app.domain.models import CaptureEvent, DeliveryEvent, GatewayCommand
+from app.domain.ports import EventBus
 
 
 class EventPublisher:
-    def __init__(self, bus: FilesystemEventBus) -> None:
+    def __init__(self, bus: EventBus) -> None:
         self.bus = bus
 
     def publish_capture(self, event: CaptureEvent) -> None:
@@ -13,3 +13,6 @@ class EventPublisher:
 
     def publish_command(self, command: GatewayCommand) -> None:
         self.bus.publish_command(command)
+
+    def publish_delivery(self, event: DeliveryEvent) -> None:
+        self.bus.publish_delivery(event)

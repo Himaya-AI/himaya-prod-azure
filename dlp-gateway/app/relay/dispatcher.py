@@ -6,7 +6,6 @@ from app.config_cache.snapshot import FileTenantConfigCache
 from app.domain.models import DeliveryOutcome, RelayRequest, RelayResult
 from app.logging_setup import get_logger
 from app.relay.adapters import RelayAdapterRegistry
-from app.relay.outcomes import spool_state_for_outcome
 from app.spool.mta_spool import FilesystemSpoolStore
 
 log = get_logger(__name__)
@@ -53,52 +52,78 @@ class RelayDispatcher:
         self.adapters = adapters
         self.tenant_cache = tenant_cache
 
-    def relay_message(self, message_id: str) -> RelayResult:
+    def relay_message(
+        self, message_id: str, command_id: str | None = None
+    ) -> RelayResult:
         record = self.spool.get(message_id)
         if record is None:
             return RelayResult(
                 outcome=DeliveryOutcome.FAILED, detail="message not found"
             )
 
+        attempt = self.spool.begin_relay_attempt(message_id, command_id)
         tenant = self.tenant_cache.resolve_by_org_id(record.org_id)
         if tenant is None:
             result = RelayResult(
                 outcome=DeliveryOutcome.FAILED,
                 detail="tenant config not found for relay",
             )
-            self.spool.update_state(
+            self.spool.finalize_relay_attempt(
                 message_id,
-                spool_state_for_outcome(result.outcome),
-                relay_detail=result.detail,
+                result,
+                relay_adapter=None,
             )
             return result
 
-        self.spool.update_state(message_id, "submitting")
-        mime = build_egress_copy(self.spool.read_mime(record))
-        request = RelayRequest(
-            message_id=record.message_id,
-            org_id=record.org_id,
-            provider=record.provider,
-            provider_deployment_id=record.provider_deployment_id,
-            envelope_from=record.envelope_from,
-            envelope_to=list(record.envelope_to),
-            mime_bytes=mime,
-            relay_config=tenant.relay.as_dict(),
-        )
-        adapter = self.adapters.get(tenant.relay)
-        result = adapter.submit(request)
-        self.spool.update_state(
+        try:
+            mime = build_egress_copy(self.spool.read_mime(attempt))
+            if attempt.relay_attempt_id is None:
+                raise RuntimeError("relay attempt id was not persisted")
+            request = RelayRequest(
+                message_id=attempt.message_id,
+                org_id=attempt.org_id,
+                provider=attempt.provider,
+                provider_deployment_id=attempt.provider_deployment_id,
+                envelope_from=attempt.envelope_from,
+                envelope_to=list(attempt.envelope_to),
+                mime_bytes=mime,
+                attempt_id=attempt.relay_attempt_id,
+                relay_config=tenant.relay.as_dict(),
+            )
+            adapter = self.adapters.get(tenant.relay)
+        except Exception as exc:
+            log.exception(
+                "relay.prepare_failed",
+                message_id=message_id,
+            )
+            result = RelayResult(
+                outcome=DeliveryOutcome.FAILED,
+                detail=f"relay preparation failed: {exc}",
+            )
+            self.spool.finalize_relay_attempt(
+                message_id,
+                result,
+                relay_adapter=tenant.relay.adapter,
+            )
+            return result
+
+        try:
+            result = adapter.submit(request)
+        except Exception as exc:
+            # Adapter exceptions can occur after DATA; never assume retry-safe.
+            log.exception(
+                "relay.adapter_unhandled",
+                message_id=message_id,
+            )
+            result = RelayResult(
+                outcome=DeliveryOutcome.UNCERTAIN,
+                detail=f"unhandled relay adapter failure: {exc}",
+                attempt_started_at=attempt.relay_started_at,
+            )
+        self.spool.finalize_relay_attempt(
             message_id,
-            spool_state_for_outcome(result.outcome),
-            relay_smtp_code=result.smtp_code,
-            relay_detail=result.detail or result.smtp_message,
-            relay_smtp_stage=(
-                result.smtp_stage.value if result.smtp_stage else None
-            ),
-            relay_remote_host=result.remote_host,
-            relay_cert_thumbprint=result.certificate_thumbprint,
-            relay_accepted_recipients=result.accepted_recipients,
-            relay_refused_recipients=result.refused_recipients,
+            result,
+            relay_adapter=tenant.relay.adapter,
         )
         log.info(
             "relay.finished",

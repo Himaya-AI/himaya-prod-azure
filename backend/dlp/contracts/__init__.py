@@ -12,7 +12,12 @@ from backend.dlp.contracts.commands import (
     GatewayCommand,
     GatewayMessageState,
 )
-from backend.dlp.contracts.events import CaptureEvent
+from backend.dlp.contracts.events import (
+    CaptureEvent,
+    DeliveryEvent,
+    DeliveryOutcome,
+    SmtpStage,
+)
 
 __all__ = [
     "CaptureEvent",
@@ -21,7 +26,10 @@ __all__ = [
     "CommandType",
     "DetectionMatch",
     "DetectionResult",
+    "DeliveryEvent",
+    "DeliveryOutcome",
     "GatewayCommand",
     "GatewayMessageState",
     "LlmClassificationResult",
+    "SmtpStage",
 ]

@@ -9,6 +9,9 @@ from backend.database import AsyncSessionLocal
 from backend.dlp.application.message_orchestrator import (
     MessageOrchestrator,
 )
+from backend.dlp.application.delivery_processor import (
+    DeliveryEventProcessor,
+)
 from backend.dlp.application.tenant_config import (
     DatabaseTenantConfigProvider,
 )
@@ -28,6 +31,7 @@ from backend.dlp.messaging.service_bus import (
 from backend.dlp.policy import PolicyEvaluator
 from backend.dlp.storage.azure_mime_store import AzureBlobMimeStore
 from backend.dlp.workers.capture_consumer import CaptureConsumer
+from backend.dlp.workers.delivery_consumer import DeliveryConsumer
 from backend.dlp.workers.outbox_publisher import OutboxPublisher
 
 log = logging.getLogger(__name__)
@@ -44,6 +48,7 @@ async def _build_bus(settings: DlpSettings) -> DlpMessageBus:
     bus = AzureServiceBusDlpMessageBus(
         capture_queue_name=settings.capture_queue_name,
         command_queue_name=settings.command_queue_name,
+        delivery_queue_name=settings.delivery_queue_name,
         connection_string=settings.service_bus_connection_string,
         fully_qualified_namespace=(
             settings.service_bus_fully_qualified_namespace
@@ -95,6 +100,15 @@ async def run() -> None:
         tenant_configs=DatabaseTenantConfigProvider(settings),
     )
     capture_consumer = CaptureConsumer(bus, orchestrator)
+    delivery_consumer = DeliveryConsumer(
+        bus,
+        DeliveryEventProcessor(
+            AsyncSessionLocal,
+            max_attempts=settings.delivery_max_attempts,
+            retry_base_seconds=settings.delivery_retry_base_seconds,
+            retry_max_seconds=settings.delivery_retry_max_seconds,
+        ),
+    )
     outbox_publisher = OutboxPublisher(
         session_factory=AsyncSessionLocal, bus=bus
     )
@@ -107,6 +121,10 @@ async def run() -> None:
             tasks.create_task(
                 outbox_publisher.run_forever(),
                 name="dlp-outbox-publisher",
+            )
+            tasks.create_task(
+                delivery_consumer.run_forever(),
+                name="dlp-delivery-consumer",
             )
     finally:
         await classifier.close()

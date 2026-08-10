@@ -22,6 +22,7 @@ class MessageState(str, Enum):
     PROVIDER_ACCEPTED = "provider_accepted"
     DEFERRED = "deferred"
     FAILED = "failed"
+    PARTIALLY_ACCEPTED = "partially_accepted"
     OUTCOME_UNCERTAIN = "outcome_uncertain"
 
 
@@ -60,6 +61,13 @@ class SpoolRecord(BaseModel):
     relay_cert_thumbprint: str | None = None
     relay_accepted_recipients: list[str] = Field(default_factory=list)
     relay_refused_recipients: list[str] = Field(default_factory=list)
+    relay_attempt_id: UUID | None = None
+    relay_attempt_count: int = 0
+    relay_trigger_command_id: UUID | None = None
+    relay_outcome: str | None = None
+    relay_started_at: datetime | None = None
+    relay_finished_at: datetime | None = None
+    published_delivery_event_ids: list[UUID] = Field(default_factory=list)
 
 
 class CaptureEvent(BaseModel):
@@ -136,3 +144,36 @@ class RelayResult(BaseModel):
     certificate_thumbprint: str | None = None
     attempt_started_at: datetime | None = None
     attempt_finished_at: datetime | None = None
+
+
+class DeliveryEvent(BaseModel):
+    """Gateway-to-control-plane result for one provider submission attempt."""
+
+    schema_version: int = 1
+    event_type: str = "dlp.message.delivery.v1"
+    event_id: UUID = Field(default_factory=uuid4)
+    message_id: UUID
+    org_id: str
+    provider: str
+    provider_deployment_id: str
+    attempt_id: UUID
+    attempt_number: int = Field(ge=1)
+    trigger_command_id: UUID | None = None
+    relay_adapter: str | None = None
+    outcome: DeliveryOutcome
+    resulting_state: MessageState
+    smtp_code: int | None = None
+    smtp_message: str | None = None
+    detail: str | None = None
+    smtp_stage: SmtpStage | None = None
+    remote_host: str | None = None
+    accepted_recipients: list[str] = Field(default_factory=list)
+    refused_recipients: list[str] = Field(default_factory=list)
+    certificate_thumbprint: str | None = None
+    attempt_started_at: datetime | None = None
+    attempt_finished_at: datetime | None = None
+    occurred_at: datetime = Field(default_factory=utcnow)
+
+    @property
+    def deduplication_key(self) -> str:
+        return f"{self.event_type}:{self.attempt_id}"

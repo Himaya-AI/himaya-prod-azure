@@ -31,6 +31,7 @@ class GatewayMessageState(str, Enum):
     PROVIDER_ACCEPTED = "provider_accepted"
     DEFERRED = "deferred"
     FAILED = "failed"
+    PARTIALLY_ACCEPTED = "partially_accepted"
     OUTCOME_UNCERTAIN = "outcome_uncertain"
 
 

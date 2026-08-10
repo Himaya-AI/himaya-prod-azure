@@ -186,10 +186,10 @@ class PhaseAwareSmtpTransport:
                 SmtpStage.DATA_SENT,
                 SmtpStage.FINAL_RESPONSE,
             }
-            outcome = classify_smtp_result(
-                None,
-                connection_lost_after_data=after_data,
-                stage=SmtpStage.DATA_SENT if after_data else stage,
+            outcome = (
+                DeliveryOutcome.UNCERTAIN
+                if after_data
+                else DeliveryOutcome.DEFERRED
             )
             log.warning(
                 "smtp_transport.connection_lost",

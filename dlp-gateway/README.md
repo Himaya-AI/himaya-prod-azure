@@ -48,6 +48,15 @@ To enable Exchange Online return:
 3. Set `relay.adapter=microsoft` and `mx_host` to the tenant MX
 4. Keep intake STARTTLS cert separate from the return client cert
 
+## AWS gateway → Azure control plane
+
+Production uses three Azure Service Bus queues: `dlp-capture`, `dlp-commands`,
+and `dlp-delivery`. On EC2 set `MESSAGE_BUS=service_bus`,
+`FORCE_ALLOW=false`, and configure either a scoped connection string or
+`SERVICE_BUS_FULLY_QUALIFIED_NAMESPACE` with workload identity credentials.
+Delivery events use a spool-backed outbox, so a queue outage does not replay
+SMTP; pending events publish after connectivity returns.
+
 ## Core principles
 
 1. Return SMTP `250` only after durable spool `fsync`.

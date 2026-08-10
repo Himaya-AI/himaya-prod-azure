@@ -34,6 +34,7 @@ It does not own:
 Contracts in `contracts/` mirror the currently deployed service payloads:
 
 - `CaptureEvent` from `dlp-gateway`
+- `DeliveryEvent` from `dlp-gateway` (one provider submission attempt)
 - `ClassifyRequest` / `ClassifyResponse` from `dlp-classifier`
 - `GatewayCommand` consumed by `dlp-gateway`
 
@@ -54,14 +55,15 @@ tasks. Do not run migrations independently in every API replica.
 ## Adapters
 
 - Local: `FilesystemDlpMessageBus` uses the gateway's durable queue directory.
-- Azure: `AzureServiceBusDlpMessageBus` uses dedicated capture and command
-  queues.
+- Azure: `AzureServiceBusDlpMessageBus` uses dedicated capture, command, and
+  delivery queues.
 - MIME: `AzureBlobMimeStore` validates the configured host/container, enforces
   the byte limit while streaming, and checks SHA-256 before returning content.
 
 Production should use managed identity with `DLP_SERVICE_BUS_FULLY_QUALIFIED_NAMESPACE`
 and `DLP_AZURE_STORAGE_ACCOUNT`; connection strings are for local development
-or controlled migration only.
+or controlled migration only. Configure `DLP_DELIVERY_QUEUE_NAME` alongside
+the existing capture and command queue names (default: `dlp-delivery`).
 
 ## MIME extraction
 
@@ -103,6 +105,12 @@ command in one database transaction. A separate loop publishes outbox rows.
 If publication succeeds but the database update fails, the same deterministic
 command ID is retried and the gateway safely deduplicates it. A hold creates no
 delivery command, so the gateway keeps the message captured.
+
+The same process consumes `dlp.message.delivery.v1` idempotently. Accepted,
+failed, partial, and uncertain outcomes update message state and are retained
+in `dlp_message_events`. Only temporary (`deferred`) outcomes schedule bounded
+retry commands; partial and uncertain outcomes never trigger a whole-message
+retry.
 
 ## Local end-to-end stack
 

@@ -6,6 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -36,8 +37,12 @@ class DlpSettings(BaseSettings):
     service_bus_fully_qualified_namespace: str = ""
     capture_queue_name: str = "dlp-capture"
     command_queue_name: str = "dlp-commands"
+    delivery_queue_name: str = "dlp-delivery"
     local_queue_dir: Path = Path("/var/dlp/queues")
     local_queue_reclaim_seconds: int = 300
+    delivery_max_attempts: int = Field(default=4, ge=1)
+    delivery_retry_base_seconds: int = Field(default=60, ge=1)
+    delivery_retry_max_seconds: int = Field(default=900, ge=1)
 
     azure_storage_connection_string: str = ""
     azure_storage_account: str = ""

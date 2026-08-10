@@ -4,6 +4,7 @@ from typing import Protocol, runtime_checkable
 
 from app.domain.models import (
     CaptureEvent,
+    DeliveryEvent,
     GatewayCommand,
     RelayRequest,
     RelayResult,
@@ -31,6 +32,17 @@ class SpoolStore(Protocol):
     def update_state(self, message_id: str, state: str, **extra: object) -> SpoolRecord:
         ...
 
+    def list_pending_delivery_events(self) -> list[DeliveryEvent]:
+        ...
+
+    def mark_delivery_event_published(
+        self, message_id: str, event_id: str
+    ) -> SpoolRecord:
+        ...
+
+    def recover_stale_submissions(self) -> int:
+        ...
+
 
 @runtime_checkable
 class MimeObjectStore(Protocol):
@@ -49,6 +61,9 @@ class EventBus(Protocol):
     def publish_command(self, command: GatewayCommand) -> None:
         ...
 
+    def publish_delivery(self, event: DeliveryEvent) -> None:
+        ...
+
     def consume_commands(self, max_items: int = 10) -> list[GatewayCommand]:
         ...
 
@@ -56,6 +71,22 @@ class EventBus(Protocol):
         ...
 
     def ack_command(self, command: GatewayCommand) -> None:
+        ...
+
+    def retry_command(self, command: GatewayCommand) -> None:
+        ...
+
+    def dead_letter_command(
+        self, command: GatewayCommand, reason: str
+    ) -> None:
+        ...
+
+    def recover_stale(
+        self, kind: str, stale_after_seconds: int
+    ) -> int:
+        ...
+
+    def close(self) -> None:
         ...
 
 

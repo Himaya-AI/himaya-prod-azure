@@ -13,6 +13,7 @@ from app.commands.processor import (
     CommandNotReadyError,
     CommandRejectedError,
 )
+from app.commands.consumer import CommandConsumer
 from app.domain.models import (
     CommandType,
     GatewayCommand,
@@ -28,11 +29,15 @@ class _AcceptingRelay:
         self.spool = spool
         self.calls = 0
 
-    def relay_message(self, message_id: str):
+    def relay_message(
+        self, message_id: str, command_id: str | None = None
+    ):
         self.calls += 1
         self.spool.update_state(
             message_id, MessageState.PROVIDER_ACCEPTED.value
         )
+        if command_id is not None:
+            self.spool.record_command_processed(message_id, command_id)
 
 
 def _captured_message(
@@ -169,4 +174,26 @@ def test_stale_processing_command_is_recovered(tmp_path: Path) -> None:
     os.utime(processing, (old_time, old_time))
 
     assert bus.recover_stale("commands", stale_after_seconds=30) == 1
+    assert bus.consume_commands() == [command]
+
+
+def test_unexpected_command_failure_is_returned_to_ready(
+    tmp_path: Path,
+) -> None:
+    bus = FilesystemEventBus(tmp_path / "queues")
+    command = GatewayCommand(
+        command_type=CommandType.ALLOW,
+        message_id=uuid4(),
+        org_id=str(uuid4()),
+    )
+    bus.publish_command(command)
+
+    class _FailingProcessor:
+        def process(self, _command):
+            raise RuntimeError("unexpected")
+
+    consumer = CommandConsumer(
+        bus, _FailingProcessor()  # type: ignore[arg-type]
+    )
+    assert consumer.run_once() == 1
     assert bus.consume_commands() == [command]

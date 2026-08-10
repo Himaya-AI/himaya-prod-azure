@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -33,6 +34,12 @@ class Settings(BaseSettings):
     queue_dir: Path = Path("/var/dlp/queues")
     queue_reclaim_seconds: int = 300
     tenant_config_path: Path = Path("/app/conf/tenants/local-tenant.json")
+    message_bus: Literal["filesystem", "service_bus"] = "filesystem"
+    service_bus_connection_string: str = ""
+    service_bus_fully_qualified_namespace: str = ""
+    capture_queue_name: str = "dlp-capture"
+    command_queue_name: str = "dlp-commands"
+    delivery_queue_name: str = "dlp-delivery"
 
     force_allow: bool = True
 
@@ -42,6 +49,7 @@ class Settings(BaseSettings):
     relay_host: str = "mailhog"
     relay_port: int = 1025
     relay_use_tls: bool = False
+    relay_max_attempts: int = Field(default=4, ge=1)
 
     max_message_bytes: int = 25 * 1024 * 1024
     max_recipients: int = 100
