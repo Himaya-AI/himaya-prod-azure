@@ -7,7 +7,7 @@ import Image from 'next/image'
 import {
   LayoutDashboard, AlertTriangle, Search, Users, Settings,
   ClipboardList, Plug, LogOut, ShieldAlert, BookLock, ShieldCheck, ShieldBan,
-  PenLine, MailWarning, Cloud
+  PenLine, MailWarning, Cloud, Globe2
 } from 'lucide-react'
 import { clsx } from 'clsx'
 import { getUser, logout } from '@/lib/auth'
@@ -27,6 +27,7 @@ const navItems = [
   { href: '/drafts',         icon: PenLine,          key: 'drafts' as const },
   { href: '/spam',           icon: MailWarning,      key: 'spam' as const },
   { href: '/saas-security',  icon: Cloud,            key: 'workspaceSecurity' as const },
+  { href: '/data-sovereignty', icon: Globe2,         key: 'dataSovereignty' as const },
   { href: '/onboarding',     icon: Plug,             key: 'integrations' as const },
   { href: '/settings',       icon: Settings,         key: 'settings' as const },
 ]
@@ -82,6 +83,7 @@ export default function Sidebar() {
             if (href === '/drafts' && !isEnterprise) return null
             if (href === '/spam' && !isEnterprise) return null
             if (href === '/saas-security' && !isEnterprise) return null
+            if (href === '/data-sovereignty' && !isEnterprise) return null
             const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
             return (
               <Link

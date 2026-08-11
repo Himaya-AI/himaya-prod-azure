@@ -47,6 +47,7 @@ export const translations = {
     inactive: 'Inactive',
     noUsers: 'No users found',
     workspaceSecurity: 'Workspace Security',
+    dataSovereignty: 'Data Sovereignty',
     defaultLanguage: 'Interface Language',
   },
   ar: {
@@ -95,6 +96,7 @@ export const translations = {
     inactive: 'غير نشط',
     noUsers: 'لا يوجد مستخدمون',
     workspaceSecurity: 'أمان مساحة العمل',
+    dataSovereignty: 'سيادة البيانات',
     defaultLanguage: 'لغة الواجهة',
   },
 }
