@@ -4,6 +4,7 @@ import {
   Globe2, ShieldAlert, ShieldCheck, RefreshCw, Scale,
   MapPin, Trash2, Plus, Layers, Server, FileWarning, CheckCircle2,
   Info, X, Lock, Zap, ClipboardCheck, AlertCircle,
+  Database, UserSearch, Fingerprint,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/Table'
@@ -77,7 +78,52 @@ interface EnforcementAction {
   created_at: string | null
 }
 
-type Tab = 'overview' | 'violations' | 'policies' | 'actions'
+interface ColumnClassification {
+  source: string
+  lineage: { database: string; schema: string; table: string; column: string; path: string }
+  data_class: string
+  category: string
+  detector: string
+  confidence: number
+  evidence: { samples?: string[]; sample_size?: number; match_count?: number; reason?: string; detector?: string }
+  region: string | null
+  country: string | null
+  last_seen_at: string | null
+}
+
+interface ClassSummary {
+  by_source: Array<{ source: string; columns: number; avg_confidence: number }>
+  by_data_class: Array<{ data_class: string; columns: number }>
+  total_columns: number
+}
+
+interface DSARMatch {
+  source: string
+  path: string
+  data_class: string
+  category: string
+  region: string | null
+  country: string | null
+  confidence: number
+  match_reason?: string
+  remediation_sql?: string | null
+}
+
+interface DSARRequest {
+  id: string
+  subject_name: string | null
+  subject_email: string | null
+  request_type: string
+  status: string
+  legal_basis: string | null
+  due_at: string | null
+  summary: { total_matches?: number; systems?: string[]; by_source?: Record<string, number>; by_country?: Record<string, number> }
+  created_by: string | null
+  created_at: string | null
+  completed_at: string | null
+}
+
+type Tab = 'overview' | 'violations' | 'policies' | 'actions' | 'classified' | 'dsar'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -121,6 +167,14 @@ export default function DataSovereigntyPage() {
   const [enforcingId, setEnforcingId] = useState<string | null>(null)
   const [showPackPicker, setShowPackPicker] = useState(false)
 
+  const [classifications, setClassifications] = useState<ColumnClassification[]>([])
+  const [classSummary, setClassSummary] = useState<ClassSummary | null>(null)
+  const [dsars, setDsars] = useState<DSARRequest[]>([])
+  const [showDsarModal, setShowDsarModal] = useState(false)
+  const [dsarDetail, setDsarDetail] = useState<{ request: DSARRequest; matches: DSARMatch[] } | null>(null)
+  const [creatingDsar, setCreatingDsar] = useState(false)
+  const [dsarForm, setDsarForm] = useState({ subject_name: '', subject_email: '', national_id: '', phone: '', request_type: 'access' })
+
   const handle403 = (e: unknown) => {
     const err = e as { response?: { status?: number } }
     if (err.response?.status === 403) { setEnterprise(false); return true }
@@ -142,12 +196,55 @@ export default function DataSovereigntyPage() {
       setPolicies(po.data?.policies ?? [])
       setPacks(pk.data?.packs ?? [])
       setActions(ac.data?.actions ?? [])
+      const [cs, cl, ds] = await Promise.all([
+        api.get('/api/dsar/classifications/summary'),
+        api.get('/api/dsar/classifications?limit=500'),
+        api.get('/api/dsar/requests'),
+      ])
+      setClassSummary(cs.data)
+      setClassifications(cl.data?.classifications ?? [])
+      setDsars(ds.data?.requests ?? [])
     } catch (e) {
       if (!handle403(e)) console.error('sovereignty load failed', e)
     } finally {
       setLoading(false)
     }
   }, [])
+
+  const createDsar = async () => {
+    setCreatingDsar(true)
+    try {
+      const identifiers: Record<string, string> = {}
+      if (dsarForm.national_id) identifiers.national_id = dsarForm.national_id
+      if (dsarForm.phone) identifiers.phone = dsarForm.phone
+      const { data } = await api.post('/api/dsar/requests', {
+        subject_name: dsarForm.subject_name || null,
+        subject_email: dsarForm.subject_email || null,
+        subject_identifiers: identifiers,
+        request_type: dsarForm.request_type,
+      })
+      setShowDsarModal(false)
+      setDsarForm({ subject_name: '', subject_email: '', national_id: '', phone: '', request_type: 'access' })
+      await loadAll()
+      if (data.request_id) openDsar(data.request_id)
+    } catch (e) { if (!handle403(e)) console.error(e) }
+    finally { setCreatingDsar(false) }
+  }
+
+  const openDsar = async (id: string) => {
+    try {
+      const { data } = await api.get(`/api/dsar/requests/${id}`)
+      setDsarDetail({ request: data, matches: data.matches ?? [] })
+    } catch (e) { if (!handle403(e)) console.error(e) }
+  }
+
+  const completeDsar = async (id: string) => {
+    try {
+      await api.post(`/api/dsar/requests/${id}/complete`)
+      setDsarDetail(null)
+      await loadAll()
+    } catch (e) { if (!handle403(e)) console.error(e) }
+  }
 
   useEffect(() => { loadAll() }, [loadAll])
 
@@ -264,6 +361,8 @@ export default function DataSovereigntyPage() {
           { id: 'overview' as const, label: 'Scorecard', icon: <ShieldCheck size={13} /> },
           { id: 'violations' as const, label: `Violations${overview ? ` (${overview.total_violations})` : ''}`, icon: <ShieldAlert size={13} /> },
           { id: 'policies' as const, label: `Policies${overview ? ` (${overview.total_policies})` : ''}`, icon: <Scale size={13} /> },
+          { id: 'classified' as const, label: `Classified Data${classSummary ? ` (${classSummary.total_columns})` : ''}`, icon: <Database size={13} /> },
+          { id: 'dsar' as const, label: `DSAR${dsars.length ? ` (${dsars.length})` : ''}`, icon: <UserSearch size={13} /> },
           { id: 'actions' as const, label: `Enforcement Log${actions.length ? ` (${actions.length})` : ''}`, icon: <ClipboardCheck size={13} /> },
         ]).map(t => (
           <button
@@ -484,6 +583,102 @@ export default function DataSovereigntyPage() {
             </div>
           )}
 
+          {/* ── Classified Data (column-level, with evidence + lineage) ── */}
+          {tab === 'classified' && (
+            <div className="space-y-4">
+              {classSummary && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <StatCard icon={<Database size={14} className="text-[#3b6ef6]" />} label="Classified Columns" value={classSummary.total_columns} />
+                  <StatCard icon={<Server size={14} className="text-purple-400" />} label="Sources" value={classSummary.by_source.length} />
+                  <StatCard icon={<Fingerprint size={14} className="text-amber-400" />} label="PII Columns" value={classSummary.by_data_class.find(d => d.data_class === 'pii')?.columns ?? 0} />
+                  <StatCard icon={<ShieldAlert size={14} className="text-red-400" />} label="Sensitive Classes" value={classSummary.by_data_class.length} />
+                </div>
+              )}
+              <div className="bg-[#13131a] border border-white/[0.06] rounded-xl overflow-hidden">
+                {classifications.length === 0 ? (
+                  <div className="text-center py-16">
+                    <Database size={32} className="mx-auto text-[#3b6ef6]/40 mb-2" />
+                    <div className="text-[13px] text-[var(--muted)]">No classified columns yet. Connect Snowflake/SAP and run a scan — column-level PII is classified automatically.</div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <Thead>
+                        <Tr>
+                          <Th>Source</Th>
+                          <Th>Lineage (db.schema.table.column)</Th>
+                          <Th>Class</Th>
+                          <Th>Category</Th>
+                          <Th>Confidence</Th>
+                          <Th>Evidence</Th>
+                          <Th>Region</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {classifications.map((c, i) => (
+                          <Tr key={i}>
+                            <Td><span className={`text-[11px] font-semibold ${providerColor(c.source)}`}>{c.source.toUpperCase()}</span></Td>
+                            <Td><span className="text-[11px] font-mono text-[var(--foreground)] max-w-[300px] block truncate" title={c.lineage.path}>{c.lineage.database}.{c.lineage.schema}.{c.lineage.table}.<span className="text-[#3b6ef6]">{c.lineage.column}</span></span></Td>
+                            <Td><span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300">{c.data_class}</span></Td>
+                            <Td><span className="text-[11px] text-[var(--muted)]">{c.category}</span></Td>
+                            <Td><ConfidenceBar value={c.confidence} detector={c.detector} /></Td>
+                            <Td>
+                              <span className="text-[10px] text-[var(--muted)] max-w-[220px] block truncate" title={(c.evidence?.samples || []).join(' · ') + (c.evidence?.reason ? ` — ${c.evidence.reason}` : '')}>
+                                {c.evidence?.reason || (c.evidence?.samples || []).join(' · ') || '—'}
+                              </span>
+                            </Td>
+                            <Td><span className="text-[10px] text-[var(--muted)]">{c.region || '—'}{c.country ? ` (${c.country})` : ''}</span></Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── DSAR ── */}
+          {tab === 'dsar' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-[12px] text-[var(--muted)] max-w-2xl">
+                  Data Subject Access Requests. Creating a request builds a privacy-preserving cross-system <span className="text-[var(--foreground)]">data map</span> from the classified inventory — pointing to the exact columns/tables/systems holding the subject&apos;s PII, without reading raw values.
+                </p>
+                <Button size="sm" onClick={() => setShowDsarModal(true)}><Plus size={14} className="mr-1" /> New DSAR</Button>
+              </div>
+              <div className="bg-[#13131a] border border-white/[0.06] rounded-xl overflow-hidden">
+                {dsars.length === 0 ? (
+                  <div className="text-center py-16">
+                    <UserSearch size={32} className="mx-auto text-[#3b6ef6]/40 mb-2" />
+                    <div className="text-[13px] text-[var(--muted)]">No DSARs yet. Create one to generate a subject data map.</div>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <Thead>
+                        <Tr><Th>Subject</Th><Th>Type</Th><Th>Status</Th><Th>Matches</Th><Th>Systems</Th><Th>Due</Th><Th></Th></Tr>
+                      </Thead>
+                      <Tbody>
+                        {dsars.map(d => (
+                          <Tr key={d.id}>
+                            <Td><span className="text-[12px] text-[var(--foreground)]">{d.subject_name || d.subject_email || '—'}</span></Td>
+                            <Td><span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 capitalize">{d.request_type}</span></Td>
+                            <Td><span className={`text-[10px] px-2 py-0.5 rounded-full border ${d.status === 'completed' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>{d.status}</span></Td>
+                            <Td><span className="text-[12px] text-[var(--foreground)]">{d.summary?.total_matches ?? 0}</span></Td>
+                            <Td><span className="text-[10px] text-[var(--muted)]">{(d.summary?.systems || []).join(', ') || '—'}</span></Td>
+                            <Td><span className="text-[10px] text-[var(--muted)]">{fmtDate(d.due_at)}</span></Td>
+                            <Td><button onClick={() => openDsar(d.id)} className="text-[11px] text-[#3b6ef6] hover:underline">View map</button></Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Enforcement Log ── */}
           {tab === 'actions' && (
             <div className="bg-[#13131a] border border-white/[0.06] rounded-xl overflow-hidden">
@@ -535,6 +730,82 @@ export default function DataSovereigntyPage() {
         </>
       )}
 
+      {/* DSAR create modal */}
+      {showDsarModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDsarModal(false)}>
+          <div className="bg-[#13131a] border border-white/[0.1] rounded-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+              <h3 className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-2"><UserSearch size={16} className="text-[#3b6ef6]" /> New Data Subject Request</h3>
+              <button onClick={() => setShowDsarModal(false)} className="text-[var(--muted)] hover:text-[var(--foreground)]"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Subject name" value={dsarForm.subject_name} onChange={v => setDsarForm(f => ({ ...f, subject_name: v }))} placeholder="Jane Doe" />
+                <Field label="Email" value={dsarForm.subject_email} onChange={v => setDsarForm(f => ({ ...f, subject_email: v }))} placeholder="jane@acme.com" />
+                <Field label="National ID / EID" value={dsarForm.national_id} onChange={v => setDsarForm(f => ({ ...f, national_id: v }))} placeholder="optional" />
+                <Field label="Phone" value={dsarForm.phone} onChange={v => setDsarForm(f => ({ ...f, phone: v }))} placeholder="optional" />
+              </div>
+              <div>
+                <label className="text-[11px] text-[var(--muted)] uppercase tracking-wide">Request type</label>
+                <select
+                  value={dsarForm.request_type}
+                  onChange={e => setDsarForm(f => ({ ...f, request_type: e.target.value }))}
+                  className="mt-1 w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)]"
+                >
+                  <option value="access">Access (Right to Access)</option>
+                  <option value="erasure">Erasure (Right to be Forgotten)</option>
+                  <option value="rectification">Rectification</option>
+                  <option value="portability">Portability</option>
+                </select>
+              </div>
+              <p className="text-[10px] text-[var(--muted)]">A 30-day response clock (GDPR/PDPL) is set automatically. We locate columns by category — raw values are never read or stored.</p>
+              <div className="flex justify-end gap-2 pt-2">
+                <Button size="sm" variant="ghost" onClick={() => setShowDsarModal(false)}>Cancel</Button>
+                <Button size="sm" onClick={createDsar} loading={creatingDsar}>Build Data Map</Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DSAR detail (data map) modal */}
+      {dsarDetail && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDsarDetail(null)}>
+          <div className="bg-[#13131a] border border-white/[0.1] rounded-2xl max-w-3xl w-full max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-white/[0.06] sticky top-0 bg-[#13131a]">
+              <div>
+                <h3 className="text-[15px] font-semibold text-[var(--foreground)]">Subject Data Map — {dsarDetail.request.subject_name || dsarDetail.request.subject_email}</h3>
+                <div className="text-[11px] text-[var(--muted)] mt-0.5 capitalize">{dsarDetail.request.request_type} · {dsarDetail.matches.length} matches · due {fmtDate(dsarDetail.request.due_at)}</div>
+              </div>
+              <button onClick={() => setDsarDetail(null)} className="text-[var(--muted)] hover:text-[var(--foreground)]"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-2">
+              {dsarDetail.matches.length === 0 ? (
+                <div className="text-center py-10 text-[12px] text-[var(--muted)]">No classified PII columns matched this subject&apos;s identifier types. Classify more sources to widen coverage.</div>
+              ) : dsarDetail.matches.map((m, i) => (
+                <div key={i} className="bg-white/[0.02] border border-white/[0.05] rounded-xl p-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`text-[11px] font-semibold ${providerColor(m.source)}`}>{m.source.toUpperCase()}</span>
+                    <span className="text-[11px] font-mono text-[var(--foreground)]">{m.path.split(':')[1]}</span>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300">{m.category}</span>
+                    <span className="text-[10px] text-[var(--muted)]">{m.region || '—'}{m.country ? ` (${m.country})` : ''}</span>
+                    <span className="text-[10px] text-[var(--muted)] ml-auto">conf {(m.confidence * 100).toFixed(0)}%</span>
+                  </div>
+                  {m.remediation_sql && (
+                    <pre className="mt-2 text-[10px] font-mono text-amber-300/90 bg-black/30 border border-amber-500/10 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap">{m.remediation_sql}</pre>
+                  )}
+                </div>
+              ))}
+              <div className="flex justify-end gap-2 pt-3">
+                {dsarDetail.request.status !== 'completed' && (
+                  <Button size="sm" onClick={() => completeDsar(dsarDetail.request.id)}><CheckCircle2 size={14} className="mr-1" /> Mark Complete</Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Pack picker modal */}
       {showPackPicker && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPackPicker(false)}>
@@ -581,6 +852,34 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
     <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-4">
       <div className="flex items-center gap-2 mb-2">{icon}<span className="text-[11px] text-[var(--muted)] uppercase tracking-wide">{label}</span></div>
       <div className={`text-2xl font-bold ${color || 'text-[var(--foreground)]'}`}>{value}</div>
+    </div>
+  )
+}
+
+function ConfidenceBar({ value, detector }: { value: number; detector: string }) {
+  const pct = Math.round(value * 100)
+  const color = value >= 0.85 ? 'bg-emerald-500' : value >= 0.65 ? 'bg-amber-500' : 'bg-zinc-500'
+  return (
+    <div className="flex items-center gap-2 min-w-[120px]">
+      <div className="h-1.5 w-16 bg-white/[0.06] rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-[10px] text-[var(--muted)]">{pct}%</span>
+      <span className="text-[9px] px-1 py-0.5 rounded bg-white/[0.04] text-[var(--muted)]" title="detector">{detector}</span>
+    </div>
+  )
+}
+
+function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div>
+      <label className="text-[11px] text-[var(--muted)] uppercase tracking-wide">{label}</label>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="mt-1 w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder:text-[var(--muted)]/50"
+      />
     </div>
   )
 }
