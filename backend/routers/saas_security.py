@@ -1937,43 +1937,61 @@ async def list_alerts(
     
     # Databricks conditions mirror AWS conditions
     databricks_conditions = ["org_id = :org_id"]
-    
+
+    # CSPM findings (github / azure / oracle). HIGH+CRITICAL are already mirrored
+    # into saas_alerts by the CSPM sink, so this branch only contributes the
+    # lower-severity findings to avoid surfacing duplicates in the alerts list.
+    cspm_conditions = ["org_id = :org_id", "severity NOT IN ('high','critical')"]
+
     if provider:
         if provider == 'aws':
             # Only AWS findings
             saas_conditions.append("1=0")  # Exclude SaaS
             databricks_conditions.append("1=0")  # Exclude Databricks
+            cspm_conditions.append("1=0")  # Exclude CSPM
         elif provider == 'databricks':
             # Only Databricks findings
             saas_conditions.append("1=0")  # Exclude SaaS
             aws_conditions.append("1=0")  # Exclude AWS
+            cspm_conditions.append("1=0")  # Exclude CSPM
         else:
-            # Only SaaS alerts for specific provider
+            # Only SaaS alerts + matching CSPM cloud for specific provider
             saas_conditions.append("provider = :provider")
             aws_conditions.append("1=0")  # Exclude AWS
             databricks_conditions.append("1=0")  # Exclude Databricks
+            cspm_conditions.append("cloud = :provider")
             params["provider"] = provider
     if severity:
         saas_conditions.append("severity = :severity")
         aws_conditions.append("severity = :severity")
         databricks_conditions.append("severity = :severity")
+        cspm_conditions.append("severity = :severity")
         params["severity"] = severity
     if status:
         saas_conditions.append("status = :status")
         aws_conditions.append("status = :status")
         databricks_conditions.append("status = :status")
+        # cspm_findings has no open/resolved status column — derive from resolved_at.
+        if status == "open":
+            cspm_conditions.append("resolved_at IS NULL")
+        elif status == "resolved":
+            cspm_conditions.append("resolved_at IS NOT NULL")
+        else:
+            cspm_conditions.append("1=0")
         params["status"] = status
     if alert_type:
         saas_conditions.append("alert_type = :alert_type")
         aws_conditions.append("category = :alert_type")
         databricks_conditions.append("category = :alert_type")
+        cspm_conditions.append("category = :alert_type")
         params["alert_type"] = alert_type
     
     saas_where = " AND ".join(saas_conditions)
     aws_where = " AND ".join(aws_conditions)
     databricks_where = " AND ".join(databricks_conditions)
+    cspm_where = " AND ".join(cspm_conditions)
     
-    # UNION query: SaaS alerts + AWS findings + Databricks findings
+    # UNION query: SaaS alerts + AWS findings + Databricks findings + CSPM findings
     union_sql = f"""
         SELECT 
             id::text, org_id::text, provider, alert_type, severity, title, description,
@@ -1997,6 +2015,15 @@ async def list_alerts(
             status, resolved_at, detected_at as created_at, detected_at as updated_at, 'databricks' as source
         FROM databricks_findings
         WHERE {databricks_where}
+        UNION ALL
+        SELECT 
+            id::text, org_id::text, cloud as provider, category as alert_type, severity, title, message as description,
+            resource as resource_id, resource_type as resource_name, NULL as resource_url,
+            metadata as classification_result, NULL as posture_result,
+            CASE WHEN resolved_at IS NULL THEN 'open' ELSE 'resolved' END as status,
+            resolved_at, first_seen_at as created_at, last_seen_at as updated_at, 'cspm' as source
+        FROM cspm_findings
+        WHERE {cspm_where}
         ORDER BY created_at DESC NULLS LAST
         LIMIT :limit OFFSET :offset
     """
@@ -2009,6 +2036,8 @@ async def list_alerts(
             SELECT id FROM aws_findings WHERE {aws_where}
             UNION ALL
             SELECT id FROM databricks_findings WHERE {databricks_where}
+            UNION ALL
+            SELECT id FROM cspm_findings WHERE {cspm_where}
         ) combined
     """
     
@@ -2335,8 +2364,9 @@ async def get_alert_remediation(
         try:
             cs_row = await db.execute(text("""
                 SELECT id::text, org_id::text,
-                       check_id as alert_type, severity,
-                       title, description, resource_id, resource_id as resource_name,
+                       category as alert_type, severity,
+                       title, message as description, resource as resource_id,
+                       resource_type as resource_name,
                        NULL::text as resource_url, metadata as classification_result,
                        NULL::jsonb as posture_result, cloud as provider
                 FROM cspm_findings
