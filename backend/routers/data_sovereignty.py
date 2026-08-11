@@ -1,0 +1,945 @@
+"""
+Himaya Data Sovereignty Router — enterprise tier only.
+
+Data Residency answers *where* data physically sits. Data Sovereignty is the
+enforcement layer on top: *which nation's laws govern the data, whether that
+placement is permitted, and provable compliance*.
+
+Four building blocks:
+  1. Jurisdiction packs   — borders (allowed regions) + transfer rules + legal citations
+  2. Location oracle       — where each asset physically lives, from REAL connector data
+  3. Sovereignty policies  — data-class + jurisdiction -> allowed regions + action
+  4. Evaluation engine     — joins the above into verdicts (violations) + alerts
+
+The location oracle reads the same connector tables the Data Residency endpoint
+uses (aws_resources, azure_resources, gcp_resources, oracle_connections,
+databricks_connections, sap_connections, saas_data_items) — no dummy data.
+
+DB tables created at startup (raw SQL, no Alembic):
+  - sovereignty_policies
+  - sovereignty_violations
+"""
+from __future__ import annotations
+
+import json
+import logging
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from sqlalchemy import select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.database import get_db
+from backend.models.db_models import Organization as _Org
+from backend.routers.auth import get_current_user
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/sovereignty", tags=["data-sovereignty"])
+
+
+# ── Enterprise gate (same pattern as dlp.py / posture.py) ─────────────────────
+
+async def _require_enterprise(current_user, db: AsyncSession):
+    """Raise 403 if org is not on Enterprise tier."""
+    _org = (await db.execute(
+        select(_Org).where(_Org.id == current_user.org_id)
+    )).scalar_one_or_none()
+    _tier = (getattr(_org, "tier", None) or "Launch").strip().lower()
+    if _tier not in ("enterprise", "enterprise trial"):
+        raise HTTPException(
+            status_code=403,
+            detail="Data Sovereignty requires an Enterprise plan. Upgrade to access this feature.",
+        )
+
+
+# ── Region -> jurisdiction (country) resolution ───────────────────────────────
+# Maps cloud region codes to the ISO country code of the physical datacentre.
+# Used to decide which nation's laws govern data stored there.
+
+AWS_REGION_COUNTRY = {
+    "us-east-1": "US", "us-east-2": "US", "us-west-1": "US", "us-west-2": "US",
+    "ca-central-1": "CA",
+    "eu-west-1": "IE", "eu-west-2": "GB", "eu-west-3": "FR", "eu-central-1": "DE",
+    "eu-central-2": "CH", "eu-north-1": "SE", "eu-south-1": "IT", "eu-south-2": "ES",
+    "me-south-1": "BH", "me-central-1": "AE",
+    "ap-northeast-1": "JP", "ap-northeast-2": "KR", "ap-northeast-3": "JP",
+    "ap-southeast-1": "SG", "ap-southeast-2": "AU", "ap-southeast-3": "ID",
+    "ap-south-1": "IN", "ap-east-1": "HK",
+    "sa-east-1": "BR", "af-south-1": "ZA",
+}
+
+AZURE_REGION_COUNTRY = {
+    "eastus": "US", "eastus2": "US", "westus": "US", "westus2": "US", "westus3": "US",
+    "centralus": "US", "northcentralus": "US", "southcentralus": "US", "westcentralus": "US",
+    "canadacentral": "CA", "canadaeast": "CA",
+    "northeurope": "IE", "westeurope": "NL", "uksouth": "GB", "ukwest": "GB",
+    "francecentral": "FR", "germanywestcentral": "DE", "switzerlandnorth": "CH",
+    "norwayeast": "NO", "swedencentral": "SE", "italynorth": "IT", "spaincentral": "ES",
+    "polandcentral": "PL",
+    "uaenorth": "AE", "uaecentral": "AE", "qatarcentral": "QA", "israelcentral": "IL",
+    "southafricanorth": "ZA",
+    "southeastasia": "SG", "eastasia": "HK", "japaneast": "JP", "japanwest": "JP",
+    "koreacentral": "KR", "centralindia": "IN", "southindia": "IN", "westindia": "IN",
+    "australiaeast": "AU", "australiasoutheast": "AU",
+    "brazilsouth": "BR",
+}
+
+GCP_REGION_COUNTRY = {
+    "us-central1": "US", "us-east1": "US", "us-east4": "US", "us-east5": "US",
+    "us-west1": "US", "us-west2": "US", "us-west3": "US", "us-west4": "US", "us-south1": "US",
+    "northamerica-northeast1": "CA", "northamerica-northeast2": "CA",
+    "southamerica-east1": "BR",
+    "europe-west1": "BE", "europe-west2": "GB", "europe-west3": "DE", "europe-west4": "NL",
+    "europe-west6": "CH", "europe-west8": "IT", "europe-west9": "FR", "europe-west10": "DE",
+    "europe-west12": "IT", "europe-north1": "FI", "europe-central2": "PL",
+    "europe-southwest1": "ES",
+    "me-central1": "QA", "me-central2": "SA", "me-west1": "IL",
+    "asia-east1": "TW", "asia-east2": "HK", "asia-northeast1": "JP", "asia-northeast2": "JP",
+    "asia-northeast3": "KR", "asia-south1": "IN", "asia-south2": "IN",
+    "asia-southeast1": "SG", "asia-southeast2": "ID", "australia-southeast1": "AU",
+    "australia-southeast2": "AU",
+}
+
+OCI_REGION_COUNTRY = {
+    "us-ashburn-1": "US", "us-phoenix-1": "US", "us-sanjose-1": "US",
+    "ca-toronto-1": "CA", "ca-montreal-1": "CA",
+    "uk-london-1": "GB", "uk-cardiff-1": "GB", "eu-frankfurt-1": "DE",
+    "eu-amsterdam-1": "NL", "eu-zurich-1": "CH", "eu-madrid-1": "ES", "eu-milan-1": "IT",
+    "eu-paris-1": "FR", "eu-stockholm-1": "SE",
+    "me-jeddah-1": "SA", "me-riyadh-1": "SA", "me-dubai-1": "AE", "me-abudhabi-1": "AE",
+    "il-jerusalem-1": "IL",
+    "ap-tokyo-1": "JP", "ap-osaka-1": "JP", "ap-seoul-1": "KR", "ap-mumbai-1": "IN",
+    "ap-hyderabad-1": "IN", "ap-singapore-1": "SG", "ap-sydney-1": "AU",
+    "sa-saopaulo-1": "BR", "af-johannesburg-1": "ZA",
+}
+
+# Country -> geographic region grouping + friendly name (for UI + policy defaults)
+COUNTRY_META = {
+    "US": {"region": "North America", "name": "United States"},
+    "CA": {"region": "North America", "name": "Canada"},
+    "MX": {"region": "North America", "name": "Mexico"},
+    "GB": {"region": "Europe", "name": "United Kingdom"},
+    "IE": {"region": "Europe", "name": "Ireland"}, "DE": {"region": "Europe", "name": "Germany"},
+    "FR": {"region": "Europe", "name": "France"}, "NL": {"region": "Europe", "name": "Netherlands"},
+    "SE": {"region": "Europe", "name": "Sweden"}, "NO": {"region": "Europe", "name": "Norway"},
+    "FI": {"region": "Europe", "name": "Finland"}, "CH": {"region": "Europe", "name": "Switzerland"},
+    "IT": {"region": "Europe", "name": "Italy"}, "ES": {"region": "Europe", "name": "Spain"},
+    "PL": {"region": "Europe", "name": "Poland"}, "BE": {"region": "Europe", "name": "Belgium"},
+    "SA": {"region": "Middle East", "name": "Saudi Arabia"}, "AE": {"region": "Middle East", "name": "UAE"},
+    "QA": {"region": "Middle East", "name": "Qatar"}, "BH": {"region": "Middle East", "name": "Bahrain"},
+    "KW": {"region": "Middle East", "name": "Kuwait"}, "OM": {"region": "Middle East", "name": "Oman"},
+    "IL": {"region": "Middle East", "name": "Israel"},
+    "JP": {"region": "Asia Pacific", "name": "Japan"}, "KR": {"region": "Asia Pacific", "name": "South Korea"},
+    "SG": {"region": "Asia Pacific", "name": "Singapore"}, "IN": {"region": "Asia Pacific", "name": "India"},
+    "AU": {"region": "Asia Pacific", "name": "Australia"}, "HK": {"region": "Asia Pacific", "name": "Hong Kong"},
+    "ID": {"region": "Asia Pacific", "name": "Indonesia"}, "TW": {"region": "Asia Pacific", "name": "Taiwan"},
+    "BR": {"region": "South America", "name": "Brazil"}, "ZA": {"region": "Africa", "name": "South Africa"},
+}
+
+
+# ── Jurisdiction packs (borders + transfer rules + legal citations) ───────────
+# Prebuilt, shipped reference data. Customers toggle which apply; they don't
+# author law. allowed_regions accepts BOTH country codes and cloud region codes.
+
+JURISDICTION_PACKS = {
+    "KSA_PDPL": {
+        "name": "Saudi Arabia — PDPL / NCA Data Localization",
+        "jurisdiction": "KSA",
+        "regulator": "SDAIA / NCA",
+        "legal_basis": "PDPL Art. 29 (cross-border transfer); NCA data-localization guidance",
+        "data_classes": ["pii", "phi", "financial", "confidential", "highly_confidential"],
+        "allowed_regions": ["SA", "me-central2", "me-jeddah-1", "me-riyadh-1"],
+        "action": "WARN",
+        "transfer_rule": "prohibited_unless_adequacy_or_consent",
+    },
+    "UAE_PDPL": {
+        "name": "UAE — Federal PDPL",
+        "jurisdiction": "UAE",
+        "regulator": "UAE Data Office",
+        "legal_basis": "UAE Federal Decree-Law No. 45 of 2021 (PDPL) Art. 22–23",
+        "data_classes": ["pii", "phi", "financial", "confidential", "highly_confidential"],
+        "allowed_regions": ["AE", "uaenorth", "uaecentral", "me-central-1", "me-dubai-1", "me-abudhabi-1"],
+        "action": "WARN",
+        "transfer_rule": "allowed_with_adequate_protection",
+    },
+    "EU_GDPR": {
+        "name": "European Union — GDPR (Chapter V transfers)",
+        "jurisdiction": "EU",
+        "regulator": "EDPB",
+        "legal_basis": "GDPR Art. 44–46 (transfers require adequacy decision or SCCs)",
+        "data_classes": ["pii", "phi", "confidential", "highly_confidential"],
+        "allowed_regions": [
+            "IE", "DE", "FR", "NL", "SE", "FI", "IT", "ES", "PL", "BE", "NO",
+            "eu-west-1", "eu-west-3", "eu-central-1", "eu-north-1", "eu-south-1",
+            "northeurope", "westeurope", "francecentral", "germanywestcentral",
+            "swedencentral", "europe-west1", "europe-west3", "europe-west4",
+            "europe-west9", "europe-north1",
+        ],
+        "action": "WARN",
+        "transfer_rule": "allowed_with_SCC_or_adequacy",
+    },
+    "US": {
+        "name": "United States — SOC 2 / HIPAA residency",
+        "jurisdiction": "US",
+        "regulator": "AICPA / HHS",
+        "legal_basis": "SOC 2 CC / HIPAA §164.308 data-residency commitments",
+        "data_classes": ["phi", "financial", "confidential", "highly_confidential"],
+        "allowed_regions": [
+            "US", "us-east-1", "us-east-2", "us-west-1", "us-west-2",
+            "eastus", "eastus2", "westus", "westus2", "westus3", "centralus",
+            "us-central1", "us-east1", "us-east4", "us-west1", "us-west2",
+        ],
+        "action": "WARN",
+        "transfer_rule": "no_restriction",
+    },
+    "UK_GDPR": {
+        "name": "United Kingdom — UK GDPR / DPA 2018",
+        "jurisdiction": "UK",
+        "regulator": "ICO",
+        "legal_basis": "UK GDPR Art. 44–46; Data Protection Act 2018",
+        "data_classes": ["pii", "phi", "confidential", "highly_confidential"],
+        "allowed_regions": ["GB", "eu-west-2", "uksouth", "ukwest", "europe-west2"],
+        "action": "WARN",
+        "transfer_rule": "allowed_with_SCC_or_adequacy",
+    },
+}
+
+# Data classes we recognise on assets. Anything a policy targets is matched
+# against the asset's derived data_class (see _asset_data_class).
+KNOWN_DATA_CLASSES = ["pii", "phi", "pci", "financial", "confidential", "highly_confidential"]
+VALID_ACTIONS = ("WARN", "BLOCK", "QUARANTINE", "NOTIFY")
+ACTION_SEVERITY = {"NOTIFY": "low", "WARN": "medium", "QUARANTINE": "high", "BLOCK": "critical"}
+
+
+def _region_to_country(provider: str, region: Optional[str]) -> Optional[str]:
+    """Resolve a provider region code to an ISO country code."""
+    if not region:
+        return None
+    r = region.strip().lower()
+    p = (provider or "").lower()
+    if p == "aws":
+        return AWS_REGION_COUNTRY.get(r)
+    if p == "azure":
+        return AZURE_REGION_COUNTRY.get(r)
+    if p == "gcp":
+        return GCP_REGION_COUNTRY.get(r)
+    if p == "oracle":
+        return OCI_REGION_COUNTRY.get(r)
+    return None
+
+
+# ── Table creation (idempotent, called at import time via lifespan) ───────────
+
+async def ensure_sovereignty_tables(db: AsyncSession):
+    """Create Data Sovereignty tables if they don't exist (idempotent)."""
+    await db.execute(text("""
+        CREATE TABLE IF NOT EXISTS sovereignty_policies (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id UUID NOT NULL,
+            name TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            jurisdiction TEXT NOT NULL,
+            pack_key TEXT,
+            data_classes JSONB NOT NULL DEFAULT '[]'::jsonb,
+            allowed_regions JSONB NOT NULL DEFAULT '[]'::jsonb,
+            action TEXT NOT NULL DEFAULT 'WARN',
+            legal_basis TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            updated_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """))
+    await db.execute(text("""
+        CREATE TABLE IF NOT EXISTS sovereignty_violations (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id UUID NOT NULL,
+            policy_id UUID,
+            policy_name TEXT,
+            jurisdiction TEXT,
+            provider TEXT NOT NULL,
+            resource_ref TEXT NOT NULL,
+            resource_name TEXT,
+            data_class TEXT,
+            actual_region TEXT,
+            actual_country TEXT,
+            allowed_regions JSONB DEFAULT '[]'::jsonb,
+            legal_basis TEXT,
+            verdict TEXT NOT NULL DEFAULT 'violation',
+            action TEXT NOT NULL DEFAULT 'WARN',
+            confidence TEXT NOT NULL DEFAULT 'confirmed',
+            status TEXT NOT NULL DEFAULT 'open',
+            detected_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """))
+    await db.execute(text(
+        "CREATE INDEX IF NOT EXISTS idx_sovereignty_policies_org ON sovereignty_policies(org_id)"
+    ))
+    await db.execute(text(
+        "CREATE INDEX IF NOT EXISTS idx_sovereignty_violations_org ON sovereignty_violations(org_id)"
+    ))
+    await db.execute(text(
+        "CREATE INDEX IF NOT EXISTS idx_sovereignty_violations_org_status "
+        "ON sovereignty_violations(org_id, status)"
+    ))
+    await db.commit()
+    logger.info("Data Sovereignty tables ensured")
+
+
+# ── Location oracle — where each asset physically lives (REAL connector data) ─
+
+async def _resolve_m365_country(org_id, current_user, db: AsyncSession) -> Optional[str]:
+    """Best-effort M365 tenant country via Graph /organization (same pattern as
+    the Data Residency endpoint). Returns an ISO country code or None."""
+    try:
+        from backend.routers.saas_security import _get_valid_token, _decrypt
+        from backend.models.db_models import OrgIntegration
+        from backend.models.db_models import SaasIntegration
+
+        access_token = None
+        integ = (await db.execute(
+            select(SaasIntegration).where(
+                SaasIntegration.org_id == current_user.org_id,
+                SaasIntegration.provider.in_(["teams", "sharepoint", "microsoft", "m365"]),
+                SaasIntegration.status == "active",
+            ).limit(1)
+        )).scalar_one_or_none()
+        if integ:
+            access_token = await _get_valid_token(integ, db)
+        if not access_token:
+            m365 = (await db.execute(
+                select(OrgIntegration).where(
+                    OrgIntegration.org_id == current_user.org_id,
+                    OrgIntegration.provider == "m365",
+                    OrgIntegration.status == "active",
+                ).limit(1)
+            )).scalar_one_or_none()
+            if m365 and m365.access_token_enc:
+                access_token = _decrypt(m365.access_token_enc)
+        if not access_token:
+            return None
+        async with httpx.AsyncClient(timeout=15) as c:
+            r = await c.get(
+                "https://graph.microsoft.com/v1.0/organization",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if r.status_code == 200:
+                orgs = r.json().get("value", [])
+                if orgs:
+                    return orgs[0].get("countryLetterCode") or orgs[0].get("preferredDataLocation")
+    except Exception as exc:
+        logger.debug(f"sovereignty: m365 country lookup failed: {exc}")
+    return None
+
+
+def _classify_from_saas_row(label: Optional[str], categories) -> Optional[str]:
+    """Derive a normalized data_class from a saas_data_items classification."""
+    cats = set()
+    if categories:
+        for c in (categories if isinstance(categories, (list, tuple)) else []):
+            cats.add(str(c).lower())
+    lbl = (label or "").lower()
+    joined = " ".join(cats) + " " + lbl
+    if any(k in joined for k in ("phi", "health", "medical")):
+        return "phi"
+    if any(k in joined for k in ("pci", "card", "payment")):
+        return "pci"
+    if any(k in joined for k in ("financial", "bank", "iban")):
+        return "financial"
+    if "pii" in joined or "personal" in joined:
+        return "pii"
+    if lbl in ("highly_confidential", "highly confidential"):
+        return "highly_confidential"
+    if lbl == "confidential":
+        return "confidential"
+    return None
+
+
+async def resolve_asset_locations(org_id: str, current_user, db: AsyncSession) -> list[dict]:
+    """Return a normalized list of data assets with physical region, jurisdiction,
+    data class and confidence — built entirely from real connector tables.
+
+    Each asset: {provider, resource_ref, resource_name, item_type,
+                 physical_region, country, data_class, confidence}
+    """
+    assets: list[dict] = []
+
+    def _add(provider, ref, name, item_type, region, country, data_class, confidence):
+        assets.append({
+            "provider": provider,
+            "resource_ref": ref,
+            "resource_name": name,
+            "item_type": item_type,
+            "physical_region": region,
+            "country": country,
+            "data_class": data_class,
+            "confidence": confidence,
+        })
+
+    # 1. AWS storage resources (confirmed regions)
+    try:
+        rows = await db.execute(text("""
+            SELECT COALESCE(name, resource_id) AS rname, resource_id, resource_type, region
+            FROM aws_resources
+            WHERE org_id = :oid AND region IS NOT NULL
+              AND resource_type IN ('s3_bucket','rds_instance','efs_filesystem','ebs_volume','dynamodb_table','redshift_cluster')
+            LIMIT 2000
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            country = _region_to_country("aws", r["region"])
+            _add("aws", r["resource_id"] or r["rname"], r["rname"], r["resource_type"],
+                 r["region"], country, "unclassified", "confirmed")
+    except Exception as e:
+        logger.debug(f"sovereignty: aws_resources scan skipped: {e}")
+
+    # 2. Azure resources (confirmed regions). Azure schema uses `location`.
+    try:
+        rows = await db.execute(text("""
+            SELECT COALESCE(name, resource_id) AS rname, resource_id, resource_type, location
+            FROM azure_resources
+            WHERE org_id = :oid AND location IS NOT NULL
+            LIMIT 2000
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            country = _region_to_country("azure", r["location"])
+            _add("azure", r["resource_id"] or r["rname"], r["rname"],
+                 r["resource_type"] or "resource", r["location"], country,
+                 "unclassified", "confirmed")
+    except Exception as e:
+        logger.debug(f"sovereignty: azure_resources scan skipped: {e}")
+
+    # 3. GCP resources (confirmed regions)
+    try:
+        rows = await db.execute(text("""
+            SELECT COALESCE(name, resource_id) AS rname, resource_id, resource_type, location
+            FROM gcp_resources
+            WHERE org_id = :oid AND location IS NOT NULL
+            LIMIT 2000
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            country = _region_to_country("gcp", r["location"])
+            _add("gcp", r["resource_id"] or r["rname"], r["rname"],
+                 r["resource_type"] or "resource", r["location"], country,
+                 "unclassified", "confirmed")
+    except Exception as e:
+        logger.debug(f"sovereignty: gcp_resources scan skipped: {e}")
+
+    # 4. Oracle Cloud connections (confirmed regions)
+    try:
+        rows = await db.execute(text("""
+            SELECT name, region FROM oracle_connections
+            WHERE org_id = :oid AND status = 'active' AND region IS NOT NULL
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            country = _region_to_country("oracle", r["region"])
+            _add("oracle", r["name"] or r["region"], r["name"], "oci_tenancy",
+                 r["region"], country, "unclassified", "confirmed")
+    except Exception as e:
+        logger.debug(f"sovereignty: oracle_connections scan skipped: {e}")
+
+    # 5. Databricks workspaces (region INFERRED from workspace URL)
+    try:
+        rows = await db.execute(text("""
+            SELECT workspace_url FROM databricks_connections
+            WHERE org_id = :oid AND status = 'active'
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            ws = (r["workspace_url"] or "").lower()
+            if "eu-" in ws or "europe" in ws or ".eu." in ws:
+                region, country = "eu-west", "IE"
+            elif "ap-" in ws or "asia" in ws or ".sg." in ws:
+                region, country = "ap-southeast", "SG"
+            elif "au-" in ws or "australia" in ws:
+                region, country = "ap-southeast-2", "AU"
+            else:
+                region, country = "us-east", "US"
+            _add("databricks", ws or "workspace", ws, "workspace",
+                 region, country, "unclassified", "inferred")
+    except Exception as e:
+        logger.debug(f"sovereignty: databricks scan skipped: {e}")
+
+    # 6. SAP hosts (region INFERRED from hostname)
+    try:
+        rows = await db.execute(text("""
+            SELECT name, system_id, host FROM sap_connections
+            WHERE org_id = :oid AND status = 'active'
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            host = (r["host"] or "").lower()
+            if ".eu" in host or ".de" in host or "europe" in host:
+                region, country = "eu-central", "DE"
+            elif ".us" in host or "-us-" in host:
+                region, country = "us", "US"
+            elif ".ap" in host or ".sg" in host or ".jp" in host:
+                region, country = "ap-southeast", "SG"
+            else:
+                region, country = "eu-central", "DE"
+            _add("sap", r["system_id"] or r["name"] or host, r["name"], "erp_system",
+                 region, country, "unclassified", "inferred")
+    except Exception as e:
+        logger.debug(f"sovereignty: sap scan skipped: {e}")
+
+    # 7. M365 SharePoint/OneDrive/Teams data items (region = tenant country)
+    #    Only include items that carry a real classification so verdicts are meaningful.
+    m365_country = await _resolve_m365_country(org_id, current_user, db)
+    try:
+        rows = await db.execute(text("""
+            SELECT provider, item_id, item_name, item_type,
+                   classification_label, classification_categories
+            FROM saas_data_items
+            WHERE org_id = :oid
+              AND provider IN ('sharepoint','onedrive','teams','microsoft','m365')
+              AND (classification_label IS NOT NULL OR classification_categories IS NOT NULL)
+            LIMIT 5000
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            data_class = _classify_from_saas_row(
+                r["classification_label"], r["classification_categories"]
+            )
+            if not data_class:
+                continue  # skip unclassified M365 items — no meaningful sovereignty verdict
+            country = m365_country
+            confidence = "confirmed" if country else "inferred"
+            _add(r["provider"], r["item_id"], r["item_name"], r["item_type"] or "file",
+                 country or "unknown", country, data_class, confidence)
+    except Exception as e:
+        logger.debug(f"sovereignty: saas_data_items scan skipped: {e}")
+
+    # 8. Cloud storage items that were classified by DSPM (upgrade data_class on
+    #    matching cloud resources so cloud PII is caught, not just M365).
+    try:
+        rows = await db.execute(text("""
+            SELECT provider, item_id, classification_label, classification_categories
+            FROM saas_data_items
+            WHERE org_id = :oid
+              AND provider IN ('aws','azure','gcp','oracle')
+              AND (classification_label IS NOT NULL OR classification_categories IS NOT NULL)
+            LIMIT 5000
+        """), {"oid": org_id})
+        by_ref = {(a["provider"], a["resource_ref"]): a for a in assets}
+        for r in rows.mappings():
+            dc = _classify_from_saas_row(r["classification_label"], r["classification_categories"])
+            if not dc:
+                continue
+            key = (r["provider"], r["item_id"])
+            if key in by_ref:
+                by_ref[key]["data_class"] = dc
+    except Exception as e:
+        logger.debug(f"sovereignty: cloud classification join skipped: {e}")
+
+    return assets
+
+
+# ── Evaluation engine ─────────────────────────────────────────────────────────
+
+def _asset_matches_policy(asset: dict, policy: dict) -> bool:
+    """True if the policy's data classes cover this asset."""
+    dcs = policy.get("data_classes") or []
+    if not dcs or "all" in dcs:
+        return asset.get("data_class") not in (None, "unclassified") or True
+    return asset.get("data_class") in dcs
+
+
+def _asset_in_allowed(asset: dict, allowed: list[str]) -> bool:
+    """True if the asset physically resides within an allowed region/country."""
+    allowed_set = {str(a).strip().lower() for a in (allowed or [])}
+    region = (asset.get("physical_region") or "").lower()
+    country = (asset.get("country") or "").lower()
+    if region and region in allowed_set:
+        return True
+    if country and country in allowed_set:
+        return True
+    return False
+
+
+async def run_sovereignty_scan(org_id: str, current_user, db: AsyncSession) -> dict:
+    """Evaluate all assets against all enabled policies. Idempotent: clears prior
+    violations + open sovereignty alerts for the org, then regenerates."""
+    # Load enabled policies
+    prows = (await db.execute(text("""
+        SELECT id, name, jurisdiction, data_classes, allowed_regions, action, legal_basis
+        FROM sovereignty_policies WHERE org_id = :oid AND enabled = TRUE
+    """), {"oid": org_id})).mappings().all()
+    policies = []
+    for p in prows:
+        policies.append({
+            "id": str(p["id"]),
+            "name": p["name"],
+            "jurisdiction": p["jurisdiction"],
+            "data_classes": p["data_classes"] if isinstance(p["data_classes"], list) else (json.loads(p["data_classes"]) if p["data_classes"] else []),
+            "allowed_regions": p["allowed_regions"] if isinstance(p["allowed_regions"], list) else (json.loads(p["allowed_regions"]) if p["allowed_regions"] else []),
+            "action": p["action"],
+            "legal_basis": p["legal_basis"],
+        })
+
+    assets = await resolve_asset_locations(org_id, current_user, db)
+
+    # Clear prior state (idempotent re-scan)
+    await db.execute(text("DELETE FROM sovereignty_violations WHERE org_id = :oid"), {"oid": org_id})
+    await db.execute(text(
+        "DELETE FROM saas_alerts WHERE org_id = :oid AND provider = 'sovereignty' AND status = 'open'"
+    ), {"oid": org_id})
+
+    violations = 0
+    assets_evaluated = 0
+    for asset in assets:
+        # Only evaluate assets that carry a data class (unclassified cloud infra
+        # is reported in posture but not flagged as a hard violation).
+        if asset.get("data_class") in (None, "unclassified"):
+            continue
+        assets_evaluated += 1
+        for policy in policies:
+            if not _asset_matches_policy(asset, policy):
+                continue
+            if _asset_in_allowed(asset, policy["allowed_regions"]):
+                continue
+            # Violation
+            violations += 1
+            action = policy["action"] if policy["action"] in VALID_ACTIONS else "WARN"
+            severity = ACTION_SEVERITY.get(action, "medium")
+            vid = str(uuid.uuid4())
+            await db.execute(text("""
+                INSERT INTO sovereignty_violations
+                (id, org_id, policy_id, policy_name, jurisdiction, provider, resource_ref,
+                 resource_name, data_class, actual_region, actual_country, allowed_regions,
+                 legal_basis, verdict, action, confidence, status)
+                VALUES (:id, :oid, :pid, :pname, :juris, :provider, :ref, :rname, :dc,
+                        :region, :country, :allowed, :legal, 'violation', :action, :conf, 'open')
+            """), {
+                "id": vid, "oid": org_id, "pid": policy["id"], "pname": policy["name"],
+                "juris": policy["jurisdiction"], "provider": asset["provider"],
+                "ref": str(asset["resource_ref"])[:500], "rname": asset.get("resource_name"),
+                "dc": asset["data_class"], "region": asset.get("physical_region"),
+                "country": asset.get("country"),
+                "allowed": json.dumps(policy["allowed_regions"]),
+                "legal": policy["legal_basis"], "action": action,
+                "conf": asset.get("confidence", "confirmed"),
+            })
+            # Mirror into the unified alerts pipeline
+            title = f"Sovereignty violation: {asset.get('resource_name') or asset['resource_ref']} in {asset.get('country') or asset.get('physical_region')}"
+            desc = (
+                f"{policy['jurisdiction']} policy '{policy['name']}' requires {asset['data_class']} "
+                f"data to reside within {', '.join(policy['allowed_regions'][:6])}"
+                f"{'…' if len(policy['allowed_regions']) > 6 else ''}. This {asset['provider'].upper()} "
+                f"asset resides in {asset.get('physical_region')} ({asset.get('country') or 'unknown'}). "
+                f"Legal basis: {policy['legal_basis']}."
+            )
+            await db.execute(text("""
+                INSERT INTO saas_alerts
+                (id, org_id, provider, alert_type, severity, title, description,
+                 resource_id, resource_name, classification_result, status)
+                VALUES (:id, :oid, 'sovereignty', 'sovereignty_violation', :sev, :title, :desc,
+                        :rid, :rname, :cls, 'open')
+            """), {
+                "id": str(uuid.uuid4()), "oid": org_id, "sev": severity,
+                "title": title[:500], "desc": desc,
+                "rid": str(asset["resource_ref"])[:500], "rname": asset.get("resource_name"),
+                "cls": json.dumps({
+                    "jurisdiction": policy["jurisdiction"],
+                    "data_class": asset["data_class"],
+                    "actual_region": asset.get("physical_region"),
+                    "actual_country": asset.get("country"),
+                    "allowed_regions": policy["allowed_regions"],
+                    "legal_basis": policy["legal_basis"],
+                    "action": action,
+                    "confidence": asset.get("confidence"),
+                }),
+            })
+
+    await db.commit()
+    return {
+        "assets_total": len(assets),
+        "assets_evaluated": assets_evaluated,
+        "policies_evaluated": len(policies),
+        "violations": violations,
+        "scanned_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ── Pydantic models ────────────────────────────────────────────────────────────
+
+class SovereigntyPolicyCreate(BaseModel):
+    name: str
+    jurisdiction: str
+    data_classes: list[str] = []
+    allowed_regions: list[str] = []
+    action: str = "WARN"
+    legal_basis: Optional[str] = None
+    enabled: bool = True
+    pack_key: Optional[str] = None
+
+
+class SovereigntyPolicyUpdate(BaseModel):
+    name: Optional[str] = None
+    jurisdiction: Optional[str] = None
+    data_classes: Optional[list[str]] = None
+    allowed_regions: Optional[list[str]] = None
+    action: Optional[str] = None
+    legal_basis: Optional[str] = None
+    enabled: Optional[bool] = None
+
+
+# ── Endpoints ───────────────────────────────────────────────────────────────
+
+@router.get("/jurisdictions")
+async def list_jurisdiction_packs(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the prebuilt jurisdiction packs (borders + transfer rules + citations)."""
+    await _require_enterprise(current_user, db)
+    return {
+        "packs": [
+            {"key": k, **v} for k, v in JURISDICTION_PACKS.items()
+        ],
+        "data_classes": KNOWN_DATA_CLASSES,
+        "actions": list(VALID_ACTIONS),
+    }
+
+
+@router.get("/policies")
+async def list_policies(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List sovereignty policies for the org."""
+    await _require_enterprise(current_user, db)
+    rows = (await db.execute(text("""
+        SELECT id, name, enabled, jurisdiction, pack_key, data_classes, allowed_regions,
+               action, legal_basis, created_at, updated_at
+        FROM sovereignty_policies WHERE org_id = :oid ORDER BY created_at DESC
+    """), {"oid": str(current_user.org_id)})).mappings().all()
+    out = []
+    for r in rows:
+        out.append({
+            "id": str(r["id"]),
+            "name": r["name"],
+            "enabled": r["enabled"],
+            "jurisdiction": r["jurisdiction"],
+            "pack_key": r["pack_key"],
+            "data_classes": r["data_classes"] if isinstance(r["data_classes"], list) else json.loads(r["data_classes"] or "[]"),
+            "allowed_regions": r["allowed_regions"] if isinstance(r["allowed_regions"], list) else json.loads(r["allowed_regions"] or "[]"),
+            "action": r["action"],
+            "legal_basis": r["legal_basis"],
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+        })
+    return {"policies": out, "total": len(out)}
+
+
+@router.post("/policies", status_code=201)
+async def create_policy(
+    body: SovereigntyPolicyCreate,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a sovereignty policy."""
+    await _require_enterprise(current_user, db)
+    if body.action not in VALID_ACTIONS:
+        raise HTTPException(status_code=422, detail=f"action must be one of {VALID_ACTIONS}")
+    pid = str(uuid.uuid4())
+    await db.execute(text("""
+        INSERT INTO sovereignty_policies
+        (id, org_id, name, enabled, jurisdiction, pack_key, data_classes, allowed_regions, action, legal_basis)
+        VALUES (:id, :oid, :name, :enabled, :juris, :pack, :dcs, :regions, :action, :legal)
+    """), {
+        "id": pid, "oid": str(current_user.org_id), "name": body.name,
+        "enabled": body.enabled, "juris": body.jurisdiction, "pack": body.pack_key,
+        "dcs": json.dumps(body.data_classes), "regions": json.dumps(body.allowed_regions),
+        "action": body.action, "legal": body.legal_basis,
+    })
+    await db.commit()
+    return {"id": pid, "ok": True}
+
+
+@router.post("/policies/seed-defaults", status_code=201)
+async def seed_default_policies(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Seed policies from all jurisdiction packs (skips packs already seeded)."""
+    await _require_enterprise(current_user, db)
+    existing = {r[0] for r in (await db.execute(text(
+        "SELECT pack_key FROM sovereignty_policies WHERE org_id = :oid AND pack_key IS NOT NULL"
+    ), {"oid": str(current_user.org_id)})).fetchall()}
+    created = []
+    for key, pack in JURISDICTION_PACKS.items():
+        if key in existing:
+            continue
+        pid = str(uuid.uuid4())
+        await db.execute(text("""
+            INSERT INTO sovereignty_policies
+            (id, org_id, name, enabled, jurisdiction, pack_key, data_classes, allowed_regions, action, legal_basis)
+            VALUES (:id, :oid, :name, TRUE, :juris, :pack, :dcs, :regions, :action, :legal)
+        """), {
+            "id": pid, "oid": str(current_user.org_id), "name": pack["name"],
+            "juris": pack["jurisdiction"], "pack": key,
+            "dcs": json.dumps(pack["data_classes"]),
+            "regions": json.dumps(pack["allowed_regions"]),
+            "action": pack["action"], "legal": pack["legal_basis"],
+        })
+        created.append(key)
+    await db.commit()
+    return {"created": created, "skipped": sorted(existing)}
+
+
+@router.patch("/policies/{policy_id}")
+async def update_policy(
+    policy_id: str,
+    body: SovereigntyPolicyUpdate,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a sovereignty policy."""
+    await _require_enterprise(current_user, db)
+    updates = body.model_dump(exclude_none=True)
+    if not updates:
+        raise HTTPException(status_code=422, detail="No fields to update")
+    if "action" in updates and updates["action"] not in VALID_ACTIONS:
+        raise HTTPException(status_code=422, detail=f"action must be one of {VALID_ACTIONS}")
+    if "data_classes" in updates:
+        updates["data_classes"] = json.dumps(updates["data_classes"])
+    if "allowed_regions" in updates:
+        updates["allowed_regions"] = json.dumps(updates["allowed_regions"])
+    updates["updated_at"] = datetime.now(timezone.utc)
+    set_clause = ", ".join(f"{k}=:{k}" for k in updates)
+    params = {**updates, "id": policy_id, "oid": str(current_user.org_id)}
+    result = await db.execute(
+        text(f"UPDATE sovereignty_policies SET {set_clause} WHERE id=:id AND org_id=:oid"),
+        params,
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return {"ok": True}
+
+
+@router.delete("/policies/{policy_id}")
+async def delete_policy(
+    policy_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a sovereignty policy."""
+    await _require_enterprise(current_user, db)
+    result = await db.execute(
+        text("DELETE FROM sovereignty_policies WHERE id=:id AND org_id=:oid"),
+        {"id": policy_id, "oid": str(current_user.org_id)},
+    )
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Policy not found")
+    return {"ok": True}
+
+
+@router.get("/violations")
+async def list_violations(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List detected sovereignty violations for the org."""
+    await _require_enterprise(current_user, db)
+    rows = (await db.execute(text("""
+        SELECT id, policy_name, jurisdiction, provider, resource_ref, resource_name,
+               data_class, actual_region, actual_country, allowed_regions, legal_basis,
+               verdict, action, confidence, status, detected_at
+        FROM sovereignty_violations WHERE org_id = :oid
+        ORDER BY detected_at DESC LIMIT 500
+    """), {"oid": str(current_user.org_id)})).mappings().all()
+    out = []
+    for r in rows:
+        out.append({
+            "id": str(r["id"]),
+            "policy_name": r["policy_name"],
+            "jurisdiction": r["jurisdiction"],
+            "provider": r["provider"],
+            "resource_ref": r["resource_ref"],
+            "resource_name": r["resource_name"],
+            "data_class": r["data_class"],
+            "actual_region": r["actual_region"],
+            "actual_country": r["actual_country"],
+            "allowed_regions": r["allowed_regions"] if isinstance(r["allowed_regions"], list) else json.loads(r["allowed_regions"] or "[]"),
+            "legal_basis": r["legal_basis"],
+            "verdict": r["verdict"],
+            "action": r["action"],
+            "confidence": r["confidence"],
+            "status": r["status"],
+            "detected_at": r["detected_at"].isoformat() if r["detected_at"] else None,
+        })
+    return {"violations": out, "total": len(out)}
+
+
+@router.post("/scan")
+async def trigger_scan(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Run a sovereignty evaluation now (posture batch)."""
+    await _require_enterprise(current_user, db)
+    result = await run_sovereignty_scan(str(current_user.org_id), current_user, db)
+    return {"ok": True, **result}
+
+
+@router.get("/overview")
+async def get_overview(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Sovereignty scorecard: per-jurisdiction posture, violation counts, coverage."""
+    await _require_enterprise(current_user, db)
+    org_id = str(current_user.org_id)
+
+    # Policy count
+    pol_rows = (await db.execute(text("""
+        SELECT jurisdiction, COUNT(*) AS n, SUM(CASE WHEN enabled THEN 1 ELSE 0 END) AS enabled_n
+        FROM sovereignty_policies WHERE org_id = :oid GROUP BY jurisdiction
+    """), {"oid": org_id})).mappings().all()
+    total_policies = sum(r["n"] for r in pol_rows)
+
+    # Violation aggregates
+    v_rows = (await db.execute(text("""
+        SELECT jurisdiction, action, confidence, COUNT(*) AS n
+        FROM sovereignty_violations WHERE org_id = :oid AND status = 'open'
+        GROUP BY jurisdiction, action, confidence
+    """), {"oid": org_id})).mappings().all()
+    total_violations = sum(r["n"] for r in v_rows)
+
+    by_jurisdiction: dict[str, dict] = {}
+    for r in pol_rows:
+        by_jurisdiction.setdefault(r["jurisdiction"], {
+            "jurisdiction": r["jurisdiction"], "policies": 0, "violations": 0,
+            "critical": 0, "inferred": 0,
+        })
+        by_jurisdiction[r["jurisdiction"]]["policies"] = r["n"]
+    for r in v_rows:
+        j = by_jurisdiction.setdefault(r["jurisdiction"], {
+            "jurisdiction": r["jurisdiction"], "policies": 0, "violations": 0,
+            "critical": 0, "inferred": 0,
+        })
+        j["violations"] += r["n"]
+        if r["action"] == "BLOCK":
+            j["critical"] += r["n"]
+        if r["confidence"] == "inferred":
+            j["inferred"] += r["n"]
+
+    # Provider breakdown of violations
+    prov_rows = (await db.execute(text("""
+        SELECT provider, COUNT(*) AS n FROM sovereignty_violations
+        WHERE org_id = :oid AND status = 'open' GROUP BY provider
+    """), {"oid": org_id})).mappings().all()
+
+    # Data-class breakdown
+    dc_rows = (await db.execute(text("""
+        SELECT data_class, COUNT(*) AS n FROM sovereignty_violations
+        WHERE org_id = :oid AND status = 'open' GROUP BY data_class
+    """), {"oid": org_id})).mappings().all()
+
+    return {
+        "total_policies": total_policies,
+        "total_violations": total_violations,
+        "by_jurisdiction": sorted(by_jurisdiction.values(), key=lambda x: -x["violations"]),
+        "by_provider": [{"provider": r["provider"], "count": r["n"]} for r in prov_rows],
+        "by_data_class": [{"data_class": r["data_class"], "count": r["n"]} for r in dc_rows],
+        "packs_available": len(JURISDICTION_PACKS),
+    }

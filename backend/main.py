@@ -63,6 +63,7 @@ from backend.routers.data_lifecycle import router as data_lifecycle_router
 from backend.routers.permission_diff_router import router as permission_diff_router
 from backend.routers.genai_shadow_it_router import router as genai_shadow_it_router
 from backend.routers.dspm_access import router as dspm_access_router
+from backend.routers.data_sovereignty import router as data_sovereignty_router, ensure_sovereignty_tables
 from backend.services.toxic_combinations import (
     ensure_schema as ensure_toxic_schema,
     run_for_org as run_toxic_for_org,
@@ -348,6 +349,17 @@ async def lifespan(app: FastAPI):
         logger.warning("DSPM table setup timed out (non-fatal — DDL lock contention)")
     except Exception as e:
         logger.warning(f"DSPM table setup failed (non-fatal): {e}")
+
+    # Ensure Data Sovereignty tables exist
+    try:
+        import asyncio as _asyncio_sov
+        async with AsyncSessionLocal() as session:
+            await _asyncio_sov.wait_for(ensure_sovereignty_tables(session), timeout=15.0)
+        logger.info("Data Sovereignty tables ensured")
+    except _asyncio_sov.TimeoutError:
+        logger.warning("Data Sovereignty table setup timed out (non-fatal — DDL lock contention)")
+    except Exception as e:
+        logger.warning(f"Data Sovereignty table setup failed (non-fatal): {e}")
 
     # Test DB + run pending migrations
     try:
@@ -2301,6 +2313,7 @@ app.include_router(data_lifecycle_router)
 app.include_router(permission_diff_router)
 app.include_router(genai_shadow_it_router)
 app.include_router(dspm_access_router)
+app.include_router(data_sovereignty_router)
 
 
 @app.get("/health")
