@@ -64,6 +64,7 @@ from backend.routers.permission_diff_router import router as permission_diff_rou
 from backend.routers.genai_shadow_it_router import router as genai_shadow_it_router
 from backend.routers.dspm_access import router as dspm_access_router
 from backend.routers.data_sovereignty import router as data_sovereignty_router, ensure_sovereignty_tables
+from backend.routers.dsar import router as dsar_router, ensure_dsar_tables
 from backend.services.toxic_combinations import (
     ensure_schema as ensure_toxic_schema,
     run_for_org as run_toxic_for_org,
@@ -360,6 +361,17 @@ async def lifespan(app: FastAPI):
         logger.warning("Data Sovereignty table setup timed out (non-fatal — DDL lock contention)")
     except Exception as e:
         logger.warning(f"Data Sovereignty table setup failed (non-fatal): {e}")
+
+    # Ensure DSAR + column-classification tables exist
+    try:
+        import asyncio as _asyncio_dsar
+        async with AsyncSessionLocal() as session:
+            await _asyncio_dsar.wait_for(ensure_dsar_tables(session), timeout=15.0)
+        logger.info("DSAR + classification tables ensured")
+    except _asyncio_dsar.TimeoutError:
+        logger.warning("DSAR table setup timed out (non-fatal — DDL lock contention)")
+    except Exception as e:
+        logger.warning(f"DSAR table setup failed (non-fatal): {e}")
 
     # Test DB + run pending migrations
     try:
@@ -929,7 +941,8 @@ async def lifespan(app: FastAPI):
                         provider = (integ.provider or "").lower()
                         logger.info(f"Rebaseline: org={org_id} provider={provider}")
 
-                        _redis = _aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+                        from backend.utils.redis_client import get_redis
+                        _redis = get_redis()
                         try:
                             # Skip if a baseline is already running for this org
                             status = await _redis.get(f"baseline:{org_id}:status")
@@ -941,7 +954,7 @@ async def lifespan(app: FastAPI):
                             await _redis.set(f"baseline:{org_id}:status", "running", ex=7200)
                             await _redis.set(f"baseline:{org_id}:progress", 1, ex=7200)
                         finally:
-                            await _redis.aclose()
+                            pass  # shared pooled Redis client — do not close
 
                         access_token = _decrypt(integ.access_token_enc) if integ.access_token_enc else ""
                         refresh_token = _decrypt(integ.refresh_token_enc) if integ.refresh_token_enc else ""
@@ -1192,14 +1205,15 @@ async def lifespan(app: FastAPI):
                     logger.error(f"auto_triage: loop crashed for org={org_id}, restarting in 30s: {exc}")
                     await asyncio.sleep(30)
                     # Check if still enabled before restarting
-                    _r = _at_redis.from_url(settings.REDIS_URL, decode_responses=True)
+                    from backend.utils.redis_client import get_redis
+                    _r = get_redis()
                     try:
                         still_enabled = await _r.get(f"auto_triage:enabled:{org_id}")
                         if not still_enabled:
                             logger.info(f"auto_triage: org={org_id} disabled while crashed, not restarting")
                             break
                     finally:
-                        await _r.aclose()
+                        pass  # shared pooled Redis client — do not close
 
         async def _restore_auto_triage_loops():
             """Re-spawn auto-triage loops for all orgs that had it enabled before restart.
@@ -1207,7 +1221,8 @@ async def lifespan(app: FastAPI):
             Redis key is re-synced here so the loop can read it without a DB call each cycle.
             """
             await asyncio.sleep(5)  # Let rest of startup complete first
-            _r = _at_redis.from_url(settings.REDIS_URL, decode_responses=True)
+            from backend.utils.redis_client import get_redis
+            _r = get_redis()
             try:
                 async with AsyncSessionLocal() as _at_db:
                     _org_res = await _at_db.execute(_at_sel(_ATOrg))
@@ -1235,7 +1250,7 @@ async def lifespan(app: FastAPI):
                 else:
                     logger.info("auto_triage: no orgs had auto-triage enabled — nothing to restore")
             finally:
-                await _r.aclose()
+                pass  # shared pooled Redis client — do not close
 
         asyncio.create_task(_restore_auto_triage_loops())
         logger.info("Auto-triage startup restore task scheduled (with auto-restart on crash)")
@@ -2314,6 +2329,7 @@ app.include_router(permission_diff_router)
 app.include_router(genai_shadow_it_router)
 app.include_router(dspm_access_router)
 app.include_router(data_sovereignty_router)
+app.include_router(dsar_router)
 
 
 @app.get("/health")

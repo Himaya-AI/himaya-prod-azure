@@ -614,6 +614,15 @@ async def _run_background_scan(org_id: str, connection_id: str) -> None:
             f"findings={len(findings)} score={score} grade={grade}"
         )
 
+        # Deepen with per-column PII classification (real row sampling). Non-fatal.
+        try:
+            from backend.services.pii_discovery_scan import scan_snowflake_columns
+            async with AsyncSessionLocal() as db2:
+                col_res = await scan_snowflake_columns(db2, org_id, connection_id)
+            logger.info(f"Snowflake column classification: org={org_id} {col_res}")
+        except Exception as col_exc:
+            logger.warning(f"Snowflake column classification failed (non-fatal): {col_exc}")
+
     except Exception as exc:
         logger.exception(f"Snowflake background scan failed: {exc}")
         try:

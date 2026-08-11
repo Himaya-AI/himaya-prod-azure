@@ -410,6 +410,16 @@ async def _run_background_scan(org_id: str, connection_id: str) -> None:
             f"SAP scan complete: org={org_id} conn={connection_id} "
             f"users={len(users)} findings={len(findings)}"
         )
+
+        # Classify the documented SAP data-dictionary PII/finance columns so they
+        # feed the sovereignty scan + DSAR data map. Non-fatal.
+        try:
+            from backend.services.pii_discovery_scan import classify_sap_catalog
+            async with AsyncSessionLocal() as db2:
+                cat_res = await classify_sap_catalog(db2, org_id, connection_id)
+            logger.info(f"SAP catalog classification: org={org_id} {cat_res}")
+        except Exception as cat_exc:
+            logger.warning(f"SAP catalog classification failed (non-fatal): {cat_exc}")
     except Exception as exc:
         logger.exception(f"SAP background scan failed: {exc}")
 
