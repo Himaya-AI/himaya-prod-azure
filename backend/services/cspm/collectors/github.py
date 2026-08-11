@@ -120,6 +120,37 @@ async def collect_github(ctx: ScanContext, config: Optional[GitHubCollectorConfi
     saml = await _gh_get(token, f"/orgs/{org}/credential-authorizations")
     ctx.add_source(["orgs", "credentialAuthorizations", org], saml)
 
+    # Org-level Dependabot alerts (actual vulnerable dependencies / CVEs).
+    # Needs security_events (or repo) scope + admin/security-manager role.
+    dependabot = await _gh_paged(
+        token, f"/orgs/{org}/dependabot/alerts?state=open&per_page=100", max_pages=5
+    )
+    ctx.add_source(["orgs", "dependabotAlerts", org], dependabot)
+
+    # Org-level secret scanning alerts (open), including push-protection bypasses.
+    org_secrets = await _gh_paged(
+        token, f"/orgs/{org}/secret-scanning/alerts?state=open&per_page=100", max_pages=5
+    )
+    ctx.add_source(["orgs", "secretScanningAlerts", org], org_secrets)
+
+    # Code security configurations (modern source of truth for GHAS/secret
+    # scanning/push protection/Dependabot enablement — replaces the deprecated
+    # per-feature org endpoint).
+    code_sec = await _gh_paged(
+        token, f"/orgs/{org}/code-security/configurations?per_page=100", max_pages=2
+    )
+    ctx.add_source(["orgs", "codeSecurityConfigurations", org], code_sec)
+
+    # Actions permissions policy (allowed_actions, SHA pinning enforcement).
+    actions_perms = await _gh_get(token, f"/orgs/{org}/actions/permissions")
+    ctx.add_source(["orgs", "actionsPermissions", org], actions_perms)
+
+    # Self-hosted runner settings (best-effort — public-repo exposure signal).
+    runner_settings = await _gh_get(
+        token, f"/orgs/{org}/actions/permissions/self-hosted-runners"
+    )
+    ctx.add_source(["orgs", "selfHostedRunners", org], runner_settings)
+
     # Repos
     repos = await _gh_paged(
         token, f"/orgs/{org}/repos?per_page=100&type=all",
