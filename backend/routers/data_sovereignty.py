@@ -394,6 +394,38 @@ def _classify_from_saas_row(label: Optional[str], categories) -> Optional[str]:
     return None
 
 
+def _classify_from_dspm(category: Optional[str], metadata) -> Optional[str]:
+    """Derive a normalized sovereignty data_class from a dspm_findings row.
+
+    dspm_findings is the unified cross-cloud classification store written by the
+    cross-cloud DLP engine and the DSPM sink for GCP / Snowflake / Oracle / SAP /
+    Databricks / Salesforce / GitHub. It carries a single `category` plus a
+    `metadata.categories` list using the heuristic vocabulary (pii, pci, phi,
+    financial, credentials, source_code, …). We map only the classes that carry
+    a residency obligation; infra-only categories (logs, config, network) return
+    None so they stay out of hard violations.
+    """
+    cats: set[str] = set()
+    if category:
+        cats.add(str(category).lower())
+    if metadata:
+        md = metadata if isinstance(metadata, dict) else {}
+        for c in (md.get("categories") or []):
+            cats.add(str(c).lower())
+    joined = " ".join(cats)
+    if any(k in joined for k in ("phi", "health", "medical", "hipaa", "patient")):
+        return "phi"
+    if any(k in joined for k in ("pci", "card", "payment")):
+        return "pci"
+    if any(k in joined for k in ("financial", "bank", "iban", "ledger")):
+        return "financial"
+    if any(k in joined for k in ("pii", "personal", "customer", "employee", "kyc")):
+        return "pii"
+    if "credentials" in joined or "secret" in joined:
+        return "highly_confidential"
+    return None
+
+
 async def resolve_asset_locations(org_id: str, current_user, db: AsyncSession) -> list[dict]:
     """Return a normalized list of data assets with physical region, jurisdiction,
     data class and confidence — built entirely from real connector tables.
@@ -582,6 +614,73 @@ async def resolve_asset_locations(org_id: str, current_user, db: AsyncSession) -
                 by_ref[key]["data_class"] = dc
     except Exception as e:
         logger.debug(f"sovereignty: cloud classification join skipped: {e}")
+
+    # 9. dspm_findings — the unified cross-cloud classification store. This is
+    #    the DB-level coverage path for GCP / Snowflake / Oracle / SAP /
+    #    Databricks / Salesforce, where structured data is classified per
+    #    object (table/column/bucket) rather than at the connection level.
+    #    For each sensitive finding we either UPGRADE the data_class of the
+    #    matching infra asset, or ADD a new asset so the sensitive object is
+    #    evaluated for residency even when the connection-level row is
+    #    unclassified. Region is taken from the finding when present, else
+    #    inherited from the provider's connector-level asset.
+    try:
+        # Cloud string in dspm_findings maps 1:1 to our provider names.
+        provider_region = {}
+        for a in assets:
+            provider_region.setdefault(
+                a["provider"], (a.get("physical_region"), a.get("country"), a.get("confidence"))
+            )
+        by_ref = {(a["provider"], str(a["resource_ref"])): a for a in assets}
+        added_keys = set()
+        rows = await db.execute(text("""
+            SELECT cloud, resource_type, resource_id, object_key, category,
+                   region, metadata
+            FROM dspm_findings
+            WHERE org_id = :oid AND resolved_at IS NULL
+            LIMIT 5000
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            provider = (r["cloud"] or "").lower()
+            if not provider:
+                continue
+            dc = _classify_from_dspm(r["category"], r["metadata"])
+            if not dc:
+                continue
+            ref = str(r["resource_id"] or r["object_key"] or "").strip()
+            if not ref:
+                continue
+            key = (provider, ref)
+            # Upgrade an existing infra asset in place (keeps its confirmed region).
+            if key in by_ref:
+                if by_ref[key].get("data_class") in (None, "unclassified"):
+                    by_ref[key]["data_class"] = dc
+                continue
+            # Resolve region: prefer the finding's own region, else inherit
+            # the provider's connector-level region.
+            fregion = (r["region"] or "").strip() or None
+            fcountry = None
+            confidence = "inferred"
+            if fregion:
+                for prov in (provider, "aws", "azure", "gcp"):
+                    fcountry = _region_to_country(prov, fregion)
+                    if fcountry:
+                        break
+                confidence = "confirmed" if fcountry else "inferred"
+            if not fcountry:
+                inherited = provider_region.get(provider)
+                if inherited:
+                    fregion = fregion or inherited[0]
+                    fcountry = inherited[1]
+                    confidence = inherited[2] or "inferred"
+            dedup = (provider, ref, dc)
+            if dedup in added_keys:
+                continue
+            added_keys.add(dedup)
+            _add(provider, ref, r["object_key"] or ref,
+                 r["resource_type"] or "data_object", fregion, fcountry, dc, confidence)
+    except Exception as e:
+        logger.debug(f"sovereignty: dspm_findings classification join skipped: {e}")
 
     return assets
 
@@ -959,6 +1058,111 @@ async def _load_aws_service_for_org(org_id: str, db: AsyncSession):
     )
 
 
+async def _revoke_m365_external_sharing(org_id: str, resource_ref: str, db: AsyncSession) -> dict:
+    """Revoke external / anyone-link sharing on an M365 (SharePoint/OneDrive/Teams)
+    item to cut cross-border exposure immediately. Returns {ok, revoked, message}.
+
+    The driveItem + its permissions are resolved from the item's webUrl via the
+    Graph /shares endpoint (which returns parentReference.driveId + item id), then
+    every external/anonymous permission is DELETEd. Residency itself is unchanged —
+    this is an exposure-reduction action, mirrored on the AWS S3 BPA path.
+    """
+    import base64 as _b64
+    from backend.routers.saas_security import _get_valid_token, _decrypt
+    from backend.models.db_models import SaasIntegration, OrgIntegration
+
+    # Resolve a Graph access token from the org's M365 integration.
+    integ = (await db.execute(
+        select(SaasIntegration).where(
+            SaasIntegration.org_id == uuid.UUID(org_id),
+            SaasIntegration.provider.in_(["teams", "sharepoint", "onedrive", "microsoft", "m365"]),
+            SaasIntegration.status == "active",
+        ).limit(1)
+    )).scalar_one_or_none()
+    token = await _get_valid_token(integ, db) if integ else None
+    if not token:
+        m365 = (await db.execute(
+            select(OrgIntegration).where(
+                OrgIntegration.org_id == uuid.UUID(org_id),
+                OrgIntegration.provider == "m365",
+                OrgIntegration.status == "active",
+            ).limit(1)
+        )).scalar_one_or_none()
+        if m365 and m365.access_token_enc:
+            token = _decrypt(m365.access_token_enc)
+    if not token:
+        return {"ok": False, "revoked": 0, "message": "No active M365 connection/token to revoke sharing."}
+
+    # We need the item's webUrl to resolve it via the shares API. It lives in
+    # saas_data_items (populated by the SaaS scanner).
+    row = (await db.execute(text("""
+        SELECT item_url, provider FROM saas_data_items
+        WHERE org_id = :oid AND item_id = :ref LIMIT 1
+    """), {"oid": org_id, "ref": resource_ref})).mappings().first()
+    web_url = (row or {}).get("item_url")
+    if not web_url:
+        return {"ok": False, "revoked": 0,
+                "message": "Item webUrl not found in inventory — re-run an M365 scan, then retry."}
+
+    # Graph share id encoding: "u!" + base64url(webUrl) with padding stripped.
+    share_id = "u!" + _b64.urlsafe_b64encode(web_url.encode()).decode().rstrip("=")
+    headers = {"Authorization": f"Bearer {token}"}
+    revoked = 0
+    try:
+        async with httpx.AsyncClient(timeout=20) as c:
+            di = await c.get(
+                f"https://graph.microsoft.com/v1.0/shares/{share_id}/driveItem?$expand=permissions",
+                headers=headers,
+            )
+            if di.status_code != 200:
+                return {"ok": False, "revoked": 0,
+                        "message": f"Graph could not resolve the item ({di.status_code})."}
+            item = di.json()
+            drive_id = (item.get("parentReference") or {}).get("driveId")
+            item_id = item.get("id")
+            if not drive_id or not item_id:
+                return {"ok": False, "revoked": 0, "message": "Item drive/id unresolved from Graph."}
+            for p in item.get("permissions", []) or []:
+                link = p.get("link") or {}
+                is_anon = link.get("scope") == "anonymous"
+                is_external = False
+                grantees = list(p.get("grantedToIdentitiesV2") or [])
+                for g in (p.get("grantedToV2"), p.get("grantedTo")):
+                    if g:
+                        grantees.append(g)
+                for g in grantees:
+                    email = ((g or {}).get("user") or {}).get("email", "").lower()
+                    if email and "#ext#" in email:
+                        is_external = True
+                if not (is_anon or is_external):
+                    continue
+                pid = p.get("id")
+                if not pid:
+                    continue
+                dr = await c.delete(
+                    f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}/permissions/{pid}",
+                    headers=headers,
+                )
+                if dr.status_code in (200, 204):
+                    revoked += 1
+    except Exception as exc:
+        logger.warning(f"sovereignty: m365 revoke failed for {resource_ref}: {exc}")
+        return {"ok": False, "revoked": revoked, "message": f"Revoke error: {exc}"}
+
+    # Reflect the reduced exposure in the inventory so the UI/next scan agree.
+    if revoked:
+        try:
+            await db.execute(text("""
+                UPDATE saas_data_items SET sharing_scope = 'private'
+                WHERE org_id = :oid AND item_id = :ref
+            """), {"oid": org_id, "ref": resource_ref})
+        except Exception:
+            pass
+    msg = (f"Revoked {revoked} external/anyone-link share(s)."
+           if revoked else "No external shares were present — exposure already contained.")
+    return {"ok": True, "revoked": revoked, "message": msg}
+
+
 async def _execute_enforcement(v: dict, org_id: str, db: AsyncSession) -> dict:
     """Execute the enforcement action for a violation. Returns
     {executed, manual_required, message}."""
@@ -984,6 +1188,16 @@ async def _execute_enforcement(v: dict, org_id: str, db: AsyncSession) -> dict:
         if res.get("ok"):
             return {"executed": True, "manual_required": False,
                     "message": f"{res['message']} Note: residency is unchanged — migrate to {allowed} to fully comply."}
+        return {"executed": False, "manual_required": True, "message": res.get("message", "enforcement failed")}
+
+    # M365 SharePoint/OneDrive/Teams — REAL action: revoke external / anyone-link
+    # sharing to cut cross-border exposure immediately (residency needs a Multi-Geo
+    # move, which stays a manual step, but exposure is contained now).
+    if provider in ("sharepoint", "onedrive", "teams") and action in ("BLOCK", "QUARANTINE"):
+        res = await _revoke_m365_external_sharing(org_id, str(v.get("resource_ref") or resource), db)
+        if res.get("ok"):
+            return {"executed": True, "manual_required": False,
+                    "message": f"{res['message']} Residency unchanged — move to a Multi-Geo location in {allowed} to fully comply."}
         return {"executed": False, "manual_required": True, "message": res.get("message", "enforcement failed")}
 
     # All other providers — residency correction requires data migration, which
