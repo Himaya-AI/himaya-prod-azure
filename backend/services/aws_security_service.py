@@ -88,6 +88,32 @@ class AWSSecurityService:
         """Test AWS credentials by calling STS GetCallerIdentity."""
         return await run_blocking(self._test_connection_sync)
 
+    async def block_s3_public_access(self, bucket_name: str, region: Optional[str] = None) -> dict:
+        """Enforce S3 Block Public Access on a bucket (real remediation action).
+
+        Used by the Data Sovereignty enforcement engine to reduce exposure of a
+        bucket that resides in a disallowed jurisdiction. Applies all four
+        BlockPublicAccess flags. Returns {ok, message}.
+        """
+        return await run_blocking(self._block_s3_public_access_sync, bucket_name, region)
+
+    def _block_s3_public_access_sync(self, bucket_name: str, region: Optional[str] = None) -> dict:
+        try:
+            s3 = self._get_client("s3", region)
+            s3.put_public_access_block(
+                Bucket=bucket_name,
+                PublicAccessBlockConfiguration={
+                    "BlockPublicAcls": True,
+                    "IgnorePublicAcls": True,
+                    "BlockPublicPolicy": True,
+                    "RestrictPublicBuckets": True,
+                },
+            )
+            return {"ok": True, "message": f"S3 Block Public Access enabled on '{bucket_name}'."}
+        except Exception as e:
+            logger.error(f"block_s3_public_access failed for {bucket_name}: {e}")
+            return {"ok": False, "message": f"Failed to block public access on '{bucket_name}': {e}"}
+
     def _test_connection_sync(self) -> dict:
         try:
             import boto3

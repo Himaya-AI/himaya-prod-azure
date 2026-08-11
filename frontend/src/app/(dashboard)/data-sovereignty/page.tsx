@@ -3,7 +3,7 @@ import React, { useEffect, useState, useCallback } from 'react'
 import {
   Globe2, ShieldAlert, ShieldCheck, RefreshCw, Scale,
   MapPin, Trash2, Plus, Layers, Server, FileWarning, CheckCircle2,
-  Info, X, Lock,
+  Info, X, Lock, Zap, ClipboardCheck, AlertCircle,
 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import { Table, Thead, Tbody, Tr, Th, Td } from '@/components/ui/Table'
@@ -64,7 +64,20 @@ interface Overview {
   packs_available: number
 }
 
-type Tab = 'overview' | 'violations' | 'policies'
+interface EnforcementAction {
+  id: string
+  violation_id: string | null
+  action: string
+  provider: string | null
+  resource_ref: string | null
+  executed: boolean
+  manual_required: boolean
+  result_message: string | null
+  actor_email: string | null
+  created_at: string | null
+}
+
+type Tab = 'overview' | 'violations' | 'policies' | 'actions'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -104,6 +117,8 @@ export default function DataSovereigntyPage() {
   const [violations, setViolations] = useState<Violation[]>([])
   const [policies, setPolicies] = useState<Policy[]>([])
   const [packs, setPacks] = useState<JurisdictionPack[]>([])
+  const [actions, setActions] = useState<EnforcementAction[]>([])
+  const [enforcingId, setEnforcingId] = useState<string | null>(null)
   const [showPackPicker, setShowPackPicker] = useState(false)
 
   const handle403 = (e: unknown) => {
@@ -115,16 +130,18 @@ export default function DataSovereigntyPage() {
   const loadAll = useCallback(async () => {
     setLoading(true)
     try {
-      const [ov, vi, po, pk] = await Promise.all([
+      const [ov, vi, po, pk, ac] = await Promise.all([
         api.get('/api/sovereignty/overview'),
         api.get('/api/sovereignty/violations'),
         api.get('/api/sovereignty/policies'),
         api.get('/api/sovereignty/jurisdictions'),
+        api.get('/api/sovereignty/actions'),
       ])
       setOverview(ov.data)
       setViolations(vi.data?.violations ?? [])
       setPolicies(po.data?.policies ?? [])
       setPacks(pk.data?.packs ?? [])
+      setActions(ac.data?.actions ?? [])
     } catch (e) {
       if (!handle403(e)) console.error('sovereignty load failed', e)
     } finally {
@@ -183,6 +200,21 @@ export default function DataSovereigntyPage() {
     } catch (e) { if (!handle403(e)) console.error(e) }
   }
 
+  const enforceViolation = async (v: Violation) => {
+    setEnforcingId(v.id)
+    try {
+      const { data } = await api.post(`/api/sovereignty/violations/${v.id}/enforce`)
+      // Surface the outcome inline via the action log; reload to reflect status.
+      window.alert(
+        data.executed
+          ? `Enforced: ${data.message}`
+          : `Manual action required: ${data.message}`
+      )
+      await loadAll()
+    } catch (e) { if (!handle403(e)) console.error(e) }
+    finally { setEnforcingId(null) }
+  }
+
   // ── Enterprise gate ──
   if (!enterprise) {
     return (
@@ -232,6 +264,7 @@ export default function DataSovereigntyPage() {
           { id: 'overview' as const, label: 'Scorecard', icon: <ShieldCheck size={13} /> },
           { id: 'violations' as const, label: `Violations${overview ? ` (${overview.total_violations})` : ''}`, icon: <ShieldAlert size={13} /> },
           { id: 'policies' as const, label: `Policies${overview ? ` (${overview.total_policies})` : ''}`, icon: <Scale size={13} /> },
+          { id: 'actions' as const, label: `Enforcement Log${actions.length ? ` (${actions.length})` : ''}`, icon: <ClipboardCheck size={13} /> },
         ]).map(t => (
           <button
             key={t.id}
@@ -337,6 +370,8 @@ export default function DataSovereigntyPage() {
                         <Th>Jurisdiction</Th>
                         <Th>Legal Basis</Th>
                         <Th>Action</Th>
+                        <Th>Status</Th>
+                        <Th>Enforce</Th>
                         <Th>Detected</Th>
                       </Tr>
                     </Thead>
@@ -359,6 +394,27 @@ export default function DataSovereigntyPage() {
                           <Td><span className="text-[12px] text-[var(--foreground)]">{v.jurisdiction}</span></Td>
                           <Td><span className="text-[10px] text-[var(--muted)] max-w-[180px] block truncate" title={v.legal_basis || ''}>{v.legal_basis || '—'}</span></Td>
                           <Td><span className={`text-[10px] px-2 py-0.5 rounded-full border ${actionColor(v.action)}`}>{v.action}</span></Td>
+                          <Td>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                              v.status === 'enforced' ? 'bg-emerald-500/10 text-emerald-400'
+                              : v.status === 'manual_required' ? 'bg-amber-500/10 text-amber-400'
+                              : 'bg-zinc-500/10 text-zinc-400'
+                            }`}>{v.status === 'manual_required' ? 'manual' : v.status}</span>
+                          </Td>
+                          <Td>
+                            {v.status === 'enforced' ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400"><CheckCircle2 size={12} /> done</span>
+                            ) : (
+                              <button
+                                onClick={() => enforceViolation(v)}
+                                disabled={enforcingId === v.id}
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-[#3b6ef6]/30 text-[#3b6ef6] hover:bg-[#3b6ef6]/10 disabled:opacity-50"
+                              >
+                                {enforcingId === v.id ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />}
+                                Enforce
+                              </button>
+                            )}
+                          </Td>
                           <Td><span className="text-[11px] text-[var(--muted)]">{fmtDate(v.detected_at)}</span></Td>
                         </Tr>
                       ))}
@@ -423,6 +479,55 @@ export default function DataSovereigntyPage() {
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Enforcement Log ── */}
+          {tab === 'actions' && (
+            <div className="bg-[#13131a] border border-white/[0.06] rounded-xl overflow-hidden">
+              {actions.length === 0 ? (
+                <div className="text-center py-16">
+                  <ClipboardCheck size={32} className="mx-auto text-[#3b6ef6]/40 mb-2" />
+                  <div className="text-[13px] text-[var(--muted)]">No enforcement actions yet. Enforce a violation to build an auditable trail.</div>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <Thead>
+                      <Tr>
+                        <Th>Action</Th>
+                        <Th>Provider</Th>
+                        <Th>Resource</Th>
+                        <Th>Outcome</Th>
+                        <Th>Result</Th>
+                        <Th>Actor</Th>
+                        <Th>When</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {actions.map(a => (
+                        <Tr key={a.id}>
+                          <Td><span className={`text-[10px] px-2 py-0.5 rounded-full border ${actionColor(a.action)}`}>{a.action}</span></Td>
+                          <Td><span className={`text-[11px] font-semibold ${providerColor(a.provider || '')}`}>{(a.provider || '—').toUpperCase()}</span></Td>
+                          <Td><span className="text-[12px] text-[var(--foreground)] max-w-[220px] block truncate" title={a.resource_ref || ''}>{a.resource_ref || '—'}</span></Td>
+                          <Td>
+                            {a.executed ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400"><CheckCircle2 size={12} /> executed</span>
+                            ) : a.manual_required ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] text-amber-400"><AlertCircle size={12} /> manual required</span>
+                            ) : (
+                              <span className="text-[11px] text-zinc-400">—</span>
+                            )}
+                          </Td>
+                          <Td><span className="text-[11px] text-[var(--muted)] max-w-[280px] block truncate" title={a.result_message || ''}>{a.result_message || '—'}</span></Td>
+                          <Td><span className="text-[11px] text-[var(--muted)]">{a.actor_email || 'system'}</span></Td>
+                          <Td><span className="text-[11px] text-[var(--muted)]">{fmtDate(a.created_at)}</span></Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
                 </div>
               )}
             </div>

@@ -232,6 +232,25 @@ def _region_to_country(provider: str, region: Optional[str]) -> Optional[str]:
     return None
 
 
+def _snowflake_region_country(account: str) -> tuple:
+    """Parse a Snowflake account identifier into (country, region).
+
+    Snowflake account identifiers embed the deployment region, e.g.
+    "xy12345.eu-central-1.aws", "ab001.uaenorth.azure", or legacy
+    "xy12345.eu-west-1". We scan the dot-separated segments against the
+    AWS/Azure/GCP region maps. Returns (None, None) if unrecognised.
+    """
+    if not account:
+        return None, None
+    segments = account.lower().replace("_", "-").split(".")
+    for seg in segments:
+        for prov in ("aws", "azure", "gcp"):
+            c = _region_to_country(prov, seg)
+            if c:
+                return c, seg
+    return None, None
+
+
 # ── Table creation (idempotent, called at import time via lifespan) ───────────
 
 async def ensure_sovereignty_tables(db: AsyncSession):
@@ -274,8 +293,26 @@ async def ensure_sovereignty_tables(db: AsyncSession):
             detected_at TIMESTAMPTZ DEFAULT NOW()
         )
     """))
+    await db.execute(text("""
+        CREATE TABLE IF NOT EXISTS sovereignty_actions (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            org_id UUID NOT NULL,
+            violation_id UUID,
+            action TEXT NOT NULL,
+            provider TEXT,
+            resource_ref TEXT,
+            executed BOOLEAN NOT NULL DEFAULT FALSE,
+            manual_required BOOLEAN NOT NULL DEFAULT FALSE,
+            result_message TEXT,
+            actor_email TEXT,
+            created_at TIMESTAMPTZ DEFAULT NOW()
+        )
+    """))
     await db.execute(text(
         "CREATE INDEX IF NOT EXISTS idx_sovereignty_policies_org ON sovereignty_policies(org_id)"
+    ))
+    await db.execute(text(
+        "CREATE INDEX IF NOT EXISTS idx_sovereignty_actions_org ON sovereignty_actions(org_id)"
     ))
     await db.execute(text(
         "CREATE INDEX IF NOT EXISTS idx_sovereignty_violations_org ON sovereignty_violations(org_id)"
@@ -480,6 +517,23 @@ async def resolve_asset_locations(org_id: str, current_user, db: AsyncSession) -
                  region, country, "unclassified", "inferred")
     except Exception as e:
         logger.debug(f"sovereignty: sap scan skipped: {e}")
+
+    # 6b. Snowflake accounts — region parsed from the account identifier
+    #     (e.g. "xy12345.eu-central-1.aws", "ab001.uaenorth.azure", legacy
+    #     "xy12345.eu-west-1"). Snowflake data warehouses hold structured data
+    #     so they are in scope for residency even without per-column scans.
+    try:
+        rows = await db.execute(text("""
+            SELECT name, account FROM snowflake_connections
+            WHERE org_id = :oid AND status = 'active'
+        """), {"oid": org_id})
+        for r in rows.mappings():
+            acct = (r["account"] or "").lower()
+            country, region = _snowflake_region_country(acct)
+            _add("snowflake", acct or (r["name"] or "account"), r["name"], "warehouse",
+                 region or acct, country, "unclassified", "confirmed" if country else "inferred")
+    except Exception as e:
+        logger.debug(f"sovereignty: snowflake scan skipped: {e}")
 
     # 7. M365 SharePoint/OneDrive/Teams data items (region = tenant country)
     #    Only include items that carry a real classification so verdicts are meaningful.
@@ -879,6 +933,153 @@ async def trigger_scan(
     await _require_enterprise(current_user, db)
     result = await run_sovereignty_scan(str(current_user.org_id), current_user, db)
     return {"ok": True, **result}
+
+
+# ── Enforcement ───────────────────────────────────────────────────────────────
+# Data residency cannot be "moved" via API — you can't relocate a bucket to a
+# new country with one call. So sovereignty enforcement takes REAL exposure-
+# reduction actions where possible (e.g. AWS S3 Block Public Access) and returns
+# precise manual remediation steps where an API action can't fix residency.
+# Every attempt is recorded in sovereignty_actions for auditor evidence.
+
+async def _load_aws_service_for_org(org_id: str, db: AsyncSession):
+    """Build a real AWSSecurityService from the org's stored AWS credentials."""
+    row = (await db.execute(text("""
+        SELECT access_key_id_enc, secret_access_key_enc, default_region
+        FROM aws_connections WHERE org_id = :oid AND status = 'active' LIMIT 1
+    """), {"oid": org_id})).mappings().first()
+    if not row:
+        return None
+    from backend.routers.aws_connector import _decrypt as _aws_decrypt
+    from backend.services.aws_security_service import AWSSecurityService
+    return AWSSecurityService(
+        access_key_id=_aws_decrypt(row["access_key_id_enc"]),
+        secret_access_key=_aws_decrypt(row["secret_access_key_enc"]),
+        region=row["default_region"] or "us-east-1",
+    )
+
+
+async def _execute_enforcement(v: dict, org_id: str, db: AsyncSession) -> dict:
+    """Execute the enforcement action for a violation. Returns
+    {executed, manual_required, message}."""
+    provider = (v.get("provider") or "").lower()
+    action = (v.get("action") or "WARN").upper()
+    resource = v.get("resource_name") or v.get("resource_ref")
+    region = v.get("actual_region")
+    allowed = ", ".join(v.get("allowed_regions") or [])
+
+    # NOTIFY — record an owner/DPO notification (no data mutation).
+    if action == "NOTIFY":
+        return {"executed": True, "manual_required": False,
+                "message": f"Notification recorded for {provider.upper()} resource '{resource}'."}
+
+    # AWS S3 — REAL action: enforce Block Public Access to cut exposure while the
+    # bucket sits in a disallowed jurisdiction.
+    if provider == "aws" and action in ("BLOCK", "QUARANTINE"):
+        svc = await _load_aws_service_for_org(org_id, db)
+        if not svc:
+            return {"executed": False, "manual_required": True,
+                    "message": "No active AWS connection found to execute enforcement."}
+        res = await svc.block_s3_public_access(str(v.get("resource_ref") or resource), region)
+        if res.get("ok"):
+            return {"executed": True, "manual_required": False,
+                    "message": f"{res['message']} Note: residency is unchanged — migrate to {allowed} to fully comply."}
+        return {"executed": False, "manual_required": True, "message": res.get("message", "enforcement failed")}
+
+    # All other providers — residency correction requires data migration, which
+    # is not an API action. Return precise manual steps (honest, no fake success).
+    steps = {
+        "azure": "Azure portal → move the resource/storage account to a region within the allowed set, or enable customer-managed geo constraints.",
+        "gcp": "GCP console → recreate the bucket/dataset in an allowed region (GCS/BigQuery location is immutable) and migrate data.",
+        "oracle": "OCI console → provision the resource in an allowed region and migrate; OCI region is fixed per resource.",
+        "snowflake": "Snowflake → data lives in the account's cloud region; replicate to an account in an allowed region or use a data-clean-room boundary.",
+        "sap": "Coordinate with SAP Basis to host the system in an allowed region / datacentre.",
+        "databricks": "Databricks → workspace region is fixed; create a workspace in an allowed region and migrate jobs/data.",
+        "sharepoint": "M365 Admin → use a Multi-Geo satellite location in an allowed region and move the site/mailbox; also revoke external sharing to reduce exposure now.",
+        "onedrive": "M365 Admin → move the user's OneDrive to an allowed Multi-Geo location; revoke external sharing to reduce exposure now.",
+        "teams": "M365 Admin → apply the allowed Multi-Geo location for the team's data; revoke guest access to reduce exposure now.",
+    }
+    step = steps.get(provider, "Migrate the resource to a region within the allowed set, or approve the placement by updating the policy.")
+    return {"executed": False, "manual_required": True,
+            "message": f"Residency violation cannot be auto-corrected via API. {step} Allowed regions: {allowed}."}
+
+
+@router.post("/violations/{violation_id}/enforce")
+async def enforce_violation(
+    violation_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Execute the policy's enforcement action for a single violation."""
+    await _require_enterprise(current_user, db)
+    org_id = str(current_user.org_id)
+    row = (await db.execute(text("""
+        SELECT id, policy_name, jurisdiction, provider, resource_ref, resource_name,
+               data_class, actual_region, actual_country, allowed_regions, action, status
+        FROM sovereignty_violations WHERE id = :id AND org_id = :oid
+    """), {"id": violation_id, "oid": org_id})).mappings().first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Violation not found")
+
+    v = dict(row)
+    v["allowed_regions"] = v["allowed_regions"] if isinstance(v["allowed_regions"], list) else json.loads(v["allowed_regions"] or "[]")
+    result = await _execute_enforcement(v, org_id, db)
+
+    # Audit trail
+    await db.execute(text("""
+        INSERT INTO sovereignty_actions
+        (id, org_id, violation_id, action, provider, resource_ref, executed,
+         manual_required, result_message, actor_email)
+        VALUES (:id, :oid, :vid, :action, :provider, :ref, :executed, :manual, :msg, :actor)
+    """), {
+        "id": str(uuid.uuid4()), "oid": org_id, "vid": violation_id,
+        "action": v.get("action"), "provider": v.get("provider"),
+        "ref": str(v.get("resource_ref"))[:500], "executed": result["executed"],
+        "manual": result["manual_required"], "msg": result["message"],
+        "actor": getattr(current_user, "email", None),
+    })
+    # Update violation status
+    new_status = "enforced" if result["executed"] else "manual_required"
+    await db.execute(text(
+        "UPDATE sovereignty_violations SET status = :s WHERE id = :id AND org_id = :oid"
+    ), {"s": new_status, "id": violation_id, "oid": org_id})
+    # Resolve the mirrored alert if fully enforced
+    if result["executed"]:
+        await db.execute(text("""
+            UPDATE saas_alerts SET status = 'resolved', resolved_at = NOW()
+            WHERE org_id = :oid AND provider = 'sovereignty' AND resource_id = :ref AND status = 'open'
+        """), {"oid": org_id, "ref": str(v.get("resource_ref"))[:500]})
+    await db.commit()
+    return {"ok": True, "violation_id": violation_id, "status": new_status, **result}
+
+
+@router.get("/actions")
+async def list_actions(
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List the sovereignty enforcement audit trail."""
+    await _require_enterprise(current_user, db)
+    rows = (await db.execute(text("""
+        SELECT id, violation_id, action, provider, resource_ref, executed,
+               manual_required, result_message, actor_email, created_at
+        FROM sovereignty_actions WHERE org_id = :oid
+        ORDER BY created_at DESC LIMIT 500
+    """), {"oid": str(current_user.org_id)})).mappings().all()
+    return {"actions": [
+        {
+            "id": str(r["id"]),
+            "violation_id": str(r["violation_id"]) if r["violation_id"] else None,
+            "action": r["action"],
+            "provider": r["provider"],
+            "resource_ref": r["resource_ref"],
+            "executed": r["executed"],
+            "manual_required": r["manual_required"],
+            "result_message": r["result_message"],
+            "actor_email": r["actor_email"],
+            "created_at": r["created_at"].isoformat() if r["created_at"] else None,
+        } for r in rows
+    ], "total": len(rows)}
 
 
 @router.get("/overview")
