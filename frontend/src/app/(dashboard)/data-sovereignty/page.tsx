@@ -175,6 +175,13 @@ export default function DataSovereigntyPage() {
   const [creatingDsar, setCreatingDsar] = useState(false)
   const [dsarForm, setDsarForm] = useState({ subject_name: '', subject_email: '', national_id: '', phone: '', request_type: 'access' })
 
+  const [showPolicyBuilder, setShowPolicyBuilder] = useState(false)
+  const [savingPolicy, setSavingPolicy] = useState(false)
+  const [dataClassOptions, setDataClassOptions] = useState<string[]>(['pii', 'phi', 'pci', 'financial', 'confidential', 'highly_confidential'])
+  const [actionOptions, setActionOptions] = useState<string[]>(['WARN', 'BLOCK', 'QUARANTINE', 'NOTIFY'])
+  const [regionInput, setRegionInput] = useState('')
+  const [policyForm, setPolicyForm] = useState<{ name: string; jurisdiction: string; data_classes: string[]; allowed_regions: string[]; action: string; legal_basis: string }>({ name: '', jurisdiction: '', data_classes: [], allowed_regions: [], action: 'WARN', legal_basis: '' })
+
   const handle403 = (e: unknown) => {
     const err = e as { response?: { status?: number } }
     if (err.response?.status === 403) { setEnterprise(false); return true }
@@ -195,6 +202,8 @@ export default function DataSovereigntyPage() {
       setViolations(vi.data?.violations ?? [])
       setPolicies(po.data?.policies ?? [])
       setPacks(pk.data?.packs ?? [])
+      if (Array.isArray(pk.data?.data_classes) && pk.data.data_classes.length) setDataClassOptions(pk.data.data_classes)
+      if (Array.isArray(pk.data?.actions) && pk.data.actions.length) setActionOptions(pk.data.actions)
       setActions(ac.data?.actions ?? [])
       const [cs, cl, ds] = await Promise.all([
         api.get('/api/dsar/classifications/summary'),
@@ -229,6 +238,33 @@ export default function DataSovereigntyPage() {
       if (data.request_id) openDsar(data.request_id)
     } catch (e) { if (!handle403(e)) console.error(e) }
     finally { setCreatingDsar(false) }
+  }
+
+  const addRegion = (raw: string) => {
+    const r = raw.trim()
+    if (!r) return
+    setPolicyForm(f => f.allowed_regions.includes(r) ? f : { ...f, allowed_regions: [...f.allowed_regions, r] })
+    setRegionInput('')
+  }
+
+  const createPolicy = async () => {
+    setSavingPolicy(true)
+    try {
+      await api.post('/api/sovereignty/policies', {
+        name: policyForm.name.trim(),
+        jurisdiction: (policyForm.jurisdiction.trim() || 'CUSTOM').toUpperCase(),
+        data_classes: policyForm.data_classes,
+        allowed_regions: policyForm.allowed_regions,
+        action: policyForm.action,
+        legal_basis: policyForm.legal_basis.trim() || null,
+        enabled: true,
+      })
+      setShowPolicyBuilder(false)
+      setPolicyForm({ name: '', jurisdiction: '', data_classes: [], allowed_regions: [], action: 'WARN', legal_basis: '' })
+      setTab('policies')
+      await loadAll()
+    } catch (e) { if (!handle403(e)) console.error(e) }
+    finally { setSavingPolicy(false) }
   }
 
   const openDsar = async (id: string) => {
@@ -329,20 +365,18 @@ export default function DataSovereigntyPage() {
   }
 
   const existingPackKeys = new Set(policies.map(p => p.pack_key).filter(Boolean))
+  const regionSuggestions = Array.from(new Set(packs.flatMap(p => p.allowed_regions ?? []))).sort()
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-[#3b6ef6]/15 border border-[#3b6ef6]/25 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3b6ef6]/25 to-[#3b6ef6]/5 border border-[#3b6ef6]/25 flex items-center justify-center shadow-lg shadow-[#3b6ef6]/10">
             <Globe2 size={24} className="text-[#3b6ef6]" />
           </div>
           <div>
             <h1 className="text-[20px] font-semibold text-[var(--foreground)]">Data Sovereignty</h1>
-            <p className="text-[12px] text-[var(--muted)]">
-              Enforce which nation&apos;s laws govern your data — detect cross-border residency violations across all connectors.
-            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -402,8 +436,7 @@ export default function DataSovereigntyPage() {
                   <Info size={18} className="text-[#3b6ef6] flex-shrink-0 mt-0.5" />
                   <div className="text-[13px] text-[var(--foreground)]">
                     No sovereignty policies yet. Click <span className="font-semibold">Seed Jurisdiction Packs</span> to
-                    load prebuilt borders for KSA (PDPL/NCA), UAE, EU (GDPR), UK and US — then <span className="font-semibold">Run Sovereignty Scan</span> to
-                    evaluate your real connector data.
+                    load prebuilt borders for {overview.packs_available}+ regimes — KSA (PDPL/NCA), UAE, EU (GDPR), UK, US, Qatar, Bahrain, India (DPDP), China (PIPL), Brazil (LGPD) and more — or <span className="font-semibold">Build Policy</span> for a custom border, then <span className="font-semibold">Run Sovereignty Scan</span>.
                   </div>
                 </div>
               )}
@@ -531,9 +564,14 @@ export default function DataSovereigntyPage() {
                 <p className="text-[12px] text-[var(--muted)]">
                   Policies bind a data class + jurisdiction to allowed regions. Assets outside those borders are flagged.
                 </p>
-                <Button size="sm" variant="secondary" onClick={() => setShowPackPicker(true)}>
-                  <Plus size={14} className="mr-1" /> Add from Pack
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="secondary" onClick={() => setShowPackPicker(true)}>
+                    <Layers size={14} className="mr-1" /> Add from Pack
+                  </Button>
+                  <Button size="sm" onClick={() => setShowPolicyBuilder(true)}>
+                    <Plus size={14} className="mr-1" /> Build Policy
+                  </Button>
+                </div>
               </div>
 
               {policies.length === 0 ? (
@@ -728,6 +766,96 @@ export default function DataSovereigntyPage() {
             </div>
           )}
         </>
+      )}
+
+      {/* Policy Builder modal */}
+      {showPolicyBuilder && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPolicyBuilder(false)}>
+          <div className="bg-[#13131a] border border-white/[0.1] rounded-2xl max-w-xl w-full max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between p-5 border-b border-white/[0.06] sticky top-0 bg-[#13131a] z-10">
+              <h3 className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-2"><Scale size={16} className="text-[#3b6ef6]" /> Build Custom Policy</h3>
+              <button onClick={() => setShowPolicyBuilder(false)} className="text-[var(--muted)] hover:text-[var(--foreground)]"><X size={18} /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Policy name" value={policyForm.name} onChange={v => setPolicyForm(f => ({ ...f, name: v }))} placeholder="e.g. Customer PII must stay in KSA" />
+                <Field label="Jurisdiction" value={policyForm.jurisdiction} onChange={v => setPolicyForm(f => ({ ...f, jurisdiction: v }))} placeholder="e.g. KSA, EU, CUSTOM" />
+              </div>
+
+              {/* Data classes */}
+              <div>
+                <label className="text-[11px] text-[var(--muted)] uppercase tracking-wide">Data classes</label>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {dataClassOptions.map(dc => {
+                    const on = policyForm.data_classes.includes(dc)
+                    return (
+                      <button
+                        key={dc}
+                        onClick={() => setPolicyForm(f => ({ ...f, data_classes: on ? f.data_classes.filter(x => x !== dc) : [...f.data_classes, dc] }))}
+                        className={`text-[10px] px-2 py-1 rounded-lg border transition-colors ${on ? 'bg-purple-500/15 border-purple-500/30 text-purple-300' : 'bg-white/[0.03] border-white/[0.08] text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+                      >{dc}</button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Action */}
+              <div>
+                <label className="text-[11px] text-[var(--muted)] uppercase tracking-wide">Enforcement action</label>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {actionOptions.map(a => (
+                    <button
+                      key={a}
+                      onClick={() => setPolicyForm(f => ({ ...f, action: a }))}
+                      className={`text-[10px] px-2.5 py-1 rounded-lg border transition-colors ${policyForm.action === a ? actionColor(a) : 'bg-white/[0.03] border-white/[0.08] text-[var(--muted)] hover:text-[var(--foreground)]'}`}
+                    >{a}</button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Allowed regions */}
+              <div>
+                <label className="text-[11px] text-[var(--muted)] uppercase tracking-wide">Allowed regions / countries</label>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {policyForm.allowed_regions.map(r => (
+                    <span key={r} className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-[#3b6ef6]/10 border border-[#3b6ef6]/25 text-[#3b6ef6]">
+                      {r}
+                      <button onClick={() => setPolicyForm(f => ({ ...f, allowed_regions: f.allowed_regions.filter(x => x !== r) }))} className="hover:text-red-400"><X size={11} /></button>
+                    </span>
+                  ))}
+                </div>
+                <input
+                  value={regionInput}
+                  onChange={e => setRegionInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addRegion(regionInput) } }}
+                  placeholder="Type a region/ISO code (e.g. SA, eu-west-1) and press Enter"
+                  className="mt-2 w-full bg-white/[0.03] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder:text-[var(--muted)]/50"
+                />
+                {regionSuggestions.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {regionSuggestions.filter(r => !policyForm.allowed_regions.includes(r)).slice(0, 18).map(r => (
+                      <button key={r} onClick={() => addRegion(r)} className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.03] border border-white/[0.06] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#3b6ef6]/30">+ {r}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <Field label="Legal basis (optional)" value={policyForm.legal_basis} onChange={v => setPolicyForm(f => ({ ...f, legal_basis: v }))} placeholder="e.g. PDPL Art. 29" />
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button size="sm" variant="ghost" onClick={() => setShowPolicyBuilder(false)}>Cancel</Button>
+                <Button
+                  size="sm"
+                  onClick={createPolicy}
+                  loading={savingPolicy}
+                  disabled={!policyForm.name.trim() || policyForm.data_classes.length === 0 || policyForm.allowed_regions.length === 0}
+                >
+                  Create Policy
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* DSAR create modal */}
