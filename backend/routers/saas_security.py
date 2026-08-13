@@ -37,6 +37,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/saas", tags=["saas-security"])
 
+# ── Table-catalog cache ──────────────────────────────────────────────────────
+# The Data Inventory UNION probes information_schema for ~9 optional connector
+# tables (+3 column lists) on every request. Tables essentially never appear or
+# disappear mid-flight, so hitting pg_catalog each time added avoidable latency
+# to a hot, user-facing endpoint. Cache the results process-wide for 5 minutes.
+import time as _time
+
+_CATALOG_TTL = 300.0
+_TABLE_EXISTS_CACHE: dict[str, tuple[float, bool]] = {}
+_TABLE_COLS_CACHE: dict[str, tuple[float, set]] = {}
+
 # ── Env vars ──────────────────────────────────────────────────────────────────
 
 SAAS_M365_CLIENT_ID = os.getenv("SAAS_M365_CLIENT_ID", "")
@@ -2607,13 +2618,18 @@ async def list_data_items(
     # Cheap existence checks so we omit UNION branches for connectors
     # the tenant hasn't enabled.
     async def _exists(tbl: str) -> bool:
+        cached = _TABLE_EXISTS_CACHE.get(tbl)
+        if cached and (_time.monotonic() - cached[0]) < _CATALOG_TTL:
+            return cached[1]
         try:
-            return (await db.execute(text(
+            found = (await db.execute(text(
                 "SELECT 1 FROM information_schema.tables "
                 "WHERE table_name = :t LIMIT 1"
             ), {"t": tbl})).first() is not None
         except Exception:
             return False
+        _TABLE_EXISTS_CACHE[tbl] = (_time.monotonic(), found)
+        return found
 
     salesforce_branch_sql = ""
     sf_exists = await _exists("salesforce_objects")
@@ -2622,6 +2638,17 @@ async def list_data_items(
     github_exists    = await _exists("github_findings")
     snowflake_exists = await _exists("snowflake_findings")
     sap_exists       = await _exists("sap_findings")
+    # Adnan 2026-08-12: aws_resources / databricks_resources / gcp_resources
+    # are created LAZILY by their connectors (only after a connection is set
+    # up + first scan). A tenant that never connected one of these clouds has
+    # no such table, so referencing it unconditionally in the UNION threw
+    # "relation does not exist", failed the whole query, and — because the
+    # except-fallback reused the same poisoned session without a rollback —
+    # returned a hard 500 for Data Inventory. Gate them on _exists like the
+    # other branches so the query degrades gracefully instead.
+    aws_exists        = await _exists("aws_resources")
+    databricks_exists = await _exists("databricks_resources")
+    gcp_exists        = await _exists("gcp_resources")
     if sf_exists:
         salesforce_branch_sql = f"""
             UNION ALL
@@ -2783,14 +2810,19 @@ async def list_data_items(
     # Probe columns at runtime per table and emit a branch only when we
     # have the bare minimum (`title`, `severity`, an id, a time column).
     async def _columns(t: str) -> set[str]:
+        cached = _TABLE_COLS_CACHE.get(t)
+        if cached and (_time.monotonic() - cached[0]) < _CATALOG_TTL:
+            return cached[1]
         try:
             r = (await db.execute(text(
                 "SELECT column_name FROM information_schema.columns "
                 "WHERE table_name = :t"
             ), {"t": t})).fetchall()
-            return {row[0] for row in r}
+            cols = {row[0] for row in r}
         except Exception:
             return set()
+        _TABLE_COLS_CACHE[t] = (_time.monotonic(), cols)
+        return cols
 
     async def _build_findings_branch(
         provider_name: str, table: str, where: str,
@@ -2866,16 +2898,8 @@ async def list_data_items(
     # which is already a JSON-encoded array string; parse with ::jsonb so
     # COALESCE branches return jsonb uniformly. Final ::text cast keeps the
     # UNION column type stable (json text) for the response parser.
-    union_sql = f"""
-        SELECT * FROM (
-            SELECT 
-                id::text, 'saas' as source, provider, item_type, item_name, item_url, parent_path,
-                owner_email, size_bytes, classification_label, classification_score,
-                to_jsonb(COALESCE(classification_categories, ARRAY[]::text[]))::text as classification_categories, sharing_scope, last_modified_at, last_scanned_at, created_at,
-                NULL::text as region, NULL::text as resource_arn, FALSE as encryption_enabled, FALSE as public_access,
-                NULL::jsonb as metadata
-            FROM saas_data_items
-            WHERE {saas_where}
+    # Gate the base cloud branches on table existence (see comment above).
+    aws_branch_sql = f"""
             UNION ALL
             SELECT 
                 id::text, 'aws' as source, 'aws' as provider, resource_type as item_type, 
@@ -2923,6 +2947,9 @@ async def list_data_items(
                 metadata
             FROM aws_resources
             WHERE {aws_where}
+    """ if aws_exists else ""
+
+    databricks_branch_sql = f"""
             UNION ALL
             SELECT 
                 id::text, 'databricks' as source, 'databricks' as provider, resource_type as item_type,
@@ -2959,6 +2986,9 @@ async def list_data_items(
                 metadata
             FROM databricks_resources
             WHERE {databricks_where}
+    """ if databricks_exists else ""
+
+    gcp_branch_sql = f"""
             UNION ALL
             SELECT
                 id::text, 'gcp' as source, 'gcp' as provider, resource_type as item_type,
@@ -2998,6 +3028,25 @@ async def list_data_items(
                 metadata
             FROM gcp_resources
             WHERE {gcp_where}
+    """ if gcp_exists else ""
+
+    # Assemble the UNION. saas_data_items is the guaranteed anchor (core
+    # Workspace Security table); every other branch is empty-string unless
+    # its table exists, so a tenant missing a given connector never trips a
+    # "relation does not exist" error.
+    union_sql = f"""
+        SELECT * FROM (
+            SELECT 
+                id::text, 'saas' as source, provider, item_type, item_name, item_url, parent_path,
+                owner_email, size_bytes, classification_label, classification_score,
+                to_jsonb(COALESCE(classification_categories, ARRAY[]::text[]))::text as classification_categories, sharing_scope, last_modified_at, last_scanned_at, created_at,
+                NULL::text as region, NULL::text as resource_arn, FALSE as encryption_enabled, FALSE as public_access,
+                NULL::jsonb as metadata
+            FROM saas_data_items
+            WHERE {saas_where}
+            {aws_branch_sql}
+            {databricks_branch_sql}
+            {gcp_branch_sql}
             {salesforce_branch_sql}
             {azure_branch_sql}
             {oracle_branch_sql}
@@ -3016,6 +3065,9 @@ async def list_data_items(
             UNION ALL
             SELECT id FROM salesforce_objects WHERE {salesforce_where}
         """
+    count_aws_branch        = f" UNION ALL SELECT id FROM aws_resources WHERE {aws_where} "          if aws_exists        else ""
+    count_databricks_branch = f" UNION ALL SELECT id FROM databricks_resources WHERE {databricks_where} " if databricks_exists else ""
+    count_gcp_branch        = f" UNION ALL SELECT id FROM gcp_resources WHERE {gcp_where} "          if gcp_exists        else ""
     count_azure_branch     = f" UNION ALL SELECT id FROM azure_resources WHERE {azure_where} "     if azure_exists     else ""
     count_oracle_branch    = f" UNION ALL SELECT id FROM oracle_resources WHERE {oracle_where} "   if oracle_exists    else ""
     # Only count a findings table if we actually emitted a UNION branch
@@ -3027,12 +3079,9 @@ async def list_data_items(
     count_sql = f"""
         SELECT COUNT(*) FROM (
             SELECT id FROM saas_data_items WHERE {saas_where}
-            UNION ALL
-            SELECT id FROM aws_resources WHERE {aws_where}
-            UNION ALL
-            SELECT id FROM databricks_resources WHERE {databricks_where}
-            UNION ALL
-            SELECT id FROM gcp_resources WHERE {gcp_where}
+            {count_aws_branch}
+            {count_databricks_branch}
+            {count_gcp_branch}
             {count_salesforce_branch}
             {count_azure_branch}
             {count_oracle_branch}
@@ -3138,6 +3187,15 @@ async def list_data_items(
         }
     except Exception as e:
         logger.warning(f"list_data_items: UNION query failed, falling back to SaaS only: {e}")
+        # A failed statement leaves the async session in an aborted
+        # transaction; without a rollback the SaaS-only fallback below would
+        # itself raise (PendingRollbackError) and the whole endpoint 500s.
+        # Roll back first so the fallback can actually run and Data Inventory
+        # still returns the M365/Teams/SharePoint rows + their labels.
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         # Fallback to original SaaS-only query
         q = select(SaasDataItem).where(SaasDataItem.org_id == current_user.org_id)
         if provider and provider != 'aws':
