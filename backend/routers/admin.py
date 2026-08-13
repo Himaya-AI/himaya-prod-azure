@@ -1220,7 +1220,7 @@ async def inject_test_threats(
     results = []
     for tp in test_payloads:
         try:
-            threat = await process_email(tp["data"], org_id=org_id, db=db)
+            threat = await process_email(tp["data"], org_id=org_id)
             results.append({
                 "label": tp["label"],
                 "recipient": tp["data"]["recipient"],
@@ -1245,7 +1245,6 @@ async def benchmark_test_threats(
     import time as _time
     from collections import Counter as _Counter, defaultdict as _defaultdict
 
-    from backend.database import AsyncSessionLocal
     from backend.services.email_processor import process_email
 
     def _canonical_label(label: str | None) -> str | None:
@@ -1278,53 +1277,49 @@ async def benchmark_test_threats(
     async def _run_item(item: BenchmarkThreatItem) -> dict:
         started_at = _time.perf_counter()
         async with semaphore:
-            async with AsyncSessionLocal() as task_db:
-                try:
-                    threat = await process_email(
-                        _build_email_payload(item),
-                        org_id=org_id,
-                        db=task_db,
-                        skip_dedup=True,
-                    )
-                    await task_db.commit()
-                    latency_ms = ( _time.perf_counter() - started_at) * 1000
-                    predicted = threat.threat_type if threat else "SKIPPED"
-                    expected = _canonical_label(item.ground_truth_threat_type)
-                    evaluated = expected is not None
-                    return {
-                        "label": item.label,
-                        "ground_truth_threat_type": expected,
-                        "predicted_threat_type": predicted,
-                        "match": bool(evaluated and predicted == expected),
-                        "evaluated": evaluated,
-                        "recipient": item.recipient,
-                        "sender": item.sender,
-                        "subject": item.subject,
-                        "threat_id": str(threat.id) if threat else None,
-                        "risk_score": threat.risk_score if threat else 0,
-                        "action_taken": threat.action_taken if threat else "NONE",
-                        "status": threat.status if threat else "skipped",
-                        "llm_reasoning": threat.ai_explanation_en if threat else None,
-                        "llm_reasoning_ar": threat.ai_explanation_ar if threat else None,
-                        "latency_ms": round(latency_ms, 2),
-                    }
-                except Exception as exc:
-                    await task_db.rollback()
-                    latency_ms = ( _time.perf_counter() - started_at) * 1000
-                    return {
-                        "label": item.label,
-                        "ground_truth_threat_type": _canonical_label(item.ground_truth_threat_type),
-                        "predicted_threat_type": "ERROR",
-                        "match": False,
-                        "evaluated": _canonical_label(item.ground_truth_threat_type) is not None,
-                        "recipient": item.recipient,
-                        "sender": item.sender,
-                        "subject": item.subject,
-                        "error": str(exc)[:300],
-                        "llm_reasoning": None,
-                        "llm_reasoning_ar": None,
-                        "latency_ms": round(latency_ms, 2),
-                    }
+            try:
+                threat = await process_email(
+                    _build_email_payload(item),
+                    org_id=org_id,
+                    skip_dedup=True,
+                )
+                latency_ms = (_time.perf_counter() - started_at) * 1000
+                predicted = threat.threat_type if threat else "SKIPPED"
+                expected = _canonical_label(item.ground_truth_threat_type)
+                evaluated = expected is not None
+                return {
+                    "label": item.label,
+                    "ground_truth_threat_type": expected,
+                    "predicted_threat_type": predicted,
+                    "match": bool(evaluated and predicted == expected),
+                    "evaluated": evaluated,
+                    "recipient": item.recipient,
+                    "sender": item.sender,
+                    "subject": item.subject,
+                    "threat_id": str(threat.id) if threat else None,
+                    "risk_score": threat.risk_score if threat else 0,
+                    "action_taken": threat.action_taken if threat else "NONE",
+                    "status": threat.status if threat else "skipped",
+                    "llm_reasoning": threat.ai_explanation_en if threat else None,
+                    "llm_reasoning_ar": threat.ai_explanation_ar if threat else None,
+                    "latency_ms": round(latency_ms, 2),
+                }
+            except Exception as exc:
+                latency_ms = (_time.perf_counter() - started_at) * 1000
+                return {
+                    "label": item.label,
+                    "ground_truth_threat_type": _canonical_label(item.ground_truth_threat_type),
+                    "predicted_threat_type": "ERROR",
+                    "match": False,
+                    "evaluated": _canonical_label(item.ground_truth_threat_type) is not None,
+                    "recipient": item.recipient,
+                    "sender": item.sender,
+                    "subject": item.subject,
+                    "error": str(exc)[:300],
+                    "llm_reasoning": None,
+                    "llm_reasoning_ar": None,
+                    "latency_ms": round(latency_ms, 2),
+                }
 
     results = await _asyncio.gather(*[_run_item(item) for item in req.emails])
     evaluated_results = [r for r in results if r.get("evaluated")]
