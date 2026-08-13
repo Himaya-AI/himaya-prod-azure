@@ -8,6 +8,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl gcc libpq-dev \
     chromium chromium-driver \
+    tesseract-ocr \
     fonts-liberation fonts-noto-color-emoji \
     libnss3 libatk-bridge2.0-0 libdrm2 libxcomposite1 libxdamage1 \
     libxrandr2 libgbm1 libxkbcommon0 libasound2 \
