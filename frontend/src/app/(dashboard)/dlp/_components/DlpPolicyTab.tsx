@@ -13,9 +13,9 @@ import {
   Trash2,
 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { toast } from '@/components/ui/Toast'
+import { ActionChip } from './DlpChrome'
 import {
   getDlpErrorMessage,
   publishDlpPolicy,
@@ -208,8 +208,13 @@ function RuleEditor({
     patch({ conditions: { ...rule.conditions, ...values } })
   }
 
+  const detectChips = [
+    ...rule.conditions.detectors,
+    ...rule.conditions.entity_types.slice(0, 3),
+  ]
+
   return (
-    <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.02]">
+    <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#13131a]">
       <div className="flex items-center gap-3 px-4 py-3">
         <button
           type="button"
@@ -217,30 +222,41 @@ function RuleEditor({
           aria-checked={rule.enabled}
           disabled={disabled}
           onClick={() => patch({ enabled: !rule.enabled })}
-          className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-            rule.enabled ? 'bg-[#3b6ef6]' : 'bg-white/10'
+          className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
+            rule.enabled ? 'justify-end bg-[#3b6ef6]' : 'justify-start bg-white/10'
           }`}
         >
-          <span
-            className={`absolute top-1 h-3 w-3 rounded-full bg-white transition-transform ${
-              rule.enabled ? 'translate-x-5' : 'translate-x-1'
-            }`}
-          />
+          <span className="h-3.5 w-3.5 rounded-full bg-white shadow-sm" />
         </button>
         <button
           type="button"
           onClick={onToggleExpanded}
           className="min-w-0 flex-1 text-left"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium text-white">{rule.name}</span>
-            <Badge variant={rule.action === 'stop' ? 'danger' : rule.action === 'hold' ? 'warning' : 'success'}>
-              {rule.action.toUpperCase()}
-            </Badge>
+            <ActionChip action={rule.action} />
+            {!rule.enabled && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#52525b]">
+                Off
+              </span>
+            )}
           </div>
-          <p className="mt-0.5 text-[11px] text-[#71717a]">
-            Priority {rule.priority} · {rule.rule_id}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-[#71717a]">
+              Priority {rule.priority}
+            </span>
+            {detectChips.length > 0 ? detectChips.map((chip, chipIndex) => (
+              <span
+                key={`${chip}-${chipIndex}`}
+                className="rounded border border-white/[0.07] bg-[#1e1e2c] px-1.5 py-0.5 text-[10px] text-[#a1a1aa]"
+              >
+                {chip.replaceAll('_', ' ')}
+              </span>
+            )) : (
+              <span className="text-[11px] text-[#52525b]">No detectors set</span>
+            )}
+          </div>
         </button>
         <button
           type="button"
@@ -539,16 +555,24 @@ export default function DlpPolicyTab({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-[#13131a] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-gradient-to-br from-[#13131a] to-[#1a1a24] p-5">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium text-white">Policy document</h2>
-            <Badge variant={draftPolicy ? 'warning' : 'info'}>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[14px] font-semibold text-white">Policy rules</h2>
+            <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+              draftPolicy
+                ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                : 'border-[#3b6ef6]/20 bg-[#3b6ef6]/10 text-[#93b4fd]'
+            }`}>
               {draftPolicy ? `DRAFT v${draftPolicy.version}` : `${activePolicy.status.toUpperCase()} v${activePolicy.version}`}
-            </Badge>
-            {dirty && <Badge variant="neutral">UNSAVED</Badge>}
+            </span>
+            {dirty && (
+              <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold text-[#a1a1aa]">
+                UNSAVED
+              </span>
+            )}
           </div>
-          <p className="mt-1 text-xs text-[#71717a]">
+          <p className="mt-1 text-[12px] text-[#71717a]">
             Active version {activePolicy.version}. Lower priority numbers win ties.
           </p>
         </div>
@@ -612,8 +636,11 @@ export default function DlpPolicyTab({
 
       <div className="space-y-3">
         {document.rules.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/[0.1] py-12 text-center">
-            <p className="text-sm text-[#71717a]">This policy has no rules.</p>
+          <div className="rounded-xl border border-dashed border-white/[0.1] py-14 text-center">
+            <p className="text-[13px] text-[#71717a]">This policy has no rules yet.</p>
+            <p className="mt-1 text-[11px] text-[#52525b]">
+              Add a rule to hold or stop outbound mail that matches detectors or entity types.
+            </p>
             {canManage && (
               <Button variant="ghost" size="sm" className="mt-3" onClick={addRule}>
                 <Plus size={13} /> Add the first rule

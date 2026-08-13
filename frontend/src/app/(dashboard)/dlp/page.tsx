@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   BarChart3,
   FileText,
+  Inbox,
   Lock,
   Mail,
   RefreshCw,
@@ -11,7 +12,6 @@ import {
   Shield,
 } from 'lucide-react'
 
-import Button from '@/components/ui/Button'
 import DlpMessagesTab from './_components/DlpMessagesTab'
 import DlpOverviewTab from './_components/DlpOverviewTab'
 import DlpPolicyTab from './_components/DlpPolicyTab'
@@ -32,13 +32,14 @@ import type {
 } from '@/lib/dlp/types'
 import { getUser } from '@/lib/auth'
 
-type Tab = 'overview' | 'settings' | 'policy' | 'messages'
+type Tab = 'overview' | 'policy' | 'queue' | 'messages' | 'settings'
 
 const TABS: Array<{ key: Tab; label: string; icon: typeof BarChart3 }> = [
   { key: 'overview', label: 'Overview', icon: BarChart3 },
-  { key: 'settings', label: 'Settings', icon: Settings },
   { key: 'policy', label: 'Policy', icon: FileText },
+  { key: 'queue', label: 'Queue', icon: Inbox },
   { key: 'messages', label: 'Messages', icon: Mail },
+  { key: 'settings', label: 'Settings', icon: Settings },
 ]
 
 function UpgradePrompt() {
@@ -48,19 +49,19 @@ function UpgradePrompt() {
         <Lock size={28} className="text-[#3b6ef6]" />
       </div>
       <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold text-[var(--foreground)]">
-          Data Loss Prevention is an Enterprise feature
+        <h1 className="mb-2 text-xl font-semibold text-[var(--foreground)]">
+          Data Loss Prevention — Enterprise Feature
         </h1>
-        <p className="mt-2 text-sm leading-relaxed text-[#71717a]">
+        <p className="text-[14px] leading-relaxed text-[#71717a]">
           Upgrade to configure policy enforcement, monitor outbound messages,
           and review held mail.
         </p>
       </div>
       <a
         href="mailto:sales@himaya.ai?subject=Enterprise Upgrade — DLP"
-        className="rounded-lg bg-[#3b6ef6] px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#2d5fe0]"
+        className="rounded-lg bg-[#3b6ef6] px-6 py-2.5 text-[14px] font-medium text-white transition-colors hover:bg-[#2d5fe0]"
       >
-        Contact Sales
+        Contact Sales to Upgrade
       </a>
     </div>
   )
@@ -68,13 +69,17 @@ function UpgradePrompt() {
 
 function LoadingPage() {
   return (
-    <div className="space-y-4">
-      <div className="h-9 w-52 animate-pulse rounded-lg bg-white/[0.04]" />
-      <div className="h-11 w-96 max-w-full animate-pulse rounded-xl bg-white/[0.04]" />
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="space-y-6">
+      <div className="h-8 w-56 animate-pulse rounded-lg bg-white/[0.04]" />
+      <div className="h-11 w-[28rem] max-w-full animate-pulse rounded-xl bg-white/[0.04]" />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-28 animate-pulse rounded-xl bg-white/[0.04]" />
+          <div key={index} className="h-32 animate-pulse rounded-xl bg-white/[0.03]" />
         ))}
+      </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="h-64 animate-pulse rounded-xl bg-white/[0.03]" />
+        <div className="h-64 animate-pulse rounded-xl bg-white/[0.03]" />
       </div>
     </div>
   )
@@ -82,7 +87,6 @@ function LoadingPage() {
 
 export default function DlpPage() {
   const user = getUser()
-  // Match Sidebar gating: enterprise entitlement is carried on user.tier from /api/auth/me.
   const isEnterprise = ['enterprise', 'enterprise trial'].includes(
     (user?.tier ?? '').toLowerCase(),
   )
@@ -124,7 +128,7 @@ export default function DlpPage() {
       setDraftPolicy(nextDraftPolicy)
       setRecentMessages(nextMessages.items)
     } catch (requestError) {
-      setError(getDlpErrorMessage(requestError, 'Could not load DLP v2.'))
+      setError(getDlpErrorMessage(requestError, 'Could not load DLP.'))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -162,41 +166,38 @@ export default function DlpPage() {
           <Shield size={21} className="text-red-400" />
         </div>
         <div>
-          <h1 className="text-base font-medium text-white">DLP v2 is unavailable</h1>
+          <h1 className="text-base font-medium text-white">DLP is unavailable</h1>
           <p className="mt-1 max-w-lg text-sm text-[#71717a]">
             {error ?? 'The DLP control plane returned an incomplete response.'}
           </p>
         </div>
-        <Button variant="outline" onClick={() => void loadPage()}>
+        <button
+          type="button"
+          onClick={() => void loadPage()}
+          className="inline-flex items-center gap-2 rounded-lg border border-white/[0.08] px-4 py-2 text-[13px] text-white hover:bg-white/[0.04]"
+        >
           <RefreshCw size={14} /> Retry
-        </Button>
+        </button>
       </div>
     )
   }
 
   return (
     <div className="min-h-screen">
-      <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Shield size={19} className="text-[#3b6ef6]" />
-            <h1 className="text-lg font-semibold text-[var(--foreground)]">
-              Data Loss Prevention
-            </h1>
-          </div>
-          <p className="mt-1 text-xs text-[#71717a]">
-            DLP v2 · {settings.enabled ? 'Tenant enabled' : 'Tenant disabled'} ·{' '}
-            <span className="capitalize">{settings.mode}</span>
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          loading={refreshing}
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-[18px] font-semibold text-[var(--foreground)]">
+          Data Loss Prevention
+        </h1>
+        <button
+          type="button"
+          title="Refresh"
+          aria-label="Refresh"
+          disabled={refreshing}
           onClick={() => void loadPage(true)}
+          className="rounded-lg border border-white/[0.08] p-2 text-[#71717a] transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
         >
-          <RefreshCw size={13} /> Refresh
-        </Button>
+          <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} />
+        </button>
       </div>
 
       <div
@@ -219,7 +220,7 @@ export default function DlpPage() {
           >
             <Icon size={13} className={tab === key ? 'text-[#3b6ef6]' : 'text-current'} />
             {label}
-            {key === 'messages' && (status.reviewable_count ?? 0) > 0 && (
+            {key === 'queue' && (status.reviewable_count ?? 0) > 0 && (
               <span
                 title="Held messages awaiting review"
                 className="rounded-full border border-orange-500/30 bg-orange-500/20 px-1.5 py-0.5 text-[10px] font-bold text-orange-400"
@@ -236,14 +237,8 @@ export default function DlpPage() {
           <DlpOverviewTab
             status={status}
             settings={settings}
+            activePolicy={activePolicy}
             recentMessages={recentMessages}
-          />
-        )}
-        {tab === 'settings' && (
-          <DlpSettingsTab
-            settings={settings}
-            canManage={canManage}
-            onUpdated={setSettings}
           />
         )}
         {tab === 'policy' && (
@@ -254,7 +249,30 @@ export default function DlpPage() {
             onChanged={reloadPolicies}
           />
         )}
-        {tab === 'messages' && <DlpMessagesTab canManage={canManage} />}
+        {tab === 'queue' && (
+          <DlpMessagesTab
+            key="queue"
+            canManage={canManage}
+            defaultFilter="reviewable"
+            variant="queue"
+          />
+        )}
+        {tab === 'messages' && (
+          <DlpMessagesTab
+            key="messages"
+            canManage={canManage}
+            defaultFilter=""
+            variant="messages"
+          />
+        )}
+        {tab === 'settings' && (
+          <DlpSettingsTab
+            settings={settings}
+            status={status}
+            canManage={canManage}
+            onUpdated={setSettings}
+          />
+        )}
       </div>
     </div>
   )

@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   ChevronDown,
   ChevronUp,
+  Inbox,
+  Info,
   Lock,
   Mail,
   RefreshCw,
@@ -14,10 +16,10 @@ import {
   X,
 } from 'lucide-react'
 
-import { Badge } from '@/components/ui/Badge'
 import Button from '@/components/ui/Button'
 import { Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
+import { ActionChip, OutcomeChip, StateChip } from './DlpChrome'
 import {
   getDlpErrorMessage,
   getDlpMessage,
@@ -33,6 +35,8 @@ import type {
 
 interface Props {
   canManage: boolean
+  defaultFilter?: string
+  variant?: 'queue' | 'messages'
 }
 
 interface PendingReview {
@@ -56,47 +60,6 @@ const FILTERS = [
   { value: 'outcome_uncertain', label: 'Outcome uncertain' },
   { value: 'failed', label: 'Failed' },
 ]
-
-function actionVariant(action: string | null) {
-  if (action === 'stop') return 'danger' as const
-  if (action === 'hold') return 'warning' as const
-  if (action === 'allow') return 'success' as const
-  return 'neutral' as const
-}
-
-function stateVariant(state: string) {
-  if (state === 'provider_accepted') return 'success' as const
-  if (
-    state === 'retry_scheduled' ||
-    state === 'partially_accepted' ||
-    state === 'outcome_uncertain' ||
-    state === 'held'
-  ) {
-    return 'warning' as const
-  }
-  if (
-    state === 'failed' ||
-    state === 'delivery_retry_exhausted' ||
-    state === 'stop_requested'
-  ) {
-    return 'danger' as const
-  }
-  if (state === 'classified' || state === 'decided') return 'info' as const
-  return 'neutral' as const
-}
-
-function outcomeVariant(outcome: string) {
-  if (outcome === 'accepted') return 'success' as const
-  if (outcome === 'failed') return 'danger' as const
-  if (
-    outcome === 'deferred' ||
-    outcome === 'partial' ||
-    outcome === 'uncertain'
-  ) {
-    return 'warning' as const
-  }
-  return 'neutral' as const
-}
 
 function makeIdempotencyKey() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -264,7 +227,12 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
           <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Matched rules</p>
           <div className="flex flex-wrap gap-1.5">
             {detail.matched_rule_ids.map((ruleId) => (
-              <Badge key={ruleId} variant="neutral">{ruleId}</Badge>
+              <span
+                key={ruleId}
+                className="rounded border border-white/[0.07] bg-[#1e1e2c] px-2 py-0.5 text-[11px] text-[#a1a1aa]"
+              >
+                {ruleId}
+              </span>
             ))}
           </div>
         </div>
@@ -279,7 +247,9 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
                 key={`${finding.detector}-${finding.entity_type}-${index}`}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
               >
-                <Badge variant="info">{finding.detector}</Badge>
+                <span className="rounded-full border border-[#3b6ef6]/20 bg-[#3b6ef6]/10 px-2 py-0.5 text-[11px] font-semibold text-[#93b4fd]">
+                  {finding.detector}
+                </span>
                 <span className="text-xs text-[#a1a1aa]">{finding.entity_type}</span>
                 <span className="text-[11px] text-[#71717a]">
                   {(finding.confidence * 100).toFixed(0)}%
@@ -337,9 +307,7 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
                 className="rounded-lg border border-white/[0.06] px-3 py-2"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={outcomeVariant(attempt.outcome)}>
-                    {attempt.outcome.toUpperCase()}
-                  </Badge>
+                  <OutcomeChip outcome={attempt.outcome} />
                   <span className="text-xs text-[#a1a1aa]">
                     Attempt {attempt.attempt_number}
                   </span>
@@ -398,9 +366,13 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
                 className="rounded-lg border border-white/[0.06] px-3 py-2"
               >
                 <div className="flex items-center gap-2">
-                  <Badge variant={item.action === 'stop' ? 'danger' : 'info'}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                    item.action === 'stop'
+                      ? 'border-red-500/20 bg-red-500/10 text-red-400'
+                      : 'border-[#3b6ef6]/20 bg-[#3b6ef6]/10 text-[#93b4fd]'
+                  }`}>
                     {item.action.toUpperCase()}
-                  </Badge>
+                  </span>
                   <span className="text-[11px] text-[#71717a]">
                     {new Date(item.created_at).toLocaleString()}
                   </span>
@@ -415,9 +387,13 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
   )
 }
 
-export default function DlpMessagesTab({ canManage }: Props) {
+export default function DlpMessagesTab({
+  canManage,
+  defaultFilter = '',
+  variant = 'messages',
+}: Props) {
   const [messages, setMessages] = useState<DlpMessageSummary[]>([])
-  const [filter, setFilter] = useState('')
+  const [filter, setFilter] = useState(defaultFilter)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -520,13 +496,29 @@ export default function DlpMessagesTab({ canManage }: Props) {
     }
   }
 
+  const isQueue = variant === 'queue'
+
   return (
     <div className="space-y-4">
+      {isQueue && (
+        <div className="flex items-center gap-2 rounded-xl border border-[#3b6ef6]/20 bg-[#3b6ef6]/[0.06] px-4 py-3 text-[12px] text-[#93b4fd]">
+          <Info size={13} className="shrink-0" />
+          <span>
+            Held messages await human review. Release or stop queues a gateway command;
+            queued does not mean delivery has completed.
+          </span>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-medium text-white">DLP messages</h2>
-          <p className="mt-1 text-xs text-[#71717a]">
-            Review held decisions with findings and a bounded sanitized preview.
+          <h2 className="text-[14px] font-semibold text-white">
+            {isQueue ? 'Review queue' : 'Message traffic'}
+          </h2>
+          <p className="mt-1 text-[12px] text-[#71717a]">
+            {isQueue
+              ? 'Held decisions with findings and a bounded sanitized preview.'
+              : 'All observed messages, including delivery and retry states.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -579,8 +571,19 @@ export default function DlpMessagesTab({ canManage }: Props) {
           </div>
         ) : messages.length === 0 ? (
           <div className="flex flex-col items-center px-4 py-14 text-center">
-            <Mail size={23} className="text-[#52525b]" />
-            <p className="mt-3 text-sm text-[#71717a]">No messages match this filter.</p>
+            {isQueue
+              ? <Inbox size={23} className="text-[#52525b]" />
+              : <Mail size={23} className="text-[#52525b]" />}
+            <p className="mt-3 text-[13px] text-[#71717a]">
+              {isQueue && filter === 'reviewable'
+                ? 'No held messages are waiting for review.'
+                : 'No messages match this filter.'}
+            </p>
+            <p className="mt-1 text-[11px] text-[#52525b]">
+              {isQueue
+                ? 'Held mail appears here when policy decides to hold outbound delivery.'
+                : 'Traffic appears here after the gateway captures a message.'}
+            </p>
           </div>
         ) : (
           <Table>
@@ -607,15 +610,11 @@ export default function DlpMessagesTab({ canManage }: Props) {
                       </p>
                     </Td>
                     <Td className="align-top">
-                      <Badge variant={stateVariant(message.state)}>
-                        {message.state.replaceAll('_', ' ')}
-                      </Badge>
+                      <StateChip state={message.state} />
                     </Td>
                     <Td className="align-top">
                       <div className="flex items-center gap-2">
-                        <Badge variant={actionVariant(message.effective_action)}>
-                          {(message.effective_action ?? 'pending').toUpperCase()}
-                        </Badge>
+                        <ActionChip action={message.effective_action} />
                         <button
                           type="button"
                           aria-label="Toggle message detail"
@@ -631,9 +630,10 @@ export default function DlpMessagesTab({ canManage }: Props) {
                     <Td className="align-top">
                       <div className="flex justify-end gap-1">
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           disabled={!canManage || !message.reviewable}
+                          className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10"
                           onClick={() => setReview({
                             message,
                             action: 'release',
@@ -643,10 +643,10 @@ export default function DlpMessagesTab({ canManage }: Props) {
                           <Undo2 size={12} /> Release
                         </Button>
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           disabled={!canManage || !message.reviewable}
-                          className="text-red-400"
+                          className="border-red-500/20 text-red-400 hover:bg-red-500/10"
                           onClick={() => setReview({
                             message,
                             action: 'stop',

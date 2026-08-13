@@ -1,68 +1,107 @@
 import {
   Activity,
   AlertTriangle,
-  CheckCircle2,
-  Database,
-  ScanSearch,
+  Ban,
+  BarChart3,
+  Clock,
+  Eye,
+  FileWarning,
+  PieChart,
   ShieldCheck,
 } from 'lucide-react'
-import type { ElementType } from 'react'
 
-import { Badge } from '@/components/ui/Badge'
-import { Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui/Table'
+import {
+  ACTION_COLORS,
+  ActionChip,
+  BarChart,
+  MetricCard,
+  RingChart,
+  STATE_GROUP_COLORS,
+  StateChip,
+  countStates,
+  formatState,
+} from './DlpChrome'
 import type {
   DlpMessageSummary,
   DlpStatus,
   DlpTenantSettings,
+  PolicyVersion,
 } from '@/lib/dlp/types'
 
 interface Props {
   status: DlpStatus
   settings: DlpTenantSettings
+  activePolicy: PolicyVersion
   recentMessages: DlpMessageSummary[]
-}
-
-function Metric({
-  label,
-  value,
-  detail,
-  icon: Icon,
-  warning = false,
-}: {
-  label: string
-  value: string | number
-  detail: string
-  icon: ElementType
-  warning?: boolean
-}) {
-  return (
-    <div className="rounded-xl border border-white/[0.07] bg-[#13131a] p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs text-[#71717a]">{label}</span>
-        <Icon size={15} className={warning ? 'text-amber-400' : 'text-[#3b6ef6]'} />
-      </div>
-      <div className="text-xl font-semibold text-[var(--foreground)]">{value}</div>
-      <p className="mt-1 text-xs text-[#71717a]">{detail}</p>
-    </div>
-  )
-}
-
-function ActionBadge({ action }: { action: string | null }) {
-  if (!action) return <span className="text-[#52525b]">—</span>
-  const variant =
-    action === 'stop' ? 'danger' : action === 'hold' ? 'warning' : 'success'
-  return <Badge variant={variant}>{action.toUpperCase()}</Badge>
 }
 
 export default function DlpOverviewTab({
   status,
   settings,
+  activePolicy,
   recentMessages,
 }: Props) {
-  const totalMessages = Object.values(status.message_counts).reduce(
-    (sum, count) => sum + count,
-    0,
+  const counts = status.message_counts
+  const totalMessages = Object.values(counts).reduce((sum, count) => sum + count, 0)
+  const reviewable = status.reviewable_count ?? 0
+  const stopped = counts.stop_requested ?? 0
+  const heldAndStopped = reviewable + stopped
+  const interventionRate = totalMessages > 0
+    ? Math.round((heldAndStopped / totalMessages) * 100)
+    : 0
+  const activeRules = activePolicy.document.rules.filter((rule) => rule.enabled).length
+
+  const pipelineGroups = [
+    {
+      label: 'Delivered',
+      value: countStates(counts, ['provider_accepted']),
+      color: STATE_GROUP_COLORS.delivered,
+    },
+    {
+      label: 'Processing',
+      value: countStates(counts, [
+        'received',
+        'classified',
+        'decided',
+        'release_requested',
+        'allow_pending',
+        'submitting',
+      ]),
+      color: STATE_GROUP_COLORS.processing,
+    },
+    {
+      label: 'Retry',
+      value: countStates(counts, ['retry_scheduled']),
+      color: STATE_GROUP_COLORS.retry,
+    },
+    {
+      label: 'Needs attention',
+      value: countStates(counts, [
+        'failed',
+        'delivery_retry_exhausted',
+        'outcome_uncertain',
+        'partially_accepted',
+        'stop_requested',
+      ]),
+      color: STATE_GROUP_COLORS.issues,
+    },
+  ]
+  const groupedTotal = pipelineGroups.reduce((sum, group) => sum + group.value, 0)
+  const ungrouped = Math.max(totalMessages - groupedTotal, 0)
+  const ringData = ungrouped > 0
+    ? [...pipelineGroups, { label: 'Other', value: ungrouped, color: '#71717a' }]
+    : pipelineGroups
+
+  const recentActions = recentMessages.reduce(
+    (acc, message) => {
+      if (message.effective_action === 'allow') acc.allow += 1
+      else if (message.effective_action === 'hold') acc.hold += 1
+      else if (message.effective_action === 'stop') acc.stop += 1
+      return acc
+    },
+    { allow: 0, hold: 0, stop: 0 },
   )
+
   const warnings = [
     !status.pipeline_enabled && 'The DLP runtime pipeline is disabled.',
     !settings.enabled && 'DLP is disabled for this tenant.',
@@ -99,12 +138,12 @@ export default function DlpOverviewTab({
   ]
     .map((alert) => ({
       ...alert,
-      count: status.message_counts[alert.state] ?? 0,
+      count: counts[alert.state] ?? 0,
     }))
     .filter((alert) => alert.count > 0)
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {warnings.length > 0 && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.06] p-4">
           <div className="flex gap-3">
@@ -158,102 +197,194 @@ export default function DlpOverviewTab({
         </div>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric
-          label="Runtime pipeline"
-          value={status.pipeline_enabled ? 'Ready' : 'Disabled'}
-          detail="Gateway and worker environment"
-          icon={Activity}
-          warning={!status.pipeline_enabled}
-        />
-        <Metric
-          label="Tenant protection"
-          value={settings.enabled ? 'Enabled' : 'Disabled'}
-          detail={`${settings.mode === 'monitor' ? 'Monitoring only' : 'Enforcing policy'}`}
-          icon={ShieldCheck}
-          warning={!settings.enabled}
-        />
-        <Metric
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <MetricCard
           label="Messages observed"
           value={totalMessages}
-          detail={`${Object.keys(status.message_counts).length} message state(s)`}
-          icon={Database}
+          icon={Activity}
+          footer={
+            <div className="flex items-center justify-between text-[11px] text-[#71717a]">
+              <span>{settings.enabled ? 'Tenant enabled' : 'Tenant disabled'}</span>
+              <span className="capitalize">{settings.mode}</span>
+            </div>
+          }
         />
-        <Metric
-          label="Classifier"
-          value={status.classifier_url_configured ? 'Configured' : 'Missing'}
-          detail={`Policy v${settings.active_policy_version ?? 0}`}
-          icon={ScanSearch}
-          warning={!status.classifier_url_configured}
+        <MetricCard
+          label="Held + stopped"
+          value={heldAndStopped}
+          icon={Ban}
+          iconClass="bg-red-500/10 border-red-500/20 text-red-400"
+          badge={
+            <div className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5">
+              <span className="text-[11px] font-semibold text-red-400">{interventionRate}%</span>
+            </div>
+          }
+          footer={
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-orange-500" />
+                <span className="text-[11px] text-[#71717a]">{reviewable} held</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-red-500" />
+                <span className="text-[11px] text-[#71717a]">{stopped} stop requested</span>
+              </div>
+            </div>
+          }
+        />
+        <MetricCard
+          label="Active rules"
+          value={activeRules}
+          icon={ShieldCheck}
+          iconClass="bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+          footer={
+            <span className="text-[11px] text-[#71717a]">
+              Policy v{activePolicy.version} · {activePolicy.status}
+            </span>
+          }
+        />
+        <MetricCard
+          label="Pending review"
+          value={reviewable}
+          icon={Clock}
+          iconClass="bg-amber-500/10 border-amber-500/20 text-amber-400"
+          badge={reviewable > 0 ? (
+            <span className="relative flex h-3 w-3">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-500" />
+            </span>
+          ) : undefined}
+          footer={
+            <span className="text-[11px] text-[#71717a]">
+              Held messages awaiting approval
+            </span>
+          }
         />
       </div>
 
-      {Object.keys(status.message_counts).length > 0 && (
-        <div className="rounded-xl border border-white/[0.07] bg-[#13131a] p-4">
-          <h2 className="mb-3 text-sm font-medium text-[var(--foreground)]">
-            Message states
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {Object.entries(status.message_counts)
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="rounded-xl border border-white/[0.06] bg-[#13131a] p-5">
+          <h3 className="mb-4 flex items-center gap-2 text-[14px] font-semibold text-[var(--foreground)]">
+            <PieChart size={15} className="text-[#3b6ef6]" />
+            Pipeline status
+          </h3>
+          <div className="flex items-center justify-between">
+            <RingChart
+              data={ringData}
+              centerValue={totalMessages}
+              centerLabel="Total"
+            />
+            <div className="ml-6 flex-1 space-y-2">
+              {ringData.map((item) => (
+                <div key={item.label} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3 w-3 rounded-full" style={{ backgroundColor: item.color }} />
+                    <span className="text-[12px] text-[#a1a1aa]">{item.label}</span>
+                  </div>
+                  <span className="text-[12px] font-semibold text-[var(--foreground)]">{item.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.06] bg-[#13131a] p-5">
+          <h3 className="mb-4 flex items-center gap-2 text-[14px] font-semibold text-[var(--foreground)]">
+            <BarChart3 size={15} className="text-[#3b6ef6]" />
+            Recent decisions
+          </h3>
+          <BarChart
+            data={[
+              { label: 'Allow', value: recentActions.allow, color: ACTION_COLORS.allow },
+              { label: 'Hold', value: recentActions.hold, color: ACTION_COLORS.hold },
+              { label: 'Stop', value: recentActions.stop, color: ACTION_COLORS.stop },
+            ]}
+          />
+          <p className="mt-3 text-[11px] text-[#52525b]">
+            From the latest {recentMessages.length} observed messages.
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-white/[0.06] bg-[#13131a] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-[14px] font-semibold text-[var(--foreground)]">
+          <FileWarning size={15} className="text-[#3b6ef6]" />
+          Message states
+        </h3>
+        {Object.keys(counts).length === 0 ? (
+          <div className="py-8 text-center text-[13px] text-[#71717a]">
+            No messages have been processed yet.
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            {Object.entries(counts)
               .sort(([a], [b]) => a.localeCompare(b))
               .map(([state, count]) => (
                 <div
                   key={state}
-                  className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.025] px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-white/[0.05] bg-white/[0.03] p-3"
                 >
-                  <CheckCircle2 size={12} className="text-[#3b6ef6]" />
-                  <span className="text-xs capitalize text-[#a1a1aa]">
-                    {state.replaceAll('_', ' ')}
-                  </span>
-                  <span className="text-xs font-semibold text-white">{count}</span>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="h-2 w-2 shrink-0 rounded-full bg-[#3b6ef6]" />
+                    <span className="truncate text-[12px] capitalize text-[#a1a1aa]" title={formatState(state)}>
+                      {formatState(state)}
+                    </span>
+                  </div>
+                  <span className="text-[12px] font-semibold text-[var(--foreground)]">{count}</span>
                 </div>
               ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#13131a]">
-        <div className="border-b border-white/[0.06] px-4 py-3">
-          <h2 className="text-sm font-medium text-[var(--foreground)]">
-            Recent messages
-          </h2>
-          <p className="mt-0.5 text-xs text-[#71717a]">
-            Latest messages observed by DLP v2
-          </p>
-        </div>
+      <div className="rounded-xl border border-white/[0.06] bg-[#13131a] p-5">
+        <h3 className="mb-4 flex items-center gap-2 text-[14px] font-semibold text-[var(--foreground)]">
+          <Eye size={15} className="text-[#3b6ef6]" />
+          Recent activity
+        </h3>
         {recentMessages.length === 0 ? (
-          <div className="px-4 py-10 text-center text-sm text-[#71717a]">
-            No DLP messages have been processed yet.
+          <div className="flex flex-col items-center justify-center gap-3 py-12">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.03]">
+              <Activity size={20} className="text-[#71717a]" />
+            </div>
+            <div className="text-center">
+              <p className="mb-1 text-[13px] text-[#71717a]">No DLP messages yet</p>
+              <p className="text-[11px] text-[#52525b]">
+                Activity appears here when outbound mail is captured and classified.
+              </p>
+            </div>
           </div>
         ) : (
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Received</Th>
-                <Th>Sender</Th>
-                <Th>State</Th>
-                <Th>Decision</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {recentMessages.map((message) => (
-                <Tr key={message.message_id}>
-                  <Td className="whitespace-nowrap text-xs">
-                    {new Date(message.received_at).toLocaleString()}
-                  </Td>
-                  <Td className="max-w-[260px] truncate text-xs">
-                    {message.envelope_from}
-                  </Td>
-                  <Td>
-                    <Badge variant="neutral">
-                      {message.state.replaceAll('_', ' ')}
-                    </Badge>
-                  </Td>
-                  <Td><ActionBadge action={message.effective_action} /></Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
+          <div className="space-y-2">
+            {recentMessages.slice(0, 8).map((message) => (
+              <div
+                key={message.message_id}
+                className="flex items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.02] p-3 transition-colors hover:bg-white/[0.04]"
+              >
+                <div className={`h-2 w-2 shrink-0 rounded-full ${
+                  message.effective_action === 'stop' ? 'bg-red-500'
+                    : message.effective_action === 'hold' ? 'bg-orange-500'
+                      : message.effective_action === 'allow' ? 'bg-emerald-500'
+                        : 'bg-[#3b6ef6]'
+                }`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="truncate text-[12px] font-medium text-[var(--foreground)]">
+                      {message.envelope_from}
+                    </span>
+                    <StateChip state={message.state} />
+                    <ActionChip action={message.effective_action} />
+                  </div>
+                  <div className="truncate text-[11px] text-[#71717a]">
+                    To: {message.envelope_to.join(', ') || '—'}
+                  </div>
+                </div>
+                <span className="whitespace-nowrap text-[10px] text-[#52525b]">
+                  {new Date(message.received_at).toLocaleTimeString()}
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>
