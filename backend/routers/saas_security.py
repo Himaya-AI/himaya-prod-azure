@@ -7091,7 +7091,19 @@ async def _scan_teams(org_id: str, access_token: str, db: AsyncSession) -> None:
                                 headers=headers, follow_redirects=True
                             )
                             if dl.status_code == 200:
-                                content = content + "\n\n" + dl.content.decode("utf-8", errors="replace")[:3800]
+                                # Extract real text (PDF/DOCX/XLSX/PPTX/OCR/…) via the
+                                # shared adapter rather than naive utf-8 decode, which
+                                # turned Office files into garbage for the classifier.
+                                from backend.services.file_text_extractor import extract_text_async
+                                _teams_mime = (item.get("file") or {}).get("mimeType", "")
+                                extracted = await extract_text_async(
+                                    dl.content,
+                                    filename=item_name,
+                                    content_type=_teams_mime,
+                                    max_chars=3800,
+                                )
+                                if extracted:
+                                    content = content + "\n\n" + extracted
                         except Exception:
                             pass
 
@@ -7325,13 +7337,18 @@ async def _scan_sharepoint(
                         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         "application/msword",
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        "text/csv",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        "application/rtf", "message/rfc822", "text/csv",
                     }
-                    is_text_file = mime in text_mimes or item_name.endswith((".txt", ".csv", ".docx", ".xlsx", ".pdf"))
+                    is_text_file = mime in text_mimes or item_name.endswith(
+                        (".txt", ".csv", ".docx", ".xlsx", ".pptx", ".pdf", ".rtf", ".eml",
+                         ".json", ".xml", ".md", ".html", ".htm", ".log")
+                    )
                     # Always include filename + site in classify content for keyword matching
                     content_to_classify = f"File: {item_name}\nSite: {site_name}\nType: {mime}"
 
-                    # For text-based files under 2MB, download and extract content
+                    # For supported files under 2MB, download + extract real text via
+                    # the shared file_text_extractor adapter (PDF/DOCX/XLSX/PPTX/OCR/…).
                     if is_text_file and 0 < size_bytes < 2 * 1024 * 1024:
                         try:
                             dl_resp = await client.get(
@@ -7340,29 +7357,17 @@ async def _scan_sharepoint(
                                 follow_redirects=True,
                             )
                             if dl_resp.status_code == 200:
-                                raw_bytes = dl_resp.content
-                                if mime == "application/pdf" or item_name.endswith(".pdf"):
-                                    # Extract text from PDF — run in thread to avoid blocking async greenlet
-                                    try:
-                                        import asyncio as _asyncio
-                                        import io as _io
-                                        from pdfminer.high_level import extract_text as _pdf_extract
-                                        _bytes_copy = raw_bytes
-                                        extracted = await _asyncio.wait_for(
-                                            _asyncio.get_event_loop().run_in_executor(
-                                                None, lambda: _pdf_extract(_io.BytesIO(_bytes_copy))
-                                            ),
-                                            timeout=15.0
-                                        )
-                                        content_to_classify = f"File: {item_name}\nSite: {site_name}\n\n{extracted[:3800]}" if extracted else content_to_classify
-                                    except Exception:
-                                        content_to_classify = raw_bytes.decode("latin-1", errors="replace")[:4000]
-                                else:
-                                    # Plain text / CSV / DOCX raw bytes — best-effort decode
-                                    raw_text = raw_bytes.decode("utf-8", errors="replace")[:3800]
-                                    content_to_classify = f"File: {item_name}\nSite: {site_name}\n\n{raw_text}"
+                                from backend.services.file_text_extractor import extract_text_async
+                                extracted = await extract_text_async(
+                                    dl_resp.content,
+                                    filename=item_name,
+                                    content_type=mime,
+                                    max_chars=3800,
+                                )
+                                if extracted:
+                                    content_to_classify = f"File: {item_name}\nSite: {site_name}\n\n{extracted}"
                         except Exception as _dl_exc:
-                            logger.warning(f"saas_scan/sharepoint: content download failed for {item_name}: {_dl_exc}")
+                            logger.warning(f"saas_scan/sharepoint: content download/extract failed for {item_name}: {_dl_exc}")
                             content_to_classify = f"File: {item_name}\nSite: {site_name}"
                     elif not is_text_file:
                         content_to_classify = item_name
@@ -9233,46 +9238,24 @@ async def _deepseek_classify_content(
     content: str, context: str, org_id: str
 ) -> dict:
     """
-    Classify content using the full DLP pipeline:
-    1. Regex patterns (fast, catches SSN/credit cards/keys immediately)
-    2. DeepSeek (semantic, L40S GPU via dlp_service — 200s timeout)
-    3. Claude Haiku fallback if DeepSeek unavailable
-    Returns: {"risk_level": "low|medium|high|critical", "categories": [...],
-              "confidence": 0.0-1.0, "explanation": "...",
-              "matched_patterns": [...], "sensitivity_score": 0-100}
+    Classify content via the dlp-classifier microservice.
+
+    Replaces the legacy regex (`_simple_classify`) + DeepSeek + Claude Haiku
+    pipeline. The remote service runs the PII/NER/lexicon/credential detectors
+    plus an LLM sensitivity verdict and returns a normalised result:
+        {"risk_level": "low|medium|high|critical", "categories": [...],
+         "confidence": 0.0-1.0, "explanation": "...",
+         "matched_patterns": [...], "sensitivity_score": 0-100}
+
+    On service failure a safe `low` verdict is returned so callers never crash.
     """
-    # Step 1: Fast regex scan — catches SSN, credit cards, private keys immediately
-    regex_result = _simple_classify(content)
-    if regex_result["risk_level"] in ("high", "critical"):
-        logger.info(f"saas_classify: regex match {regex_result['categories']} for context={context[:50]}")
-        return regex_result
-
-    # Step 2: Claude classification (DeepSeek disabled due to timeouts - can be replaced with custom DLP later)
-    try:
-        from backend.services import dlp_service as _dlp
-        claude_result = await _dlp._claude_classify(
-            email_body=content[:4000],
-            subject=context,
-            attachments=[],
-            sender="saas-scanner@helios",
-            recipient_domains=[],
-        )
-        if claude_result:
-            claude_result.setdefault("risk_level", "low")
-            claude_result.setdefault("categories", [])
-            claude_result.setdefault("confidence", 0.5)
-            claude_result.setdefault("matched_patterns", [])
-            claude_result.setdefault("sensitivity_score",
-                                     _risk_to_score(claude_result.get("risk_level", "low")))
-            # Take the higher of Claude and regex
-            if claude_result["risk_level"] == "low" and regex_result["risk_level"] != "low":
-                return regex_result
-            logger.info(f"saas_classify: Claude={claude_result['risk_level']} cats={claude_result['categories']} for {context[:40]}")
-            return claude_result
-    except Exception as exc:
-        logger.warning(f"saas_classify: Claude call failed: {exc}")
-
-    return regex_result
+    from backend.services import dlp_classifier_client as _clf
+    result = await _clf.classify_content(content, context=context, org_id=org_id)
+    logger.info(
+        f"saas_classify: dlp-classifier={result['risk_level']} "
+        f"cats={result['categories']} for {context[:40]}"
+    )
+    return result
 
 
 async def _detect_behavioral_threats(org_id: str, provider: str, access_token: str, db: AsyncSession) -> None:
@@ -10084,48 +10067,9 @@ async def _evaluate_conditional_access(org_id: str, access_token: str, db: Async
     return checks
 
 
-def _simple_classify(content: str) -> dict:
-    """Fast regex-based content classification. Runs before DeepSeek as a quick check."""
-    import re as _re
-    content_lower = content.lower()
-
-    # Critical: SSN, tax IDs, credit cards, private keys
-    critical_patterns = [
-        (r'\b\d{3}-\d{2}-\d{4}\b', 'pii_ssn'),           # SSN
-        (r'\b4[0-9]{12}(?:[0-9]{3})?\b', 'pii_credit_card'),  # Visa
-        (r'\b5[1-5][0-9]{14}\b', 'pii_credit_card'),          # MC
-        (r'-----BEGIN (RSA |EC )?PRIVATE KEY-----', 'infra_private_key'),
-        (r'\biban\b.{0,30}[A-Z]{2}\d{2}[A-Z0-9]{10,30}', 'financial_iban'),
-    ]
-    for pattern, cat in critical_patterns:
-        if _re.search(pattern, content, _re.IGNORECASE):
-            return {"risk_level": "critical", "categories": [cat], "confidence": 0.9,
-                    "explanation": f"Pattern matched: {cat}", "matched_patterns": [cat], "sensitivity_score": 100}
-
-    high_keywords = ["password", "secret", "confidential", "private key", "ssn", "credit card",
-                     "tax return", "income tax", "form 1040", "w-2", "w2 ", "turbotax",
-                     "social security", "date of birth", "passport number", "driver license"]
-    med_keywords = ["salary", "invoice", "bank", "nda", "merger", "acquisition",
-                    "annual income", "total income", "tax owed", "refund amount",
-                    "routing number", "account number", "health insurance", "medical record"]
-    content_lower = content.lower()
-
-    for kw in high_keywords:
-        if kw in content_lower:
-            return {
-                "risk_level": "high", "categories": ["sensitive"], "confidence": 0.7,
-                "explanation": f"Keyword match: {kw}", "matched_patterns": [kw], "sensitivity_score": 75,
-            }
-    for kw in med_keywords:
-        if kw in content_lower:
-            return {
-                "risk_level": "medium", "categories": ["sensitive"], "confidence": 0.6,
-                "explanation": f"Keyword match: {kw}", "matched_patterns": [kw], "sensitivity_score": 50,
-            }
-    return {
-        "risk_level": "low", "categories": [], "confidence": 0.5,
-        "explanation": "No sensitive patterns detected", "matched_patterns": [], "sensitivity_score": 10,
-    }
+# NOTE: the legacy regex classifier `_simple_classify` was removed — content
+# data classification now runs entirely through the dlp-classifier service
+# (see `_deepseek_classify_content` / backend.services.dlp_classifier_client).
 
 
 async def _claude_posture_analysis(
@@ -14504,13 +14448,12 @@ async def get_attack_chains(
 async def _run_dlp_classification_worker(org_id: str) -> None:
     """
     DLP Classification Background Worker:
-    - Runs Claude API for contextual analysis on unclassified/stale data items
+    - Runs the dlp-classifier service for contextual analysis on
+      unclassified/stale data items (SaaS files + AWS/Databricks/GCP resources)
     - Updates classification_label and severity
     - Creates alerts for high-risk items
     """
-    if not ANTHROPIC_API_KEY:
-        logger.debug(f"dlp_worker: ANTHROPIC_API_KEY not set, skipping for org {org_id}")
-        return
+    from backend.services import dlp_classifier_client as _clf
 
     try:
         async with AsyncSessionLocal() as db:
@@ -14552,36 +14495,10 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
             for item in items:
                 try:
                     context = f"File: {item['item_name']}\nPath: {item['parent_path'] or 'Unknown'}\nProvider: {item['provider']}"
-                    prompt = (
-                        f"Classify this file for DLP risk. Return JSON only.\n"
-                        f"Context: {context}\n\n"
-                        f"Return: {{\"risk_level\": \"low|medium|high|critical\", "
-                        f"\"categories\": [\"pii_ssn\"|\"financial_tax\"|\"hr_medical\"|etc], "
-                        f"\"confidence\": 0.0-1.0, \"explanation\": \"brief reason\"}}"
-                    )
-
-                    async with httpx.AsyncClient(timeout=20) as client:
-                        r = await client.post(
-                            "https://api.anthropic.com/v1/messages",
-                            headers={
-                                "x-api-key": ANTHROPIC_API_KEY,
-                                "anthropic-version": "2023-06-01",
-                                "content-type": "application/json",
-                            },
-                            json={
-                                "model": "claude-haiku-4-5",
-                                "max_tokens": 200,
-                                "messages": [{"role": "user", "content": prompt}],
-                            },
-                        )
-
-                    if r.status_code != 200:
+                    cls_result = await _clf.classify_verdict(context, tenant_id=org_id)
+                    if not cls_result:
+                        # Service unavailable — leave item for the next pass.
                         continue
-
-                    raw = r.json()["content"][0]["text"].strip()
-                    raw = re.sub(r"^```[\w]*\n?", "", raw)
-                    raw = re.sub(r"```$", "", raw).strip()
-                    cls_result = json.loads(raw)
 
                     risk_level = cls_result.get("risk_level", "low")
                     label = _risk_to_label(risk_level)
@@ -14697,39 +14614,9 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
                         if meta.get("versioning"):
                             context += f"Versioning: {meta['versioning']}\n"
                         
-                        prompt = (
-                            f"Classify this AWS resource for DLP risk based on its name and configuration. "
-                            f"Infer data sensitivity from naming conventions (e.g., prod-, finance-, pii-, backup-, logs-).\n"
-                            f"Return JSON only.\n\n"
-                            f"Context: {context}\n\n"
-                            f"Return: {{\"risk_level\": \"low|medium|high|critical\", "
-                            f"\"categories\": [\"source_code\"|\"financial_data\"|\"customer_pii\"|\"logs\"|\"backups\"|\"ml_models\"|etc], "
-                            f"\"inferred_data_type\": \"what data likely stored\", "
-                            f"\"confidence\": 0.0-1.0}}"
-                        )
-                        
-                        async with httpx.AsyncClient(timeout=20) as client:
-                            r = await client.post(
-                                "https://api.anthropic.com/v1/messages",
-                                headers={
-                                    "x-api-key": ANTHROPIC_API_KEY,
-                                    "anthropic-version": "2023-06-01",
-                                    "content-type": "application/json",
-                                },
-                                json={
-                                    "model": "claude-haiku-4-5",
-                                    "max_tokens": 200,
-                                    "messages": [{"role": "user", "content": prompt}],
-                                },
-                            )
-                        
-                        if r.status_code != 200:
+                        cls_result = await _clf.classify_verdict(context, tenant_id=org_id)
+                        if not cls_result:
                             continue
-                        
-                        raw = r.json()["content"][0]["text"].strip()
-                        raw = re.sub(r"^```[\w]*\n?", "", raw)
-                        raw = re.sub(r"```$", "", raw).strip()
-                        cls_result = json.loads(raw)
                         
                         # Update metadata with classification
                         meta["dlp_classified"] = "true"
@@ -14785,34 +14672,9 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
                                 f"Language: {db_item.get('language') or 'n/a'}\n"
                                 f"Has secrets: {db_item.get('has_secrets')}\n"
                             )
-                            prompt = (
-                                "Classify this Databricks asset for DLP. Infer data sensitivity from "
-                                "the path/name and secret/language signals. JSON only.\n\n"
-                                f"Context: {ctx}\n\n"
-                                'Return: {"risk_level":"low|medium|high|critical",'
-                                '"categories":["source_code"|"customer_pii"|"financial_data"|"ml_models"|"logs"|"backups"|etc],'
-                                '"inferred_data_type":"...","confidence":0.0-1.0}'
-                            )
-                            async with httpx.AsyncClient(timeout=20) as client:
-                                r = await client.post(
-                                    "https://api.anthropic.com/v1/messages",
-                                    headers={
-                                        "x-api-key": ANTHROPIC_API_KEY,
-                                        "anthropic-version": "2023-06-01",
-                                        "content-type": "application/json",
-                                    },
-                                    json={
-                                        "model": "claude-haiku-4-5",
-                                        "max_tokens": 200,
-                                        "messages": [{"role": "user", "content": prompt}],
-                                    },
-                                )
-                            if r.status_code != 200:
+                            cls = await _clf.classify_verdict(ctx, tenant_id=org_id)
+                            if not cls:
                                 continue
-                            raw = r.json()["content"][0]["text"].strip()
-                            raw = re.sub(r"^```[\w]*\n?", "", raw)
-                            raw = re.sub(r"```$", "", raw).strip()
-                            cls = json.loads(raw)
                             d_meta["dlp_classified"] = "true"
                             d_meta["dlp_categories"] = cls.get("categories", [])
                             d_meta["dlp_risk_level"] = cls.get("risk_level", "low")
@@ -14868,34 +14730,9 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
                                 f"Public access: {g_item.get('public_access')}\n"
                                 f"Encryption: {g_item.get('encryption_enabled')}\n"
                             )
-                            prompt = (
-                                "Classify this GCP resource for DLP. Infer sensitivity from name + "
-                                "public/encryption signals. JSON only.\n\n"
-                                f"Context: {ctx}\n\n"
-                                'Return: {"risk_level":"low|medium|high|critical",'
-                                '"categories":["source_code"|"customer_pii"|"financial_data"|"logs"|"backups"|etc],'
-                                '"inferred_data_type":"...","confidence":0.0-1.0}'
-                            )
-                            async with httpx.AsyncClient(timeout=20) as client:
-                                r = await client.post(
-                                    "https://api.anthropic.com/v1/messages",
-                                    headers={
-                                        "x-api-key": ANTHROPIC_API_KEY,
-                                        "anthropic-version": "2023-06-01",
-                                        "content-type": "application/json",
-                                    },
-                                    json={
-                                        "model": "claude-haiku-4-5",
-                                        "max_tokens": 200,
-                                        "messages": [{"role": "user", "content": prompt}],
-                                    },
-                                )
-                            if r.status_code != 200:
+                            cls = await _clf.classify_verdict(ctx, tenant_id=org_id)
+                            if not cls:
                                 continue
-                            raw = r.json()["content"][0]["text"].strip()
-                            raw = re.sub(r"^```[\w]*\n?", "", raw)
-                            raw = re.sub(r"```$", "", raw).strip()
-                            cls = json.loads(raw)
                             g_meta["dlp_classified"] = "true"
                             g_meta["dlp_categories"] = cls.get("categories", [])
                             g_meta["dlp_risk_level"] = cls.get("risk_level", "low")
