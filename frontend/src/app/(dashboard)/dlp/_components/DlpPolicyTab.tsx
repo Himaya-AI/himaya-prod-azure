@@ -222,11 +222,13 @@ function RuleEditor({
           aria-checked={rule.enabled}
           disabled={disabled}
           onClick={() => patch({ enabled: !rule.enabled })}
-          className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50 ${
-            rule.enabled ? 'justify-end bg-[#3b6ef6]' : 'justify-start bg-white/10'
+          className={`w-14 shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            rule.enabled
+              ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+              : 'border-white/[0.08] bg-white/[0.03] text-[#71717a]'
           }`}
         >
-          <span className="h-3.5 w-3.5 rounded-full bg-white shadow-sm" />
+          {rule.enabled ? 'On' : 'Off'}
         </button>
         <button
           type="button"
@@ -236,11 +238,6 @@ function RuleEditor({
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium text-white">{rule.name}</span>
             <ActionChip action={rule.action} />
-            {!rule.enabled && (
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#52525b]">
-                Off
-              </span>
-            )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] text-[#71717a]">
