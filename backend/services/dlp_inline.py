@@ -295,21 +295,36 @@ async def _get_org_domains(org_id: str, db: AsyncSession) -> list[str]:
 async def _extract_text_from_attachment(att: dict) -> str:
     """
     Extract text content from an attachment.
-    Supports: PDF, text files, Office docs (DOCX/XLSX/PPTX), images (OCR).
+    Supports: PDF, text files, Office docs (DOCX/XLSX/PPTX), images (OCR),
+    RTF and EML. Delegates to the shared `file_text_extractor` adapter so the
+    email-DLP and DSPM (SharePoint/Teams) paths share one implementation.
     """
     import base64
-    import io
-    
+
+    from backend.services.file_text_extractor import extract_text_async
+
     content_b64 = att.get("content_base64", "")
     if not content_b64:
         return ""
-    
+
     try:
         content_bytes = base64.b64decode(content_b64)
     except Exception as e:
         logger.warning(f"Failed to decode attachment base64: {e}")
         return ""
-    
+
+    return await extract_text_async(
+        content_bytes,
+        filename=att.get("name", ""),
+        content_type=att.get("content_type", ""),
+    )
+
+
+async def _extract_text_from_attachment_legacy_unused(att: dict) -> str:
+    import base64
+    import io
+
+    content_bytes = base64.b64decode(att.get("content_base64", ""))
     content_type = att.get("content_type", "").lower()
     name = att.get("name", "").lower()
     

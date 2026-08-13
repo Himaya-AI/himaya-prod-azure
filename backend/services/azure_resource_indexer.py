@@ -21,9 +21,9 @@ This module closes that gap. After a scan it:
   2. Extracts resources from the collector's `ScanContext` cache (storage
      accounts, key vaults, VMs, disks, SQL servers, NSGs, public IPs, app
      services).
-  3. Classifies each resource with **Claude** — connector data classification is
-     Claude-driven — falling back to the deterministic heuristic classifier only
-     when Claude is unavailable or errors.
+  3. Classifies each resource with the **dlp-classifier service** — connector
+     data classification is service-driven — falling back to the deterministic
+     heuristic classifier only when the service is unavailable or errors.
   4. Upserts rows into `azure_resources` with
      `dlp_classified` / `dlp_categories` / `dlp_risk_level` / `dlp_source`
      metadata (same shape the rest of the platform reads).
@@ -32,29 +32,16 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import re
 from typing import Any, Optional
 
-import httpx
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-# Claude model used for connector data classification (fast + cheap).
-_CLAUDE_MODEL = "claude-haiku-4-5"
-# Cap how many resources we ship to Claude per scan to bound cost/latency.
+# Cap how many resources we ship to the classifier per scan to bound
+# cost/latency (one HTTP call per resource, run with bounded concurrency).
 _MAX_CLASSIFY = 400
-# Resources per Claude request (batched to keep it to a handful of calls).
-_BATCH_SIZE = 50
-
-# Category vocabulary Claude is allowed to choose from — kept aligned with the
-# heuristic classifier + DSPM categories so downstream filters stay consistent.
-_CATEGORIES = (
-    "pii, pci, phi, financial, credentials, source_code, backup, logs, config, "
-    "network, ml_data, public_data, database, storage, identity, infrastructure"
-)
 
 # (cache service key, normalised resource_type) pairs to extract from the scan.
 _SERVICE_MAP: list[tuple[str, str]] = [
@@ -66,6 +53,15 @@ _SERVICE_MAP: list[tuple[str, str]] = [
     ("networkSecurityGroups", "network_security_group"),
     ("publicIPAddresses", "public_ip"),
     ("webApps", "app_service"),
+    ("containerApps", "container_app"),
+    ("containerRegistries", "container_registry"),
+    ("communicationServices", "communication_service"),
+    ("redis", "redis_cache"),
+    ("cdnProfiles", "cdn_profile"),
+    ("logAnalyticsWorkspaces", "log_analytics_workspace"),
+    ("managedIdentities", "managed_identity"),
+    ("postgresServers", "postgres_server"),
+    ("serviceBusNamespaces", "service_bus_namespace"),
 ]
 
 
@@ -108,6 +104,10 @@ def _derive_security_flags(resource_type: str, props: dict) -> tuple[bool, bool]
         elif resource_type == "app_service":
             # Web apps are internet-facing unless access restrictions are set.
             public_access = not bool(props.get("privateEndpointConnections"))
+        elif resource_type == "container_app":
+            # Container apps are internet-facing unless ingress is disabled.
+            ingress = props.get("configuration", {}).get("ingress") or {}
+            public_access = ingress.get("external", True) and ingress.get("targetPort") is not None
         elif resource_type == "managed_disk":
             encryption_enabled = bool((props.get("encryption") or {}).get("type"))
         elif resource_type == "key_vault":
@@ -115,6 +115,27 @@ def _derive_security_flags(resource_type: str, props: dict) -> tuple[bool, bool]
             public_access = (acls.get("defaultAction") or "Allow").lower() == "allow"
         elif resource_type == "sql_server":
             public_access = (props.get("publicNetworkAccess") or "Enabled").lower() == "enabled"
+        elif resource_type == "postgres_server":
+            public_access = (props.get("network", {}).get("publicNetworkAccess") or "Enabled").lower() == "enabled"
+        elif resource_type == "redis_cache":
+            public_access = (props.get("properties", {}).get("publicNetworkAccess") or "Enabled").lower() == "enabled"
+        elif resource_type == "service_bus_namespace":
+            public_access = (props.get("properties", {}).get("publicNetworkAccess") or "Enabled").lower() == "enabled"
+        elif resource_type == "communication_service":
+            # Communication services typically require public access for SMS/voice.
+            public_access = True
+        elif resource_type == "cdn_profile":
+            # CDN is inherently public-facing.
+            public_access = True
+        elif resource_type == "log_analytics_workspace":
+            # Log Analytics can be private, but often public for ingestion.
+            public_access = True
+        elif resource_type == "managed_identity":
+            # Managed identities are internal, not directly accessible.
+            public_access = False
+        elif resource_type == "container_registry":
+            # ACR can be public or private; check publicNetworkAccess.
+            public_access = (props.get("properties", {}).get("publicNetworkAccess") or "Enabled").lower() == "enabled"
     except Exception:
         pass
     return public_access, encryption_enabled
@@ -148,97 +169,60 @@ def _extract_resources(ctx: Any) -> list[dict]:
     return out
 
 
-async def _claude_classify_batch(batch: list[dict]) -> Optional[dict[int, tuple[list[str], str]]]:
-    """Classify a batch of resources with Claude.
+async def _service_classify_resource(r: dict) -> Optional[tuple[list[str], str]]:
+    """Classify a single Azure resource via the dlp-classifier service.
 
-    Returns {index: (categories, risk_level)} or None if Claude is unavailable.
+    Returns (categories, risk_level) or None if the service is unavailable.
     """
-    anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not anthropic_key:
-        return None
+    from backend.services import dlp_classifier_client as _clf
 
-    listing = "\n".join(
-        f'{i}. name="{r["name"]}" type="{r["azure_type"] or r["resource_type"]}" '
+    text = (
+        f'Azure resource name="{r["name"]}" '
+        f'type="{r["azure_type"] or r["resource_type"]}" '
         f'location={r["location"]} public={r["public_access"]} '
-        f'encrypted={r["encryption_enabled"]} tags={json.dumps(r.get("tags") or {})[:200]}'
-        for i, r in enumerate(batch)
+        f'encrypted={r["encryption_enabled"]} '
+        f'tags={json.dumps(r.get("tags") or {})[:200]}'
     )
-    prompt = (
-        "You are a cloud data-security classifier. For each Azure resource below, "
-        "infer what kind of data it most likely holds or governs and its data-security "
-        "risk. Base the decision on the resource name, type, tags, public exposure and "
-        "encryption.\n\n"
-        f"Allowed categories (choose all that clearly apply): {_CATEGORIES}\n\n"
-        f"Resources:\n{listing}\n\n"
-        "Respond with a JSON array ONLY, one object per resource index, like:\n"
-        '[{"i":0,"categories":["storage","pii"],"risk":"high"},{"i":1,'
-        '"categories":["logs"],"risk":"low"}]\n'
-        "risk must be one of: low, medium, high, critical. Do not add commentary."
-    )
-    try:
-        async with httpx.AsyncClient(timeout=40) as client:
-            r = await client.post(
-                "https://api.anthropic.com/v1/messages",
-                headers={
-                    "x-api-key": anthropic_key,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
-                json={
-                    "model": _CLAUDE_MODEL,
-                    "max_tokens": 1500,
-                    "messages": [{"role": "user", "content": prompt}],
-                },
-            )
-            if r.status_code != 200:
-                logger.warning(f"azure_indexer: Claude returned {r.status_code}")
-                return None
-            raw = r.json()["content"][0]["text"].strip()
-            raw = re.sub(r"^```[\w]*\n?", "", raw)
-            raw = re.sub(r"```$", "", raw).strip()
-            parsed = json.loads(raw)
-            result: dict[int, tuple[list[str], str]] = {}
-            for entry in parsed:
-                try:
-                    idx = int(entry.get("i"))
-                    cats = [str(c).lower().strip() for c in (entry.get("categories") or []) if c]
-                    risk = str(entry.get("risk", "low")).lower().strip()
-                    if risk not in ("low", "medium", "high", "critical"):
-                        risk = "low"
-                    result[idx] = (cats or ["infrastructure"], risk)
-                except Exception:
-                    continue
-            return result
-    except Exception as exc:
-        logger.warning(f"azure_indexer: Claude classify failed: {exc}")
+    verdict = await _clf.classify_verdict(text)
+    if verdict is None:
         return None
+    cats = verdict.get("categories") or ["infrastructure"]
+    risk = verdict.get("risk_level", "low")
+    return cats, risk
 
 
 async def _classify_resources(resources: list[dict]) -> None:
     """Attach (categories, risk_level, source) to each resource in place.
 
-    Claude is the primary classifier; the deterministic heuristic is used only
-    as a fallback for resources Claude did not (or could not) classify.
+    The dlp-classifier service is the primary classifier; the deterministic
+    heuristic is used only as a fallback for resources the service could not
+    classify (e.g. transient outage).
     """
+    import asyncio
+
     from backend.services.cross_cloud_dlp import _classify_heuristic
 
     to_classify = resources[:_MAX_CLASSIFY]
-    claude_used = False
+    service_used = False
+    # Bounded concurrency keeps a large inventory fast without hammering the
+    # service (it is one HTTP call per resource).
+    sem = asyncio.Semaphore(8)
 
-    for start in range(0, len(to_classify), _BATCH_SIZE):
-        batch = to_classify[start:start + _BATCH_SIZE]
-        verdicts = await _claude_classify_batch(batch)
-        if verdicts is not None:
-            claude_used = True
-            for i, r in enumerate(batch):
-                if i in verdicts:
-                    cats, risk = verdicts[i]
-                    r["_dlp_categories"] = cats
-                    r["_dlp_risk_level"] = risk
-                    r["_dlp_source"] = "claude"
+    async def _one(r: dict) -> None:
+        nonlocal service_used
+        async with sem:
+            verdict = await _service_classify_resource(r)
+        if verdict is not None:
+            cats, risk = verdict
+            r["_dlp_categories"] = cats
+            r["_dlp_risk_level"] = risk
+            r["_dlp_source"] = "dlp-classifier"
+            service_used = True
 
-    # Heuristic fallback for anything Claude did not classify (or all, if Claude
-    # is unavailable) so no resource is ever left uncategorised.
+    await asyncio.gather(*(_one(r) for r in to_classify))
+
+    # Heuristic fallback for anything the service did not classify (or all, if
+    # the service is unavailable) so no resource is ever left uncategorised.
     for r in resources:
         if r.get("_dlp_categories"):
             continue
@@ -249,7 +233,7 @@ async def _classify_resources(resources: list[dict]) -> None:
 
     logger.info(
         f"azure_indexer: classified {len(resources)} resources "
-        f"(claude={'yes' if claude_used else 'no'})"
+        f"(service={'yes' if service_used else 'no'})"
     )
 
 
