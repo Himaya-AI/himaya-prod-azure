@@ -164,18 +164,42 @@ def map_verdict(resp: dict) -> dict:
         categories.add(_CAT_MAP.get(key, str(c).lower().strip()))
         patterns.add(str(c))
 
+    # Per-finding escalate flag from the detector service (set when a match
+    # is validated/high-confidence, e.g. a Luhn-passing card number).
+    detector_escalate = any(bool(det.get("escalate")) for det in findings)
+
     # ── Derive risk_level ──────────────────────────────────────────────
+    # Adnan 2026-08-12: the old logic escalated to `high` on the mere
+    # PRESENCE of any regex entity_type. Weak detectors (US_DRIVER_LICENSE,
+    # PHONE_NUMBER, PERSON, generic national-ID regexes) fire on short
+    # numeric strings, so a single low-confidence match combined with an
+    # inconclusive LLM verdict produced a flood of false-positive HIGH
+    # alerts. We now require corroboration: the LLM must affirm sensitivity,
+    # OR the signal must be a strong structured identifier, OR the detector
+    # explicitly escalated. An ambiguous signal with an inconclusive LLM is
+    # flagged for review (medium) or dropped (low) — never HIGH on its own.
+    llm_sensitive = classification not in ("NOT_SENSITIVE", "UNKNOWN", "")
+    strong_categories = categories & {
+        "pii_ssn", "pii_credit_card", "phi", "financial_data",
+        "financial_iban", "financial_bank_account",
+    }
     if classification == "NOT_SENSITIVE":
         risk = "low"
+    elif has_credential or (entity_types & _CRITICAL_ENTITIES) \
+            or "credential_secret" in categories or "pci" in categories:
+        risk = "critical"
+    elif llm_sensitive and (categories or entity_types):
+        # LLM affirmatively classified as sensitive with corroborating signal.
+        risk = "high"
+    elif strong_categories or detector_escalate:
+        # Strong structured identifiers, or the detector explicitly escalated.
+        risk = "high"
+    elif categories or entity_types:
+        # Weak/ambiguous signal with an inconclusive LLM verdict — surface for
+        # manual review at most, but do not cry "high".
+        risk = "medium" if confidence >= 0.6 else "low"
     else:
-        if has_credential or (entity_types & _CRITICAL_ENTITIES) \
-                or "credential_secret" in categories or "pci" in categories:
-            risk = "critical"
-        elif categories & {"pii", "phi", "financial_data",
-                           "pii_ssn", "pii_credit_card"} or entity_types:
-            risk = "high"
-        else:
-            risk = "medium" if confidence >= 0.5 else "low"
+        risk = "medium" if confidence >= 0.5 else "low"
 
     score = _RISK_SCORE.get(risk, 10)
     if entity_types & {"CREDIT_CARD", "US_SSN", "SSN"} or has_credential:
