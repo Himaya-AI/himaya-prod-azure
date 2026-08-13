@@ -33,6 +33,33 @@ def is_configured() -> bool:
     return bool(REPUTATION_SERVICE_URL)
 
 
+# ─────────────────────────────────────────────
+# Shared HTTP client — singleton, lazy-built
+# ─────────────────────────────────────────────
+# A fresh httpx.AsyncClient per lookup_reputation() call (the previous
+# behavior) pays a full TCP + TLS handshake on every email. The classifier
+# client (models.content_classifier.remote_classifier) is already long-lived
+# for the life of the process; this mirrors that pattern so every email reuses
+# the same connection pool instead of opening a new one.
+
+_client: httpx.AsyncClient | None = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=REPUTATION_SERVICE_TIMEOUT_SECONDS)
+    return _client
+
+
+async def aclose_client() -> None:
+    """Close the shared client. Call on app shutdown."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
+
 def extract_urls(email_data: dict) -> list[str]:
     body = (email_data.get("body", "") or "") + " " + (email_data.get("html_body", "") or "")
     return list(dict.fromkeys(_URL_RE.findall(body)))[:MAX_URLS]
@@ -113,10 +140,10 @@ async def lookup_reputation(entities: list[dict[str, Any]]) -> list[dict[str, An
 
     url = f"{REPUTATION_SERVICE_URL}/api/v1/reputation/lookup"
     try:
-        async with httpx.AsyncClient(timeout=REPUTATION_SERVICE_TIMEOUT_SECONDS) as client:
-            response = await client.post(url, json={"entities": entities})
-            response.raise_for_status()
-            return response.json().get("results", [])
+        client = _get_client()
+        response = await client.post(url, json={"entities": entities})
+        response.raise_for_status()
+        return response.json().get("results", [])
     except httpx.HTTPError as exc:
         logger.warning("Reputation service lookup failed: %s", exc)
         return []
@@ -136,6 +163,7 @@ def map_sender_result(
     sender_result = next((r for r in results if r.get("type") == "sender"), None)
     if sender_result is not None:
         email_verify = sender_result.get("email_verify") or sender_result.get("email-verify")
+        email_verify = _normalize_email_verify_context(email_verify)
         return {
             "reputation_score": int(sender_result.get("score", 0)),
             "indicators": list(sender_result.get("indicators") or []),
@@ -336,3 +364,23 @@ def _fallback_sender_reputation(auth_results: dict) -> dict[str, Any]:
         "dmarc_pass": dmarc == "pass",
         "email_verify": None,
     }
+
+
+def _normalize_email_verify_context(email_verify: Any) -> dict[str, Any] | None:
+    if not isinstance(email_verify, dict):
+        return None
+
+    normalized = dict(email_verify)
+    legacy_to_new = {
+        "a_records_domain": "a_record_source_domain",
+        "mx_records_domain": "mx_record_source_domain",
+        "txt_records_domain": "txt_record_source_domain",
+        "spf_records_domain": "spf_record_source_domain",
+        "dmarc_records_domain": "dmarc_record_source_domain",
+    }
+    for legacy_key, new_key in legacy_to_new.items():
+        if new_key not in normalized and legacy_key in normalized:
+            normalized[new_key] = normalized[legacy_key]
+        normalized.pop(legacy_key, None)
+
+    return normalized

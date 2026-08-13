@@ -2139,6 +2139,11 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    try:
+        from backend.services.reputation_client import aclose_client as _aclose_reputation_client
+        await _aclose_reputation_client()
+    except Exception as e:
+        logger.warning(f"Reputation client shutdown failed (non-fatal): {e}")
     await engine.dispose()
     logger.info("Himaya API shutdown complete")
 

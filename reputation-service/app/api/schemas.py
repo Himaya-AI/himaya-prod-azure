@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class EntityType(str, Enum):
@@ -125,10 +125,31 @@ class EmailVerifyContext(BaseModel):
     has_txt_records: bool = False
     has_spf_records: bool = False
     spf_qualifier: str | None = None
-    spf_strict: bool = False
     dmarc_configured: bool = False
     mx_records: list[str] = Field(default_factory=list)
     txt_records: list[str] = Field(default_factory=list)
+    a_record_source_domain: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("a_record_source_domain", "a_records_domain"),
+    )
+    mx_record_source_domain: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("mx_record_source_domain", "mx_records_domain"),
+    )
+    txt_record_source_domain: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("txt_record_source_domain", "txt_records_domain"),
+    )
+    spf_record_source_domain: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("spf_record_source_domain", "spf_records_domain"),
+    )
+    dmarc_record_source_domain: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("dmarc_record_source_domain", "dmarc_records_domain"),
+    )
+    root_domain_age_days: int | None = Field(default=None, ge=0)
+    domain_flags: dict[str, Any] = Field(default_factory=dict)
     indicators: list[str] = Field(default_factory=list)
     notes: list[str] = Field(default_factory=list)
 
