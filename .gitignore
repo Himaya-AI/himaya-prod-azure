@@ -4,3 +4,10 @@ __pycache__/
 *.pkl
 *.pt
 .DS_Store
+.venv/
+dlp_e2e_compose.log
+dlp_e2e_pytest.log
+git_numstat.txt
+git_stats_out.txt
+pytest_gateway.txt
+pytest_out.txt

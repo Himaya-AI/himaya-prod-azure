@@ -15,15 +15,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.database import get_db
 from backend.dlp.api.deps import require_dlp_admin, require_dlp_enterprise
 from backend.dlp.api.message_views import (
+    DELIVERY_EVENT_TYPE,
     PREVIEW_MAX_MIME_BYTES,
     PREVIEW_MAX_TEXT_CHARS,
     REVIEWABLE_STATES,
     is_reviewable,
+    sanitize_delivery_attempts,
     sanitize_findings,
     sanitize_limitations,
     sanitize_preview_text,
 )
 from backend.dlp.api.schemas import (
+    DlpDeliveryAttempt,
     DlpExtractionLimitation,
     DlpFindingSummary,
     DlpMessageDetail,
@@ -48,6 +51,7 @@ from backend.dlp.persistence.models import (
     DlpClassificationResult,
     DlpDecision,
     DlpMessage,
+    DlpMessageEvent,
     DlpMessagePart,
     DlpReviewAction,
 )
@@ -151,6 +155,18 @@ async def get_message(
         .order_by(DlpReviewAction.created_at.desc())
     )
     history = list(history_result.scalars().all())
+    delivery_result = await session.execute(
+        select(DlpMessageEvent)
+        .where(
+            DlpMessageEvent.message_id == message.id,
+            DlpMessageEvent.event_type == DELIVERY_EVENT_TYPE,
+        )
+        .order_by(
+            DlpMessageEvent.occurred_at.asc(),
+            DlpMessageEvent.created_at.asc(),
+        )
+    )
+    delivery_events = list(delivery_result.scalars().all())
 
     findings = sanitize_findings(
         list(decision.finding_references)
@@ -220,6 +236,10 @@ async def get_message(
             )
             for item in history
             if item.action in {"release", "stop"}
+        ],
+        deliveries=[
+            DlpDeliveryAttempt.model_validate(item)
+            for item in sanitize_delivery_attempts(delivery_events)
         ],
     )
 

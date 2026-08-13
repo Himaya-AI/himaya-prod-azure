@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
-from backend.dlp.persistence.models import DlpDecision, DlpMessage
+from backend.dlp.persistence.models import (
+    DlpDecision,
+    DlpMessage,
+    DlpMessageEvent,
+)
 
 REVIEWABLE_STATES = frozenset({"decided", "held"})
 PREVIEW_MAX_MIME_BYTES = 2 * 1024 * 1024
 PREVIEW_MAX_TEXT_CHARS = 4000
+DELIVERY_EVENT_TYPE = "dlp.message.delivery.v1"
+DELIVERY_MAX_TEXT_CHARS = 500
+DELIVERY_MAX_RECIPIENTS = 50
 
 
 def is_reviewable(
@@ -74,3 +82,96 @@ def sanitize_limitations(
             }
         )
     return result
+
+
+def _bounded_text(value: Any, max_chars: int) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    return text[:max_chars]
+
+
+def _bounded_recipients(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    recipients: list[str] = []
+    for item in value[:DELIVERY_MAX_RECIPIENTS]:
+        text = str(item).strip()
+        if text:
+            recipients.append(text[:320])
+    return recipients
+
+
+def _payload_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _payload_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def sanitize_delivery_attempts(
+    events: list[DlpMessageEvent],
+) -> list[dict[str, Any]]:
+    """Project stored delivery events into safe per-attempt records.
+
+    Never exposes certificate thumbprints, command linkage, or any
+    unbounded payload text.
+    """
+    attempts: list[dict[str, Any]] = []
+    for event in events:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        attempts.append(
+            {
+                "outcome": (
+                    _bounded_text(payload.get("outcome"), 32)
+                    or "uncertain"
+                ),
+                "resulting_state": (
+                    _bounded_text(payload.get("resulting_state"), 64)
+                    or "unknown"
+                ),
+                "attempt_number": max(
+                    _payload_int(payload.get("attempt_number")) or 0, 0
+                ),
+                "smtp_stage": _bounded_text(
+                    payload.get("smtp_stage"), 64
+                ),
+                "smtp_code": _payload_int(payload.get("smtp_code")),
+                "smtp_message": _bounded_text(
+                    payload.get("smtp_message"), DELIVERY_MAX_TEXT_CHARS
+                ),
+                "detail": _bounded_text(
+                    payload.get("detail"), DELIVERY_MAX_TEXT_CHARS
+                ),
+                "remote_host": _bounded_text(
+                    payload.get("remote_host"), 255
+                ),
+                "accepted_recipients": _bounded_recipients(
+                    payload.get("accepted_recipients")
+                ),
+                "refused_recipients": _bounded_recipients(
+                    payload.get("refused_recipients")
+                ),
+                "attempt_started_at": _payload_datetime(
+                    payload.get("attempt_started_at")
+                ),
+                "attempt_finished_at": _payload_datetime(
+                    payload.get("attempt_finished_at")
+                ),
+                "occurred_at": event.occurred_at,
+            }
+        )
+    return attempts

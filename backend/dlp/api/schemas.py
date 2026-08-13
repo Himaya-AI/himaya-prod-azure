@@ -118,6 +118,24 @@ class DlpReviewHistoryItem(BaseModel):
     created_at: datetime
 
 
+class DlpDeliveryAttempt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: str
+    resulting_state: str
+    attempt_number: int
+    smtp_stage: str | None = None
+    smtp_code: int | None = None
+    smtp_message: str | None = None
+    detail: str | None = None
+    remote_host: str | None = None
+    accepted_recipients: list[str] = Field(default_factory=list)
+    refused_recipients: list[str] = Field(default_factory=list)
+    attempt_started_at: datetime | None = None
+    attempt_finished_at: datetime | None = None
+    occurred_at: datetime
+
+
 class DlpMessageDetail(DlpMessageSummary):
     model_config = ConfigDict(extra="forbid")
 
@@ -134,6 +152,7 @@ class DlpMessageDetail(DlpMessageSummary):
     review_history: list[DlpReviewHistoryItem] = Field(
         default_factory=list
     )
+    deliveries: list[DlpDeliveryAttempt] = Field(default_factory=list)
 
 
 class ReviewActionRequest(BaseModel):

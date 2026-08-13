@@ -113,6 +113,22 @@ export interface DlpReviewHistoryItem {
   created_at: string
 }
 
+export interface DlpDeliveryAttempt {
+  outcome: string
+  resulting_state: string
+  attempt_number: number
+  smtp_stage: string | null
+  smtp_code: number | null
+  smtp_message: string | null
+  detail: string | null
+  remote_host: string | null
+  accepted_recipients: string[]
+  refused_recipients: string[]
+  attempt_started_at: string | null
+  attempt_finished_at: string | null
+  occurred_at: string
+}
+
 export interface DlpMessageDetail extends DlpMessageSummary {
   policy_version: string | null
   matched_rule_ids: string[]
@@ -123,6 +139,7 @@ export interface DlpMessageDetail extends DlpMessageSummary {
   sanitized_preview: string | null
   preview_available: boolean
   review_history: DlpReviewHistoryItem[]
+  deliveries: DlpDeliveryAttempt[]
 }
 
 export interface DlpReviewActionRequest {

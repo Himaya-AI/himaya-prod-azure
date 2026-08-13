@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import { AxiosError } from 'axios'
 import {
   AlertTriangle,
@@ -45,16 +45,56 @@ const FILTERS = [
   { value: '', label: 'All messages' },
   { value: 'reviewable', label: 'Held / reviewable' },
   { value: 'received', label: 'Received' },
+  { value: 'classified', label: 'Classified' },
   { value: 'decided', label: 'Decided' },
-  { value: 'held', label: 'Held' },
   { value: 'release_requested', label: 'Release requested' },
   { value: 'stop_requested', label: 'Stop requested' },
+  { value: 'retry_scheduled', label: 'Retry scheduled' },
+  { value: 'delivery_retry_exhausted', label: 'Retry exhausted' },
+  { value: 'provider_accepted', label: 'Provider accepted' },
+  { value: 'partially_accepted', label: 'Partially accepted' },
+  { value: 'outcome_uncertain', label: 'Outcome uncertain' },
+  { value: 'failed', label: 'Failed' },
 ]
 
 function actionVariant(action: string | null) {
   if (action === 'stop') return 'danger' as const
   if (action === 'hold') return 'warning' as const
   if (action === 'allow') return 'success' as const
+  return 'neutral' as const
+}
+
+function stateVariant(state: string) {
+  if (state === 'provider_accepted') return 'success' as const
+  if (
+    state === 'retry_scheduled' ||
+    state === 'partially_accepted' ||
+    state === 'outcome_uncertain' ||
+    state === 'held'
+  ) {
+    return 'warning' as const
+  }
+  if (
+    state === 'failed' ||
+    state === 'delivery_retry_exhausted' ||
+    state === 'stop_requested'
+  ) {
+    return 'danger' as const
+  }
+  if (state === 'classified' || state === 'decided') return 'info' as const
+  return 'neutral' as const
+}
+
+function outcomeVariant(outcome: string) {
+  if (outcome === 'accepted') return 'success' as const
+  if (outcome === 'failed') return 'danger' as const
+  if (
+    outcome === 'deferred' ||
+    outcome === 'partial' ||
+    outcome === 'uncertain'
+  ) {
+    return 'warning' as const
+  }
   return 'neutral' as const
 }
 
@@ -281,6 +321,73 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
         </div>
       )}
 
+      <div>
+        <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">
+          Delivery attempts
+        </p>
+        {detail.deliveries.length === 0 ? (
+          <p className="text-[11px] text-[#52525b]">
+            No delivery attempts recorded yet.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {detail.deliveries.map((attempt, index) => (
+              <div
+                key={`${attempt.attempt_number}-${attempt.occurred_at}-${index}`}
+                className="rounded-lg border border-white/[0.06] px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={outcomeVariant(attempt.outcome)}>
+                    {attempt.outcome.toUpperCase()}
+                  </Badge>
+                  <span className="text-xs text-[#a1a1aa]">
+                    Attempt {attempt.attempt_number}
+                  </span>
+                  {attempt.smtp_stage && (
+                    <span className="text-[11px] text-[#71717a]">
+                      stage: {attempt.smtp_stage.replaceAll('_', ' ')}
+                    </span>
+                  )}
+                  {attempt.smtp_code != null && (
+                    <span className="text-[11px] text-[#71717a]">
+                      SMTP {attempt.smtp_code}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[11px] text-[#71717a]">
+                    {new Date(attempt.occurred_at).toLocaleString()}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-[#71717a]">
+                  <span>
+                    Resulting state: {attempt.resulting_state.replaceAll('_', ' ')}
+                  </span>
+                  {attempt.remote_host && <span>via {attempt.remote_host}</span>}
+                  <span>
+                    {attempt.accepted_recipients.length} accepted ·{' '}
+                    {attempt.refused_recipients.length} refused
+                  </span>
+                </div>
+                {attempt.refused_recipients.length > 0 && (
+                  <p className="mt-1 break-all text-[11px] text-red-300/80">
+                    Refused: {attempt.refused_recipients.join(', ')}
+                  </p>
+                )}
+                {attempt.accepted_recipients.length > 0 && (
+                  <p className="mt-1 break-all text-[11px] text-[#71717a]">
+                    Accepted: {attempt.accepted_recipients.join(', ')}
+                  </p>
+                )}
+                {(attempt.detail || attempt.smtp_message) && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-amber-200/70">
+                    {attempt.detail ?? attempt.smtp_message}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {detail.review_history.length > 0 && (
         <div>
           <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Review history</p>
@@ -319,10 +426,28 @@ export default function DlpMessagesTab({ canManage }: Props) {
   const [details, setDetails] = useState<Record<string, DlpMessageDetail>>({})
   const [detailLoading, setDetailLoading] = useState<string | null>(null)
   const [review, setReview] = useState<PendingReview | null>(null)
+  const pollTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const expandedRef = useRef<string | null>(null)
 
-  const load = useCallback(async (append = false, cursor: string | null = null) => {
+  useEffect(() => {
+    expandedRef.current = expanded
+  }, [expanded])
+
+  useEffect(() => {
+    const timers = pollTimers.current
+    return () => {
+      timers.forEach(clearTimeout)
+      timers.length = 0
+    }
+  }, [filter])
+
+  const load = useCallback(async (
+    append = false,
+    cursor: string | null = null,
+    background = false,
+  ) => {
     if (append) setLoadingMore(true)
-    else setLoading(true)
+    else if (!background) setLoading(true)
     setError(null)
     try {
       const response = await listDlpMessages({
@@ -351,6 +476,30 @@ export default function DlpMessagesTab({ canManage }: Props) {
     setDetails({})
     void load(false, null)
   }, [filter, load])
+
+  const refreshDetail = useCallback(async (messageId: string) => {
+    try {
+      const detail = await getDlpMessage(messageId)
+      setDetails((current) => ({ ...current, [messageId]: detail }))
+    } catch {
+      // Keep the last known detail on transient refresh failures.
+    }
+  }, [])
+
+  const scheduleFollowUpRefresh = useCallback((messageId: string) => {
+    pollTimers.current.forEach(clearTimeout)
+    pollTimers.current.length = 0
+    for (const delay of [3000, 8000, 15000]) {
+      pollTimers.current.push(
+        setTimeout(() => {
+          void load(false, null, true)
+          if (expandedRef.current === messageId) {
+            void refreshDetail(messageId)
+          }
+        }, delay),
+      )
+    }
+  }, [load, refreshDetail])
 
   async function toggleDetail(messageId: string) {
     if (expanded === messageId) {
@@ -458,7 +607,9 @@ export default function DlpMessagesTab({ canManage }: Props) {
                       </p>
                     </Td>
                     <Td className="align-top">
-                      <Badge variant="neutral">{message.state.replaceAll('_', ' ')}</Badge>
+                      <Badge variant={stateVariant(message.state)}>
+                        {message.state.replaceAll('_', ' ')}
+                      </Badge>
                     </Td>
                     <Td className="align-top">
                       <div className="flex items-center gap-2">
@@ -549,8 +700,11 @@ export default function DlpMessagesTab({ canManage }: Props) {
           review={review}
           onClose={() => setReview(null)}
           onComplete={async () => {
+            const expandedId = expandedRef.current
             setDetails({})
             await load(false, null)
+            if (expandedId) await refreshDetail(expandedId)
+            scheduleFollowUpRefresh(review.message.message_id)
           }}
         />
       )}

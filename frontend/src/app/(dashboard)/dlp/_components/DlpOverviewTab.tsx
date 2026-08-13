@@ -71,6 +71,38 @@ export default function DlpOverviewTab({
       `${status.failed_outbox_commands} gateway command(s) failed.`,
   ].filter((item): item is string => Boolean(item))
 
+  const deliveryAlerts = [
+    {
+      state: 'delivery_retry_exhausted',
+      label: 'Delivery retries exhausted',
+      detail: 'These messages will not be retried automatically and need a manual decision.',
+      tone: 'red' as const,
+    },
+    {
+      state: 'failed',
+      label: 'Delivery failed',
+      detail: 'The gateway reported a permanent delivery failure.',
+      tone: 'red' as const,
+    },
+    {
+      state: 'outcome_uncertain',
+      label: 'Uncertain delivery outcomes',
+      detail: 'The final provider response was not captured; verify delivery out of band.',
+      tone: 'amber' as const,
+    },
+    {
+      state: 'partially_accepted',
+      label: 'Partially accepted deliveries',
+      detail: 'Some recipients refused the message while others accepted it.',
+      tone: 'amber' as const,
+    },
+  ]
+    .map((alert) => ({
+      ...alert,
+      count: status.message_counts[alert.state] ?? 0,
+    }))
+    .filter((alert) => alert.count > 0)
+
   return (
     <div className="space-y-5">
       {warnings.length > 0 && (
@@ -84,6 +116,45 @@ export default function DlpOverviewTab({
               </ul>
             </div>
           </div>
+        </div>
+      )}
+
+      {deliveryAlerts.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {deliveryAlerts.map((alert) => (
+            <div
+              key={alert.state}
+              className={`rounded-xl border p-4 ${
+                alert.tone === 'red'
+                  ? 'border-red-500/20 bg-red-500/[0.06]'
+                  : 'border-amber-500/20 bg-amber-500/[0.06]'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle
+                    size={14}
+                    className={alert.tone === 'red' ? 'text-red-400' : 'text-amber-400'}
+                  />
+                  <p className={`text-sm font-medium ${
+                    alert.tone === 'red' ? 'text-red-300' : 'text-amber-300'
+                  }`}>
+                    {alert.label}
+                  </p>
+                </div>
+                <span className={`text-lg font-semibold ${
+                  alert.tone === 'red' ? 'text-red-300' : 'text-amber-300'
+                }`}>
+                  {alert.count}
+                </span>
+              </div>
+              <p className={`mt-1 text-xs ${
+                alert.tone === 'red' ? 'text-red-200/70' : 'text-amber-200/70'
+              }`}>
+                {alert.detail}
+              </p>
+            </div>
+          ))}
         </div>
       )}
 

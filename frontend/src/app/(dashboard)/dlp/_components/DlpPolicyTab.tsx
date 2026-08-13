@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -20,6 +21,11 @@ import {
   publishDlpPolicy,
   saveDlpPolicyDraft,
 } from '@/lib/dlp/api'
+import {
+  DLP_DETECTORS,
+  DLP_ENTITY_TYPES,
+  DLP_LLM_CLASSIFICATIONS,
+} from '@/lib/dlp/policy-options'
 import type {
   PolicyAction,
   PolicyDocument,
@@ -98,6 +104,82 @@ function PolicyField({
         className="w-full rounded-lg border border-white/[0.08] bg-[#0d0d12] px-3 py-2 text-xs text-white outline-none focus:border-[#3b6ef6]/60 disabled:opacity-60"
       />
     </label>
+  )
+}
+
+interface ChipOption {
+  value: string
+  label: string
+}
+
+function PolicyChipSelect({
+  label,
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string
+  options: readonly ChipOption[]
+  value: string[]
+  onChange: (value: string[]) => void
+  disabled: boolean
+}) {
+  const known = new Set(options.map((option) => option.value))
+  const chips: ChipOption[] = [
+    ...options,
+    ...value
+      .filter((item) => !known.has(item))
+      .map((item) => ({ value: item, label: item })),
+  ]
+
+  function toggle(option: string) {
+    onChange(
+      value.includes(option)
+        ? value.filter((item) => item !== option)
+        : [...value, option],
+    )
+  }
+
+  return (
+    <div>
+      <span className="mb-1.5 block text-[11px] font-medium text-[#71717a]">
+        {label}
+      </span>
+      <div role="group" aria-label={label} className="flex flex-wrap gap-1.5">
+        {chips.map((option) => {
+          const selected = value.includes(option.value)
+          return (
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={selected}
+              disabled={disabled}
+              onClick={() => toggle(option.value)}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                selected
+                  ? 'border-[#3b6ef6]/50 bg-[#3b6ef6]/15 text-[#93b4fd]'
+                  : 'border-white/[0.08] bg-white/[0.02] text-[#71717a] hover:border-white/[0.16] hover:text-[#a1a1aa]'
+              }`}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ruleHasNoConditions(rule: PolicyRule): boolean {
+  const conditions = rule.conditions
+  return (
+    conditions.entity_types.length === 0 &&
+    conditions.detectors.length === 0 &&
+    conditions.llm_classifications.length === 0 &&
+    conditions.llm_categories.length === 0 &&
+    conditions.recipient_domains.length === 0 &&
+    !conditions.external_recipients_only
   )
 }
 
@@ -247,26 +329,41 @@ function RuleEditor({
             </label>
           </div>
 
+          {ruleHasNoConditions(rule) && (
+            <div className="flex gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2">
+              <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-400" />
+              <p className="text-xs text-amber-200/80">
+                This rule has no conditions and will match every message.
+              </p>
+            </div>
+          )}
+
           <div className="grid gap-3 md:grid-cols-2">
-            <PolicyField
-              label="Detectors (comma separated)"
+            <PolicyChipSelect
+              label="Detectors"
+              options={DLP_DETECTORS}
               value={rule.conditions.detectors}
               onChange={(detectors) => patchConditions({ detectors })}
-              placeholder="credential, pii, lexicon"
               disabled={disabled}
             />
-            <PolicyField
+            <PolicyChipSelect
               label="Entity types"
+              options={DLP_ENTITY_TYPES.map((entityType) => ({
+                value: entityType,
+                label: entityType.replaceAll('_', ' '),
+              }))}
               value={rule.conditions.entity_types}
               onChange={(entity_types) => patchConditions({ entity_types })}
-              placeholder="CREDIT_CARD, US_SSN"
               disabled={disabled}
             />
-            <PolicyField
+            <PolicyChipSelect
               label="LLM classifications"
+              options={DLP_LLM_CLASSIFICATIONS.map((classification) => ({
+                value: classification,
+                label: classification,
+              }))}
               value={rule.conditions.llm_classifications}
               onChange={(llm_classifications) => patchConditions({ llm_classifications })}
-              placeholder="SENSITIVE, UNCERTAIN"
               disabled={disabled}
             />
             <PolicyField
