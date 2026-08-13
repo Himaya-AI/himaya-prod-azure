@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import logging
+from dataclasses import dataclass, field
 from typing import Any
 
 from app.api.schemas import EntityType, Verdict
 from app.config.settings import Settings
+from app.core.domain_checks import run_domain_checks, summarize_domain_checks
 from app.core.tld import TldService
+from app.core.whois_gateway import WhoisGateway, get_whois_gateway
 from app.sources.base import AdapterStatus, BaseAdapter, SourceConfig, SourceSignal, TimedLookup
 
 try:
@@ -31,12 +33,18 @@ class DnsVerificationResult:
     has_txt_records: bool
     has_spf_records: bool
     spf_qualifier: str | None
-    spf_strict: bool
     dmarc_configured: bool
     mx_records: list[str] = field(default_factory=list)
     txt_records: list[str] = field(default_factory=list)
     indicators: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    a_record_source_domain: str | None = None
+    mx_record_source_domain: str | None = None
+    txt_record_source_domain: str | None = None
+    spf_record_source_domain: str | None = None
+    dmarc_record_source_domain: str | None = None
+    root_domain_age_days: int | None = None
+    domain_flags: dict[str, Any] = field(default_factory=dict)
 
 
 class DnsAdapter(BaseAdapter):
@@ -44,6 +52,7 @@ class DnsAdapter(BaseAdapter):
         super().__init__(config)
         self.settings = settings
         self._tld_service = TldService()
+        self._whois_gateway: WhoisGateway = get_whois_gateway(settings)
 
     @property
     def is_configured(self) -> bool:
@@ -125,17 +134,53 @@ class DnsAdapter(BaseAdapter):
 
                 tld_result = self._tld_service.analyze(value)
                 domain = tld_result.domain or value.strip().lower().rstrip(".") or None
+                fallback_domain = None
+                if domain and tld_result.root_domain and tld_result.root_domain != domain:
+                    fallback_domain = tld_result.root_domain
 
                 has_a_records = await self._has_a_records(resolver, domain) if domain else False
+                a_record_source_domain = domain if has_a_records else None
+                if not has_a_records and fallback_domain:
+                    has_a_records = await self._has_a_records(resolver, fallback_domain)
+                    if has_a_records:
+                        a_record_source_domain = fallback_domain
+
                 mx_records = await self._mx_records(resolver, domain) if domain else []
+                mx_record_source_domain = domain if mx_records else None
+                if not mx_records and fallback_domain:
+                    mx_records = await self._mx_records(resolver, fallback_domain)
+                    if mx_records:
+                        mx_record_source_domain = fallback_domain
+
                 txt_records = await self._txt_records(resolver, domain) if domain else []
+                txt_record_source_domain = domain if txt_records else None
+
                 spf_record = _first_spf_record(txt_records)
+                spf_record_source_domain = txt_record_source_domain if spf_record else None
+                if not spf_record and fallback_domain:
+                    fallback_txt_records = await self._txt_records(resolver, fallback_domain)
+                    if fallback_txt_records:
+                        if not txt_records:
+                            txt_records = fallback_txt_records
+                            txt_record_source_domain = fallback_domain
+                        spf_record = _first_spf_record(fallback_txt_records)
+                        if spf_record:
+                            spf_record_source_domain = fallback_domain
+
                 has_spf_records = spf_record is not None
-                spf_qualifier, spf_strict = _parse_spf(spf_record)
+                spf_qualifier = _parse_spf(spf_record)
                 dmarc_configured = await self._has_dmarc_record(resolver, domain) if domain else False
+                dmarc_record_source_domain = domain if dmarc_configured else None
+                if not dmarc_configured and fallback_domain:
+                    dmarc_configured = await self._has_dmarc_record(resolver, fallback_domain)
+                    if dmarc_configured:
+                        dmarc_record_source_domain = fallback_domain
 
                 indicators: list[str] = []
                 notes: list[str] = []
+                root_domain_age_days = await self._root_domain_age_days(tld_result.root_domain)
+                domain_checks = run_domain_checks(domain or value, tld_service=self._tld_service)
+                domain_flags = summarize_domain_checks(domain_checks)
 
                 if not has_a_records:
                     indicators.append("no_a_record")
@@ -148,8 +193,28 @@ class DnsAdapter(BaseAdapter):
 
                 if tld_result.root_domain:
                     notes.append(f"registrable_domain:{tld_result.root_domain}")
+                if root_domain_age_days is not None:
+                    notes.append(f"root_domain_age_days:{root_domain_age_days}")
+                if domain_flags.get("punycode_detected"):
+                    notes.append("domain_flag:punycode")
+                if domain_flags.get("homoglyph_detected"):
+                    notes.append("domain_flag:homoglyph")
+                if domain_flags.get("tranco_rank") is not None:
+                    notes.append(
+                        f"domain_flag:tranco_rank:{domain_flags['tranco_rank']}:{domain_flags.get('tranco_rank_source') or 'unknown'}"
+                    )
                 if tld_result.subdomain:
                     notes.append(f"subdomain:{tld_result.subdomain}")
+                if a_record_source_domain and a_record_source_domain != domain:
+                    notes.append(f"a_record_fallback:{a_record_source_domain}")
+                if mx_record_source_domain and mx_record_source_domain != domain:
+                    notes.append(f"mx_record_fallback:{mx_record_source_domain}")
+                if txt_record_source_domain and txt_record_source_domain != domain:
+                    notes.append(f"txt_record_fallback:{txt_record_source_domain}")
+                if spf_record_source_domain and spf_record_source_domain != domain:
+                    notes.append(f"spf_record_fallback:{spf_record_source_domain}")
+                if dmarc_record_source_domain and dmarc_record_source_domain != domain:
+                    notes.append(f"dmarc_record_fallback:{dmarc_record_source_domain}")
                 if mx_records:
                     notes.append(f"mx_count:{len(mx_records)}")
                 if spf_record:
@@ -168,12 +233,18 @@ class DnsAdapter(BaseAdapter):
                     has_txt_records=bool(txt_records),
                     has_spf_records=has_spf_records,
                     spf_qualifier=spf_qualifier,
-                    spf_strict=spf_strict,
                     dmarc_configured=dmarc_configured,
                     mx_records=mx_records,
                     txt_records=txt_records,
                     indicators=indicators,
                     notes=notes,
+                    a_record_source_domain=a_record_source_domain,
+                    mx_record_source_domain=mx_record_source_domain,
+                    txt_record_source_domain=txt_record_source_domain,
+                    spf_record_source_domain=spf_record_source_domain,
+                    dmarc_record_source_domain=dmarc_record_source_domain,
+                    root_domain_age_days=root_domain_age_days,
+                    domain_flags=domain_flags,
                 )
             except Exception as exc:
                 logger.debug("DNS inspect failed for %s: %s", value, exc)
@@ -190,7 +261,6 @@ class DnsAdapter(BaseAdapter):
                     has_txt_records=False,
                     has_spf_records=False,
                     spf_qualifier=None,
-                    spf_strict=False,
                     dmarc_configured=False,
                     indicators=["dns_lookup_error"],
                     notes=[f"dns_lookup_failed:{type(exc).__name__}"],
@@ -270,13 +340,24 @@ class DnsAdapter(BaseAdapter):
             "has_txt_records": verification.has_txt_records,
             "has_spf_records": verification.has_spf_records,
             "spf_qualifier": verification.spf_qualifier,
-            "spf_strict": verification.spf_strict,
             "dmarc_configured": verification.dmarc_configured,
             "mx_records": verification.mx_records,
             "txt_records": verification.txt_records,
             "indicators": verification.indicators,
             "notes": verification.notes,
+            "a_record_source_domain": verification.a_record_source_domain,
+            "mx_record_source_domain": verification.mx_record_source_domain,
+            "txt_record_source_domain": verification.txt_record_source_domain,
+            "spf_record_source_domain": verification.spf_record_source_domain,
+            "dmarc_record_source_domain": verification.dmarc_record_source_domain,
+            "root_domain_age_days": verification.root_domain_age_days,
+            "domain_flags": verification.domain_flags,
         }
+
+    async def _root_domain_age_days(self, root_domain: str | None) -> int | None:
+        if not root_domain:
+            return None
+        return await self._whois_gateway.age_days(root_domain)
 
 
 def _first_spf_record(txt_records: list[str]) -> str | None:
@@ -286,33 +367,29 @@ def _first_spf_record(txt_records: list[str]) -> str | None:
     return None
 
 
-def _parse_spf(record: str | None) -> tuple[str | None, bool]:
+def _parse_spf(record: str | None) -> str | None:
     if not record:
-        return None, False
+        return None
 
     parts = record.split()
     if not parts or parts[0].lower() != "v=spf1":
-        return None, False
+        return None
 
     qualifier = None
-    strict = False
     for part in parts[1:]:
         if part.endswith("all"):
             prefix = part[:-3]
             if prefix == "-":
                 qualifier = "fail"
-                strict = True
                 break
             if prefix == "~":
                 qualifier = "softfail"
-                strict = False
                 break
             if prefix == "?":
                 qualifier = "neutral"
-                strict = False
                 break
             if prefix == "+":
                 qualifier = "pass"
-                strict = False
                 break
-    return qualifier, strict
+    return qualifier
+
