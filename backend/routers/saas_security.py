@@ -48,6 +48,26 @@ _CATALOG_TTL = 300.0
 _TABLE_EXISTS_CACHE: dict[str, tuple[float, bool]] = {}
 _TABLE_COLS_CACHE: dict[str, tuple[float, set]] = {}
 
+
+async def _table_exists(db: "AsyncSession", tbl: str) -> bool:
+    """Process-wide cached information_schema existence check for optional
+    connector tables. Shared by the Data Inventory list + summary endpoints so
+    both agree on which provider branches to include (they previously drifted:
+    the list covered 10 providers while the summary only counted 3, so the
+    inventory tiles read 0 even when the table below them had rows)."""
+    cached = _TABLE_EXISTS_CACHE.get(tbl)
+    if cached and (_time.monotonic() - cached[0]) < _CATALOG_TTL:
+        return cached[1]
+    try:
+        found = (await db.execute(text(
+            "SELECT 1 FROM information_schema.tables "
+            "WHERE table_name = :t LIMIT 1"
+        ), {"t": tbl})).first() is not None
+    except Exception:
+        return False
+    _TABLE_EXISTS_CACHE[tbl] = (_time.monotonic(), found)
+    return found
+
 # ── Env vars ──────────────────────────────────────────────────────────────────
 
 SAAS_M365_CLIENT_ID = os.getenv("SAAS_M365_CLIENT_ID", "")
@@ -3637,66 +3657,129 @@ async def data_summary(
     except Exception as e:
         logger.warning(f"data_summary: SaaS query failed: {e}")
     
-    # AWS resources — exclude IAM (lives in User Risk).
-    try:
-        # AWS classification: encrypted → confidential, public → public, else → internal
-        aws_result = await db.execute(text("""
-            SELECT 
-                CASE 
-                    WHEN public_access = TRUE THEN 'public'
-                    WHEN encryption_enabled = TRUE THEN 'confidential'
-                    ELSE 'internal'
-                END as classification_label,
-                CASE WHEN public_access = TRUE THEN 'public' ELSE 'private' END as sharing_scope,
-                COUNT(*) as cnt
-            FROM aws_resources
-            WHERE org_id = :org_id
-              AND resource_type NOT IN ('iam_user', 'iam_role', 'iam_group', 'iam_policy')
-            GROUP BY 1, 2
-        """), {"org_id": org_id})
-        
-        aws_total = 0
-        for row in aws_result.mappings():
-            label = row["classification_label"]
-            scope = row["sharing_scope"]
+    # ── Cloud / connector resource tables ────────────────────────────────────
+    # Adnan 2026-08-13: the summary previously only counted SaaS + AWS +
+    # Databricks, while the /data (list) UNION covered ten providers. That
+    # drift meant the Data Inventory tiles (Total Items, Confidential,
+    # Externally Shared, Public) read 0 — or badly under-reported — even when
+    # the table below them showed GCP / Azure / Oracle / Salesforce / GitHub /
+    # Snowflake / SAP rows. Keep the two in lockstep by folding every branch in
+    # here with the SAME classification logic the list uses, gated on table
+    # existence so a tenant missing a connector never trips "relation does not
+    # exist" (which used to abort the whole summary and blank all the tiles).
+    _INV_LABEL = """
+        CASE
+            WHEN metadata->>'dlp_risk_level' IN ('public','internal','confidential','highly_confidential')
+                THEN metadata->>'dlp_risk_level'
+            WHEN metadata->>'dlp_risk_level' IN ('critical','high')
+                 AND (metadata->'dlp_categories')::jsonb
+                     ?| ARRAY['pii','phi','pci','credentials','secrets','customer_data','financial']
+                THEN 'highly_confidential'
+            WHEN metadata->>'dlp_risk_level' IN ('critical','high','medium') THEN 'confidential'
+            WHEN metadata->>'dlp_risk_level' = 'low' AND public_access = TRUE THEN 'public'
+            WHEN metadata->>'dlp_risk_level' = 'low' THEN 'internal'
+            WHEN public_access = TRUE THEN 'public'
+            WHEN encryption_enabled = TRUE THEN 'confidential'
+            ELSE 'internal'
+        END
+    """
+    _INV_SCOPE = "CASE WHEN public_access = TRUE THEN 'public' ELSE 'private' END"
+
+    _DBX_LABEL = """
+        CASE
+            WHEN metadata->>'dlp_risk_level' IN ('public','internal','confidential','highly_confidential')
+                THEN metadata->>'dlp_risk_level'
+            WHEN metadata->>'dlp_risk_level' IN ('critical','high')
+                 AND (metadata->'dlp_categories')::jsonb
+                     ?| ARRAY['pii','phi','pci','credentials','secrets','customer_data','financial']
+                THEN 'highly_confidential'
+            WHEN metadata->>'dlp_risk_level' IN ('critical','high','medium') THEN 'confidential'
+            WHEN metadata->>'dlp_risk_level' = 'low' THEN 'internal'
+            WHEN has_secrets = TRUE THEN 'confidential'
+            ELSE 'internal'
+        END
+    """
+
+    _SF_LABEL = """
+        CASE
+            WHEN metadata->>'dlp_risk_level' IN ('public','internal','confidential','highly_confidential')
+                THEN metadata->>'dlp_risk_level'
+            WHEN metadata->>'dlp_risk_level' IN ('critical','high')
+                 AND (metadata->'dlp_categories')::jsonb
+                     ?| ARRAY['pii','phi','pci','credentials','secrets','customer_data','financial']
+                THEN 'highly_confidential'
+            WHEN metadata->>'dlp_risk_level' IN ('critical','high','medium') THEN 'confidential'
+            WHEN metadata->>'dlp_risk_level' = 'low' AND guest_accessible = TRUE THEN 'public'
+            WHEN metadata->>'dlp_risk_level' = 'low' THEN 'internal'
+            WHEN guest_accessible = TRUE THEN 'public'
+            WHEN is_custom = TRUE THEN 'confidential'
+            ELSE 'internal'
+        END
+    """
+
+    # Findings tables (github / snowflake / sap): no public/encryption flags
+    # and metadata schemas differ, so classify from severity only — matches
+    # the list's severity fallback.
+    _FIND_LABEL = "CASE WHEN severity IN ('critical','high') THEN 'confidential' ELSE 'internal' END"
+
+    async def _fold_counts(
+        provider: str, table: str, label_sql: str, scope_sql: str,
+        extra_where: str = "",
+    ) -> None:
+        """Grouped label/scope count for one connector table, gated on
+        existence, folded into the running totals. Rolls back on failure so a
+        single bad table can't poison the rest of the summary."""
+        nonlocal total
+        if not await _table_exists(db, table):
+            return
+        where = "org_id = :org_id" + (f" AND {extra_where}" if extra_where else "")
+        try:
+            res = await db.execute(text(f"""
+                SELECT {label_sql} AS classification_label,
+                       {scope_sql} AS sharing_scope,
+                       COUNT(*) AS cnt
+                FROM {table}
+                WHERE {where}
+                GROUP BY 1, 2
+            """), {"org_id": org_id})
+        except Exception as e:
+            logger.debug(f"data_summary: {provider} query failed: {e}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            return
+        prov_total = 0
+        for row in res.mappings():
+            label = row["classification_label"] or "unknown"
+            scope = row["sharing_scope"] or "unknown"
             cnt = row["cnt"]
             by_label[label] = by_label.get(label, 0) + cnt
             by_scope[scope] = by_scope.get(scope, 0) + cnt
-            aws_total += cnt
-        
-        if aws_total > 0:
-            by_provider["aws"] = aws_total
-            total += aws_total
-    except Exception as e:
-        logger.debug(f"data_summary: AWS query failed (table may not exist): {e}")
-    
-    # Databricks resources
-    try:
-        databricks_result = await db.execute(text("""
-            SELECT 
-                CASE WHEN has_secrets = TRUE THEN 'confidential' ELSE 'internal' END as classification_label,
-                'org' as sharing_scope,
-                resource_type,
-                COUNT(*) as cnt
-            FROM databricks_resources
-            WHERE org_id = :org_id
-            GROUP BY 1, 2, 3
-        """), {"org_id": org_id})
-        
-        databricks_total = 0
-        for row in databricks_result.mappings():
-            label = row["classification_label"]
-            scope = row["sharing_scope"]
-            cnt = row["cnt"]
-            by_label[label] = by_label.get(label, 0) + cnt
-            by_scope[scope] = by_scope.get(scope, 0) + cnt
-            databricks_total += cnt
-        
-        if databricks_total > 0:
-            by_provider["databricks"] = databricks_total
-            total += databricks_total
-    except Exception as e:
-        logger.debug(f"data_summary: Databricks query failed (table may not exist): {e}")
+            prov_total += cnt
+        if prov_total > 0:
+            by_provider[provider] = by_provider.get(provider, 0) + prov_total
+            total += prov_total
+
+    # Inventory-style tables (metadata + public_access + encryption_enabled).
+    await _fold_counts(
+        "aws", "aws_resources", _INV_LABEL, _INV_SCOPE,
+        extra_where="resource_type NOT IN ('iam_user', 'iam_role', 'iam_group', 'iam_policy')",
+    )
+    await _fold_counts("gcp", "gcp_resources", _INV_LABEL, _INV_SCOPE)
+    await _fold_counts("azure", "azure_resources", _INV_LABEL, _INV_SCOPE)
+    await _fold_counts("oracle", "oracle_resources", _INV_LABEL, _INV_SCOPE)
+    # Databricks (metadata + has_secrets, always org-scoped).
+    await _fold_counts("databricks", "databricks_resources", _DBX_LABEL, "'org'")
+    # Salesforce (guest_accessible / is_custom).
+    await _fold_counts(
+        "salesforce", "salesforce_objects", _SF_LABEL,
+        "CASE WHEN guest_accessible = TRUE THEN 'public' ELSE 'org' END",
+    )
+    # Findings tables (severity-only classification, org-scoped).
+    await _fold_counts("github", "github_findings", _FIND_LABEL, "'org'")
+    await _fold_counts("snowflake", "snowflake_findings", _FIND_LABEL, "'org'")
+    await _fold_counts("sap", "sap_findings", _FIND_LABEL, "'org'")
 
     return {
         "total": total,

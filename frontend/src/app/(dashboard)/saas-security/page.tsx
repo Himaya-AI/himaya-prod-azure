@@ -7148,21 +7148,29 @@ export default function SaasSecurityPage() {
   }, [alertPage, filterSev, filterStatus, filterProvider])
 
   const loadData = useCallback(async () => {
-    try {
-      setDataLoading(true)
-      const params = new URLSearchParams({ page: String(dataPage), page_size: '20' })
-      if (dataFilterProvider) params.set('provider', dataFilterProvider)
-      if (dataFilterLabel) params.set('classification_label', dataFilterLabel)
-      if (dataFilterScope) params.set('sharing_scope', dataFilterScope)
-      const [r, s] = await Promise.all([
-        api.get(`/api/saas/data?${params}`),
-        api.get('/api/saas/data/summary'),
-      ])
-      setDataItems(r.data?.items ?? [])
-      setDataTotal(r.data?.total ?? 0)
-      setDataSummary(s.data)
-    } catch { /* ignore */ }
-    finally { setDataLoading(false) }
+    setDataLoading(true)
+    const params = new URLSearchParams({ page: String(dataPage), page_size: '20' })
+    if (dataFilterProvider) params.set('provider', dataFilterProvider)
+    if (dataFilterLabel) params.set('classification_label', dataFilterLabel)
+    if (dataFilterScope) params.set('sharing_scope', dataFilterScope)
+    // Settle the list and the summary INDEPENDENTLY. Previously a single
+    // Promise.all meant that if the heavy inventory UNION query was slow and
+    // tripped the 15s client timeout, BOTH the table AND the summary tiles got
+    // dropped — so the whole Data Inventory / DSPM Overview section rendered
+    // empty ("super slow, sometimes doesn't work"). Now the summary tiles can
+    // paint even if the row list is still loading or fails, and vice-versa.
+    const [listRes, summaryRes] = await Promise.allSettled([
+      api.get(`/api/saas/data?${params}`),
+      api.get('/api/saas/data/summary'),
+    ])
+    if (listRes.status === 'fulfilled') {
+      setDataItems(listRes.value.data?.items ?? [])
+      setDataTotal(listRes.value.data?.total ?? 0)
+    }
+    if (summaryRes.status === 'fulfilled') {
+      setDataSummary(summaryRes.value.data)
+    }
+    setDataLoading(false)
   }, [dataPage, dataFilterProvider, dataFilterLabel, dataFilterScope])
 
   const loadPosture = useCallback(async () => {
