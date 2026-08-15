@@ -3206,7 +3206,14 @@ async def list_data_items(
             "items": items,
         }
     except Exception as e:
-        logger.warning(f"list_data_items: UNION query failed, falling back to SaaS only: {e}")
+        # Log at ERROR with the SQL so the actual UNION failure (e.g. a schema
+        # drift in an optional connector table) is diagnosable in prod logs
+        # instead of silently degrading. This is what surfaces WHY cloud rows
+        # don't appear in Data Inventory.
+        logger.error(
+            "list_data_items: UNION query failed, falling back to SaaS only: %s\nunion_sql=%s",
+            e, union_sql,
+        )
         # A failed statement leaves the async session in an aborted
         # transaction; without a rollback the SaaS-only fallback below would
         # itself raise (PendingRollbackError) and the whole endpoint 500s.
@@ -3216,27 +3223,40 @@ async def list_data_items(
             await db.rollback()
         except Exception:
             pass
-        # Fallback to original SaaS-only query
-        q = select(SaasDataItem).where(SaasDataItem.org_id == current_user.org_id)
-        if provider and provider != 'aws':
-            q = q.where(SaasDataItem.provider == provider)
-        if classification_label:
-            q = q.where(SaasDataItem.classification_label == classification_label)
-        if sharing_scope:
-            q = q.where(SaasDataItem.sharing_scope == sharing_scope)
+        # Fallback to original SaaS-only query. This is itself wrapped so that
+        # a SECOND failure (aborted session that rollback couldn't clear, an
+        # ORM/schema mismatch, etc.) degrades to an empty-but-valid payload
+        # rather than a hard 500 — the Data Inventory tab should always render,
+        # even if empty. A 500 here is what produced the blank tab + console
+        # errors the user reported.
+        try:
+            q = select(SaasDataItem).where(SaasDataItem.org_id == current_user.org_id)
+            if provider and provider != 'aws':
+                q = q.where(SaasDataItem.provider == provider)
+            if classification_label:
+                q = q.where(SaasDataItem.classification_label == classification_label)
+            if sharing_scope:
+                q = q.where(SaasDataItem.sharing_scope == sharing_scope)
 
-        total_q = select(func.count()).select_from(q.subquery())
-        total = (await db.execute(total_q)).scalar() or 0
+            total_q = select(func.count()).select_from(q.subquery())
+            total = (await db.execute(total_q)).scalar() or 0
 
-        q = q.order_by(SaasDataItem.last_modified_at.desc().nullslast()).offset((page - 1) * page_size).limit(page_size)
-        rows = (await db.execute(q)).scalars().all()
+            q = q.order_by(SaasDataItem.last_modified_at.desc().nullslast()).offset((page - 1) * page_size).limit(page_size)
+            rows = (await db.execute(q)).scalars().all()
 
-        return {
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "items": [_data_item_to_dict(d) for d in rows],
-        }
+            return {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "items": [_data_item_to_dict(d) for d in rows],
+            }
+        except Exception as e2:
+            logger.error(f"list_data_items: SaaS-only fallback ALSO failed: {e2}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            return {"total": 0, "page": page, "page_size": page_size, "items": []}
 
 
 # ── AI-driven verbose resource risk analysis ─────────────────────────────────
