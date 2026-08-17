@@ -10595,23 +10595,37 @@ function GovernanceTab() {
     setLoading(true);
     setError(null);
     try {
-      const [policiesRes, signInsRes, gapsRes, mcRes] = await Promise.all([
+      // allSettled so a 403 on ANY single sub-request (e.g. blocked-signins
+      // needs AuditLog.Read.All, which many tenants haven't consented to)
+      // no longer blanks the entire Conditional Access tab — each panel
+      // renders whatever it successfully loaded.
+      const [policiesRes, signInsRes, gapsRes, mcRes] = await Promise.allSettled([
         api.get('/api/saas/conditional-access/policies'),
-        api.get('/api/saas/conditional-access/blocked-signins?limit=50'),
+        api.get('/api/saas/conditional-access/blocked-signins?page_size=50'),
         api.get('/api/saas/conditional-access/gaps'),
-        api.get('/api/saas/conditional-access/multi-cloud').catch(() => ({ data: { controls: [] } })),
+        api.get('/api/saas/conditional-access/multi-cloud'),
       ]);
-      setCaPolicies(policiesRes.data?.policies ?? []);
-      setBlockedSignIns(signInsRes.data?.blocked_signins ?? []);
-      setCaGaps(gapsRes.data?.gaps ?? []);
-      setMultiCloudControls(mcRes.data?.controls ?? []);
-    } catch (e: unknown) {
-      const err = e as { response?: { status?: number } };
-      if (err.response?.status === 403) {
-        setError('Requires Policy.Read.All permission in Microsoft Graph');
-      } else {
-        setError('Failed to load Conditional Access data');
+      const ok = (r: PromiseSettledResult<{ data?: any }>) =>
+        r.status === 'fulfilled' ? r.value.data : undefined;
+      setCaPolicies(ok(policiesRes)?.policies ?? []);
+      // Backend returns `items` (not `blocked_signins`) — read the correct key.
+      setBlockedSignIns(ok(signInsRes)?.items ?? ok(signInsRes)?.blocked_signins ?? []);
+      setCaGaps(ok(gapsRes)?.gaps ?? []);
+      setMultiCloudControls(ok(mcRes)?.controls ?? []);
+
+      // Only surface a hard error if the core policies call itself failed;
+      // a blocked-signins 403 is a permission gap, not a page failure.
+      if (policiesRes.status === 'rejected') {
+        const status = (policiesRes.reason as { response?: { status?: number } })?.response?.status;
+        setError(status === 403
+          ? 'Requires Policy.Read.All permission in Microsoft Graph'
+          : 'Failed to load Conditional Access data');
+      } else if (signInsRes.status === 'rejected'
+        && (signInsRes.reason as { response?: { status?: number } })?.response?.status === 403) {
+        setError('Blocked sign-ins need the AuditLog.Read.All Graph permission (other panels loaded).');
       }
+    } catch {
+      setError('Failed to load Conditional Access data');
     } finally {
       setLoading(false);
     }
