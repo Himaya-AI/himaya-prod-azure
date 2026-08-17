@@ -15,7 +15,7 @@ LLM_MAX_TOKENS = int(os.getenv("LLM_MAX_TOKENS", "2000"))
 bedrock_runtime = boto3.client(
     service_name="bedrock-runtime",
     region_name=os.getenv("AWS_REGION", "us-east-1"),  # fallback to us-east-1
-    config=Config(retries={"max_attempts": 10, "mode": "standard"}),
+    config=Config(retries={"max_attempts": 3, "mode": "standard"}),
 )
 
 # PROMPT_BUCKET = os.getenv("PROMPT_BUCKET", "classify-prompts-439055361147")

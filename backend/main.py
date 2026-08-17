@@ -835,6 +835,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Delta sync loop failed to start: {e}")
 
+    try:
+        from backend.workers.email_worker import run_email_worker
+        _email_worker_task = asyncio.create_task(run_email_worker(), name="email_worker")
+        _background_tasks.append(_email_worker_task)
+        logger.info("Email worker started")
+    except Exception as e:
+        logger.warning(f"Email worker failed to start: {e}")
+
     # Start background draft + spam auto-scan loops
     try:
         from backend.services.draft_spam_scan_service import run_draft_scan_loop, run_spam_sync_loop

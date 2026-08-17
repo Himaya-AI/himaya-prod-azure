@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 
 from backend.database import AsyncSessionLocal
 from backend.models.db_models import OrgIntegration, Organization
-from backend.services.email_processor import process_email
+from backend.services.email_job import enqueue_scan_job
 from backend.services.attachment_hashing import (
     enrich_gmail_attachments_with_sha256,
     fetch_m365_inbound_attachments,
@@ -694,59 +694,18 @@ async def _delta_sync_integration_snap(db, redis, integration):
                                 new_count += 1
                                 continue
 
-                            # For QUARANTINE/ALERT/TAG from policy — let process_email run for AI analysis
-                            # Policy will be applied retroactively via apply_policy_action after AI result
+                            # QUARANTINE/ALERT/TAG — worker applies policy after AI (Step 3)
                             email_data["_matched_policy"] = matched_policy
 
-                        # Fresh session per email — failure on one never poisons others
-                        threat = None
-                        async with _ASL() as email_db:
-                            try:
-                                threat = await process_email(email_data, org_id, email_db)
-                                await email_db.commit()
-                            except Exception as _pe:
-                                logger.warning(f"Delta process_email failed for {msg_id}: {_pe}")
+                        try:
+                            await enqueue_scan_job(org_id=org_id, source="google", email=email_data)
+                        except Exception as _pe:
+                            logger.warning(f"Delta enqueue failed for {msg_id}: {_pe}")
 
                         try:
                             await _store_comm_edge(db, org_id, sender, recipients, email_date_str)
                         except Exception as _ce:
                             logger.debug(f"comm_edge store failed (non-fatal): {_ce}")
-
-                        # Apply policy action to the AI-processed threat record
-                        if threat and matched_policy:
-                            policy_action = matched_policy.get("action", "")
-                            async with _ASL() as pol_db:
-                                try:
-                                    from backend.services.policy_engine import apply_policy_action as _apa
-                                    _link_ct2 = len(_link_re.findall(r'https?://\S+', body_text or ''))
-                                    await _apa(
-                                        policy=matched_policy,
-                                        threat_id=str(threat.id),
-                                        email_message_id=msg_id,
-                                        recipient_email=user_email,
-                                        org_id=org_id,
-                                        db=pol_db,
-                                        access_token=access_token,
-                                        sender_email=sender,
-                                        subject=subject,
-                                        ai_explanation=threat.ai_explanation_en if threat else "",
-                                        body_preview=(body_text or "")[:300],
-                                        attachments=email_attachments,
-                                        link_count=_link_ct2,
-                                        received_at=email_date_str or "",
-                                        provider="gmail",  # explicit — no inference needed for Google delta
-                                    )
-                                    await pol_db.commit()
-                                except Exception as _pae:
-                                    logger.warning(f"Policy apply failed (non-fatal): {_pae}")
-
-                        # AI-determined quarantine (no policy matched, or policy was ALERT/TAG)
-                        elif threat and threat.action_taken in ("QUARANTINED", "QUARANTINE"):
-                            try:
-                                from backend.services.quarantine_service import quarantine_gmail_message
-                                await quarantine_gmail_message(user_email, msg_id, access_token=access_token)
-                            except Exception as _qe:
-                                logger.debug(f"Quarantine move failed (non-fatal): {_qe}")
                         new_count += 1
                 except Exception as e:
                     logger.debug(f"Delta sync error for {user_email}: {e}")
@@ -909,11 +868,7 @@ async def _delta_sync_integration_snap(db, redis, integration):
             # /me/messages doesn't work with app-level tokens — must use
             # /users/{email}/messages for each mailbox individually.
             from backend.services.policy_engine import evaluate_policies as _m365_eval
-            from backend.services.policy_engine import apply_policy_action as _m365_apa
-            from backend.services.quarantine_service import (
-                block_to_trash_m365,
-                quarantine_m365_message_with_fallback,
-            )
+            from backend.services.quarantine_service import block_to_trash_m365
             from backend.database import AsyncSessionLocal as _M365ASL
             import re as _m365_re, uuid as _m365_uuid, hashlib as _m365_hash
             from backend.models.db_models import Threat as _M365T
@@ -1205,55 +1160,13 @@ async def _delta_sync_integration_snap(db, redis, integration):
                                     new_count += 1
                                     continue
 
-                                # QUARANTINE / ALERT / TAG → run AI, then apply action
+                                # QUARANTINE / ALERT / TAG — worker applies policy after AI (Step 3)
                                 email_data["_matched_policy"] = m365_matched_policy
 
-                            # ── AI threat detection ────────────────────────────────
-                            m365_threat = None
-                            async with _M365ASL() as _email_db:
-                                try:
-                                    m365_threat = await process_email(email_data, org_id, _email_db)
-                                    await _email_db.commit()
-                                except Exception as _pe:
-                                    logger.warning(f"M365 process_email failed {m365_msg_id}: {_pe}")
-
-                            # ── Apply policy action ────────────────────────────────
-                            if m365_threat and m365_matched_policy:
-                                async with _M365ASL() as _pa_db:
-                                    try:
-                                        await _m365_apa(
-                                            policy=m365_matched_policy,
-                                            threat_id=str(m365_threat.id),
-                                            email_message_id=m365_msg_id,
-                                            recipient_email=_m365_user_email,
-                                            org_id=org_id,
-                                            db=_pa_db,
-                                            access_token=access_token,
-                                            sender_email=sender,
-                                            subject=subject,
-                                            ai_explanation=m365_threat.ai_explanation_en or "",
-                                            body_preview=body_content[:300],
-                                            received_at=received_at_str,
-                                            provider="m365",
-                                        )
-                                        await _pa_db.commit()
-                                        logger.info(f"M365 policy action applied: {m365_matched_policy.get('action')} "
-                                                    f"on {m365_msg_id} for {_m365_user_email}")
-                                    except Exception as _pae:
-                                        logger.warning(f"M365 policy apply failed: {_pae}")
-
-                            # AI-determined quarantine (no policy, but AI flagged it)
-                            elif m365_threat and m365_threat.action_taken in ("QUARANTINED", "QUARANTINE"):
-                                try:
-                                    await quarantine_m365_message_with_fallback(
-                                        user_email=_m365_user_email,
-                                        m365_message_id=m365_msg_id,
-                                        access_token=access_token,
-                                        org_id=str(org_id),
-                                    )
-                                    logger.info(f"M365 AI-quarantine: moved {m365_msg_id} for {_m365_user_email}")
-                                except Exception as _qe:
-                                    logger.debug(f"M365 AI-quarantine failed (non-fatal): {_qe}")
+                            try:
+                                await enqueue_scan_job(org_id=org_id, source="m365", email=email_data)
+                            except Exception as _pe:
+                                logger.warning(f"M365 enqueue failed {m365_msg_id}: {_pe}")
 
                         await _store_comm_edge(db, org_id, sender, recipients, received_at_str)
                         new_count += 1

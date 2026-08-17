@@ -41,7 +41,11 @@ def test_map_sender_result_from_service():
             "type": "sender",
             "score": 40,
             "indicators": ["spf_fail", "dmarc_fail"],
-            "email-verify": {"domain": "evil.com", "has_mx_records": True},
+            "email-verify": {
+                "domain": "evil.com",
+                "has_mx_records": True,
+                "mx_records_domain": "evil.com",
+            },
         }
     ]
     auth = {"spf": "fail", "dkim": "none", "dmarc": "fail"}
@@ -50,6 +54,8 @@ def test_map_sender_result_from_service():
     assert "spf_fail" in mapped["indicators"]
     assert mapped["spf_pass"] is False
     assert mapped["email_verify"]["domain"] == "evil.com"
+    assert mapped["email_verify"]["mx_record_source_domain"] == "evil.com"
+    assert "mx_records_domain" not in mapped["email_verify"]
 
 
 def test_map_sender_result_fallback_auth_only():
@@ -99,14 +105,13 @@ def test_lookup_reputation_skips_when_unconfigured(monkeypatch):
 
 def test_lookup_reputation_posts_batch(monkeypatch):
     monkeypatch.setattr(rc, "REPUTATION_SERVICE_URL", "http://reputation:8080")
+    monkeypatch.setattr(rc, "_client", None)
 
     response = MagicMock()
     response.raise_for_status = MagicMock()
     response.json.return_value = {"results": [{"type": "sender", "score": 10}]}
 
     client = AsyncMock()
-    client.__aenter__.return_value = client
-    client.__aexit__.return_value = None
     client.post = AsyncMock(return_value=response)
 
     with patch("backend.services.reputation_client.httpx.AsyncClient", return_value=client):
@@ -118,6 +123,31 @@ def test_lookup_reputation_posts_batch(monkeypatch):
     client.post.assert_called_once()
     call_url = client.post.call_args[0][0]
     assert call_url.endswith("/api/v1/reputation/lookup")
+
+
+def test_lookup_reputation_reuses_client_across_calls(monkeypatch):
+    """The client should be built once and reused, not once per lookup."""
+    monkeypatch.setattr(rc, "REPUTATION_SERVICE_URL", "http://reputation:8080")
+    monkeypatch.setattr(rc, "_client", None)
+
+    response = MagicMock()
+    response.raise_for_status = MagicMock()
+    response.json.return_value = {"results": []}
+
+    client = AsyncMock()
+    client.post = AsyncMock(return_value=response)
+
+    with patch(
+        "backend.services.reputation_client.httpx.AsyncClient", return_value=client
+    ) as ctor:
+        asyncio.run(rc.lookup_reputation([{"type": "sender", "value": "a@b.com"}]))
+        asyncio.run(rc.lookup_reputation([{"type": "sender", "value": "c@d.com"}]))
+
+    ctor.assert_called_once()
+    assert client.post.call_count == 2
+
+    asyncio.run(rc.aclose_client())
+    assert rc._client is None
 
 
 def test_analyze_email_reputation_integration(monkeypatch):
