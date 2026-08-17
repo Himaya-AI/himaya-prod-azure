@@ -295,6 +295,70 @@ async def _build_data_map(db: AsyncSession, org_id: str, request_id: str,
             "region": r["region"], "country": r["country"],
             "confidence": r["confidence"], "remediation_sql": remediation,
         })
+
+    # ── Workspace / SaaS connector inventory ────────────────────────────────
+    # column_classifications only covers Snowflake/SAP column scans, so a tenant
+    # whose only connectors are M365 / Google / Slack / Box (the workspace
+    # connectors that populate saas_data_items) previously got an EMPTY data
+    # map. Surface the *items* those connectors classified as holding the
+    # subject's PII categories — object/file-level, privacy-preserving (we point
+    # to files, we never read raw values). Wrapped defensively so any
+    # schema skew degrades to the column-level map instead of failing the DSAR.
+    try:
+        broad = set(wanted)
+        broad.update(["pii", "phi", "pci", "financial",
+                      "customer_data", "credentials", "secrets"])
+        saas_rows = (await db.execute(text("""
+            SELECT provider, item_type, item_name, parent_path,
+                   classification_label, classification_categories,
+                   classification_score
+            FROM saas_data_items
+            WHERE org_id = CAST(:oid AS UUID)
+              AND (
+                    classification_categories && CAST(:cats AS TEXT[])
+                 OR classification_label IN
+                        ('confidential','highly_confidential','restricted')
+              )
+            ORDER BY provider, item_name
+            LIMIT 2000
+        """), {"oid": org_id, "cats": list(broad)})).mappings().all()
+        for r in saas_rows:
+            cats = list(r["classification_categories"] or [])
+            category = next((c for c in cats if c in wanted),
+                            (cats[0] if cats else (r["classification_label"] or "sensitive")))
+            data_class = "pii" if any(str(c).startswith("pii") for c in cats) \
+                else (r["classification_label"] or "confidential")
+            provider = r["provider"] or "saas"
+            container = r["parent_path"] or r["item_type"] or "workspace"
+            item = r["item_name"] or ""
+            reason = (f"{provider} {r['item_type'] or 'item'} classified as "
+                      f"{category} — likely holds this subject's data")
+            await db.execute(text("""
+                INSERT INTO dsar_matches
+                    (request_id, org_id, source, database_name, schema_name,
+                     table_name, column_name, data_class, category, region,
+                     country, confidence, match_reason, remediation_sql)
+                VALUES
+                    (CAST(:rid AS UUID), CAST(:oid AS UUID), :src, :db, :sc, :tbl,
+                     :col, :dc, :cat, NULL, NULL, :conf, :reason, NULL)
+            """), {
+                "rid": request_id, "oid": org_id, "src": provider,
+                "db": provider, "sc": (r["item_type"] or "")[:255],
+                "tbl": container[:255], "col": item[:255],
+                "dc": data_class, "cat": str(category)[:64],
+                "conf": r["classification_score"] or 0.6, "reason": reason,
+            })
+            matches.append({
+                "source": provider,
+                "path": f"{provider}:{container}.{item}",
+                "data_class": data_class, "category": str(category),
+                "region": None, "country": None,
+                "confidence": r["classification_score"] or 0.6,
+                "remediation_sql": None,
+            })
+    except Exception as exc:
+        logger.warning("dsar: saas_data_items data-map contribution skipped: %s", exc)
+
     return matches
 
 
