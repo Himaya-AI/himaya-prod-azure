@@ -204,6 +204,7 @@ async def _delta_sync_integration_snap(db, redis, integration):
     since_epoch = int(since.timestamp())
     now_ts = datetime.now(timezone.utc).timestamp()
     new_count = 0
+    enqueue_failures = 0
 
     if provider == "google":
         org_result = await db.execute(select(Organization).where(Organization.id == integration["org_id"]))
@@ -700,7 +701,9 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         try:
                             await enqueue_scan_job(org_id=org_id, source="google", email=email_data)
                         except Exception as _pe:
+                            enqueue_failures += 1
                             logger.warning(f"Delta enqueue failed for {msg_id}: {_pe}")
+                            continue
 
                         try:
                             await _store_comm_edge(db, org_id, sender, recipients, email_date_str)
@@ -1046,6 +1049,7 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         # The inbox owner is _m365_user_email; use that as primary recipient
                         # but still loop others in case email was to a group
                         scan_recipients = [_m365_user_email] if _m365_user_email not in recipients else recipients
+                        queued_ok = True
                         for _rcpt in scan_recipients:
                             email_data = {
                                 "sender":        sender,
@@ -1166,7 +1170,13 @@ async def _delta_sync_integration_snap(db, redis, integration):
                             try:
                                 await enqueue_scan_job(org_id=org_id, source="m365", email=email_data)
                             except Exception as _pe:
+                                queued_ok = False
+                                enqueue_failures += 1
                                 logger.warning(f"M365 enqueue failed {m365_msg_id}: {_pe}")
+                                break
+
+                        if not queued_ok:
+                            continue
 
                         await _store_comm_edge(db, org_id, sender, recipients, received_at_str)
                         new_count += 1
@@ -1253,7 +1263,8 @@ async def _delta_sync_integration_snap(db, redis, integration):
         "ts": now_ts,
         "provider": provider,
         "new_emails": new_count,
-        "status": "ok",
+        "enqueue_failures": enqueue_failures,
+        "status": "partial" if enqueue_failures else "ok",
     })
     await redis.lpush(f"sync_history:{org_id}", run_log)
     await redis.ltrim(f"sync_history:{org_id}", 0, 19)
@@ -1261,7 +1272,13 @@ async def _delta_sync_integration_snap(db, redis, integration):
 
     if new_count > 0:
         logger.info(f"Delta sync: {new_count} new emails for org {org_id} / {provider}")
-    await redis.set(last_sync_key, str(now_ts), ex=86400)
+    if enqueue_failures:
+        logger.warning(
+            "Delta sync: %s enqueue failure(s) for org %s / %s — last_sync not advanced",
+            enqueue_failures, org_id, provider,
+        )
+    else:
+        await redis.set(last_sync_key, str(now_ts), ex=86400)
 
 
 async def _upsert_directory_groups(db, org_id: str, groups: list[dict], provider: str) -> None:

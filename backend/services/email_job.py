@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal
 
 from backend.services.queue_client import queue_client
-from backend.utils.helper import make_id
+from backend.utils.helper import fit_queue_payload, make_id
 
 EMAIL_SCAN_QUEUE = os.getenv("EMAIL_QUEUE_NAME", "himaya-email-events")
 EmailSource = Literal["google", "m365"]
@@ -79,7 +79,7 @@ async def enqueue_scan_job(org_id: str, source: EmailSource, email: dict[str, An
     job = EmailScanJob.create(org_id=org_id, source=source, email=email)
     await queue_client.send_message(
         EMAIL_SCAN_QUEUE,
-        job.to_dict(),
+        fit_queue_payload(job.to_dict()),
         message_id=job.dedup_id(),
     )
     return job
