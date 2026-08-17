@@ -5405,10 +5405,17 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
         },
         markers: markers.map((m, idx) => ({ ...m, style: markerStyles[idx] })),
         onRegionTooltipShow: (
-          tooltip: { selector: { innerHTML: string } },
+          tooltip: { selector?: { innerHTML: string } },
           _e: unknown,
           code: string,
         ) => {
+          // jsvectormap versions differ on the tooltip object shape; on some
+          // builds `tooltip.selector` is undefined, which made
+          // `tooltip.selector.innerHTML = …` throw
+          // "Cannot set properties of undefined (setting 'innerHTML')" on
+          // every hover and spam the console (see uploaded screenshot). Bail
+          // out safely when the DOM handle isn't present.
+          if (!tooltip || !tooltip.selector) return;
           const c = countryRollup[code];
           if (!c) {
             // Country with no data — hide the tooltip body entirely.
@@ -7440,6 +7447,7 @@ function AdminActionsTab() {
   }>>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('');
+  const [search, setSearch] = useState<string>('');
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [actionDetail, setActionDetail] = useState<{
@@ -7480,22 +7488,41 @@ function AdminActionsTab() {
     default: 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400',
   };
 
+  // SIEM-style client-side search across actor / action / target / provider.
+  // The `filter` dropdown still drives the server-side action_type query;
+  // `search` narrows the already-loaded rows for fast free-text lookup.
+  const q = search.trim().toLowerCase();
+  const filteredActions = q
+    ? actions.filter(a =>
+        [a.admin_email, a.action_type, a.target_name, a.target_id, a.target_type, a.provider]
+          .some(v => (v || '').toString().toLowerCase().includes(q)))
+    : actions;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-[14px] font-semibold text-[var(--foreground)]">Admin Actions</h2>
-        <select
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-          className="text-[11px] bg-[var(--input)] border border-[var(--border)] rounded px-2 py-1 text-[var(--foreground)]"
-        >
-          <option value="">All actions</option>
-          <option value="user_deleted">User Deleted</option>
-          <option value="role_assigned">Role Assigned</option>
-          <option value="permission_changed">Permission Changed</option>
-          <option value="policy_modified">Policy Modified</option>
-          <option value="app_consent_granted">App Consent Granted</option>
-        </select>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search by actor, action or target…"
+            className="text-[11px] bg-[var(--input)] border border-[var(--border)] rounded px-2 py-1 text-[var(--foreground)] w-64 placeholder:text-[var(--muted)]"
+          />
+          <select
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+            className="text-[11px] bg-[var(--input)] border border-[var(--border)] rounded px-2 py-1 text-[var(--foreground)]"
+          >
+            <option value="">All actions</option>
+            <option value="user_deleted">User Deleted</option>
+            <option value="role_assigned">Role Assigned</option>
+            <option value="permission_changed">Permission Changed</option>
+            <option value="policy_modified">Policy Modified</option>
+            <option value="app_consent_granted">App Consent Granted</option>
+          </select>
+        </div>
       </div>
       {permissionError && (
         <div className="flex items-start gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
@@ -7508,10 +7535,12 @@ function AdminActionsTab() {
       )}
       {loading ? (
         <div className="text-center py-8 text-[var(--muted)] text-[12px]">Loading admin actions...</div>
-      ) : actions.length === 0 ? (
+      ) : filteredActions.length === 0 ? (
         <div className="text-center py-12 text-[var(--muted)] text-[12px]">
           <Shield size={32} className="mx-auto mb-2 text-[var(--muted)]" />
-          No admin actions recorded yet. Actions will appear here as admins perform privileged operations.
+          {search || filter
+            ? 'No admin actions match your search.'
+            : 'No admin actions recorded yet. Actions will appear here as admins perform privileged operations.'}
           {!permissionError && (
             <div className="mt-3 text-[10px] text-[var(--muted)]/60">
               Note: Requires <code className="bg-white/5 px-1 rounded">AuditLog.Read.All</code> permission in your Microsoft 365 app registration.
@@ -7532,7 +7561,7 @@ function AdminActionsTab() {
               </Tr>
             </Thead>
             <Tbody>
-              {actions.map(action => (
+              {filteredActions.map(action => (
                 <React.Fragment key={action.id}>
                   <Tr 
                     className="cursor-pointer hover:bg-white/5 transition-colors"

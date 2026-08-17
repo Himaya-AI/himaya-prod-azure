@@ -2764,7 +2764,15 @@ async def list_data_items(
                     '[]'
                 ) as classification_categories,
                 CASE WHEN public_access = TRUE THEN 'public' ELSE 'private' END as sharing_scope,
-                last_modified as last_modified_at, scanned_at as last_scanned_at, created_at,
+                -- azure_resources has NO `last_modified` column (see
+                -- azure_resource_indexer.ensure_azure_resources_table — only
+                -- scanned_at + created_at exist). Referencing last_modified
+                -- here threw "column does not exist" and crashed the ENTIRE
+                -- Data Inventory UNION, silently falling back to SaaS-only —
+                -- which is why the tiles showed 96 items (summary counts each
+                -- table independently) but the table below rendered empty.
+                COALESCE(scanned_at, created_at) as last_modified_at,
+                scanned_at as last_scanned_at, created_at,
                 location as region, NULL::text as resource_arn, encryption_enabled, public_access,
                 metadata
             FROM azure_resources
