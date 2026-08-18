@@ -3401,6 +3401,38 @@ async def _fetch_data_item_context(item_id: str, org_id: str, db: AsyncSession) 
     except Exception as exc:
         logger.debug(f"resource_risk: gcp lookup failed for {item_id}: {exc}")
 
+    # Try azure_resources — MISSING before, so azure inventory items (e.g.
+    # himaya-prod-db) returned 404 on the risk-analysis panel even though they
+    # render in the /data listing. Mirrors the azure branch of the list UNION.
+    try:
+        _az_label_sql = _label_case_sql(
+            low_extra=("WHEN metadata->>'dlp_risk_level' = 'low' "
+                       "AND public_access THEN 'public'"),
+            default_extra=("WHEN public_access THEN 'public' "
+                           "WHEN encryption_enabled THEN 'confidential'"),
+        )
+        row = (await db.execute(
+            text(
+                "SELECT id::text, 'azure' as source, 'azure' as provider, resource_type as item_type, "
+                "COALESCE(name, resource_id) as item_name, NULL::text as item_url, "
+                "location as parent_path, "
+                "COALESCE(metadata->>'owner', metadata->>'created_by') as owner_email, "
+                "NULL::bigint as size_bytes, "
+                + _az_label_sql + " as classification_label, "
+                "CASE WHEN metadata->>'dlp_classified' = 'true' THEN 0.85 ELSE 0.5 END as classification_score, "
+                "COALESCE(NULLIF(metadata->>'dlp_categories',''), NULLIF(metadata->>'ai_categories',''), '[]') as classification_categories, "
+                "CASE WHEN public_access THEN 'public' ELSE 'private' END as sharing_scope, "
+                "COALESCE(scanned_at, created_at) as last_modified_at, scanned_at as last_scanned_at, created_at, "
+                "metadata, location as region, encryption_enabled, public_access "
+                "FROM azure_resources WHERE id::text=:id AND org_id=:oid"
+            ),
+            {"id": item_id, "oid": org_id},
+        )).mappings().first()
+        if row:
+            return dict(row)
+    except Exception as exc:
+        logger.debug(f"resource_risk: azure lookup failed for {item_id}: {exc}")
+
     return None
 
 
@@ -14635,6 +14667,7 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
             # SharePoint/Teams files showed up uncategorised forever.
             # New rule: pick up anything that's NULL, or 'internal'/'public'
             # with no DLP categories yet, or older than 7d at 'internal'.
+            from backend.services.file_type_classifier import BINARY_EXT_REGEX
             result = await db.execute(text("""
                 SELECT id::text, item_name, parent_path, provider, sharing_scope,
                        classification_label, owner_email, classification_categories
@@ -14650,10 +14683,21 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
                         )
                     )
                     OR (classification_label = 'internal' AND last_scanned_at < NOW() - INTERVAL '7 days')
+                    -- Re-pick binaries/executables that were mis-classified by
+                    -- the text/PII classifier (e.g. a WildFire test .apk tagged
+                    -- pii_person). The file-type adapter in the loop below
+                    -- corrects them to executable/malware.
+                    OR (
+                        lower(item_name) ~ :bin_re
+                        AND NOT (
+                            COALESCE(classification_categories, ARRAY[]::text[])
+                            && ARRAY['executable','malware','archive']
+                        )
+                    )
                   )
                 ORDER BY created_at DESC
                 LIMIT 50
-            """), {"org_id": org_id})
+            """), {"org_id": org_id, "bin_re": BINARY_EXT_REGEX})
             items = result.mappings().all()
 
             if not items:
@@ -14661,36 +14705,51 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
 
             logger.info(f"dlp_worker: classifying {len(items)} items for org {org_id}")
 
+            from backend.services.file_type_classifier import classify_file_type
             for item in items:
                 try:
-                    context = f"File: {item['item_name']}\nPath: {item['parent_path'] or 'Unknown'}\nProvider: {item['provider']}"
-                    cls_result = await _clf.classify_verdict(context, tenant_id=org_id)
-                    if not cls_result:
-                        # Service unavailable — leave item for the next pass.
-                        continue
+                    explanation = "File classified as high-risk and shared externally."
+                    # ── File-type adapter (runs BEFORE the text/PII classifier) ──
+                    # Binaries/executables/archives must never be run through the
+                    # NER/PII text classifier — that's what tagged a WildFire test
+                    # .apk as pii_person. Deterministic file-type verdict wins.
+                    ft = classify_file_type(item["item_name"])
+                    if ft is not None:
+                        risk_level = ft["risk_level"]
+                        label = ft["label"]
+                        score = float(ft["confidence"])
+                        categories = ft["categories"]
+                        explanation = ft["note"]
+                    else:
+                        context = f"File: {item['item_name']}\nPath: {item['parent_path'] or 'Unknown'}\nProvider: {item['provider']}"
+                        cls_result = await _clf.classify_verdict(context, tenant_id=org_id)
+                        if not cls_result:
+                            # Service unavailable — leave item for the next pass.
+                            continue
 
-                    risk_level = cls_result.get("risk_level", "low")
-                    label = _risk_to_label(risk_level)
-                    score = float(cls_result.get("confidence", 0.5))
-                    categories = cls_result.get("categories", [])
-                    # Adnan 2026-06-23 (turn 3): if Claude returned no
-                    # categories, try the cross-cloud heuristic before
-                    # we write an empty list. This is the same backstop
-                    # we apply at SharePoint / Teams ingest time —
-                    # makes sure the DLP Categories column on the
-                    # frontend is never silently empty.
-                    if not categories:
-                        try:
-                            from backend.services.cross_cloud_dlp import _classify_heuristic
-                            heur_cats, _ = _classify_heuristic({
-                                "name": item.get("item_name"),
-                                "resource_type": "file",
-                                "resource_path": item.get("parent_path"),
-                            })
-                            if heur_cats:
-                                categories = heur_cats
-                        except Exception as _hexc:
-                            logger.debug(f"dlp_worker heuristic fallback failed: {_hexc}")
+                        risk_level = cls_result.get("risk_level", "low")
+                        label = _risk_to_label(risk_level)
+                        score = float(cls_result.get("confidence", 0.5))
+                        categories = cls_result.get("categories", [])
+                        explanation = cls_result.get("explanation", explanation)
+                        # Adnan 2026-06-23 (turn 3): if Claude returned no
+                        # categories, try the cross-cloud heuristic before
+                        # we write an empty list. This is the same backstop
+                        # we apply at SharePoint / Teams ingest time —
+                        # makes sure the DLP Categories column on the
+                        # frontend is never silently empty.
+                        if not categories:
+                            try:
+                                from backend.services.cross_cloud_dlp import _classify_heuristic
+                                heur_cats, _ = _classify_heuristic({
+                                    "name": item.get("item_name"),
+                                    "resource_type": "file",
+                                    "resource_path": item.get("parent_path"),
+                                })
+                                if heur_cats:
+                                    categories = heur_cats
+                            except Exception as _hexc:
+                                logger.debug(f"dlp_worker heuristic fallback failed: {_hexc}")
 
                     # Belt-and-suspenders: include org_id even though the
                     # item id was fetched by an org-scoped SELECT above.
@@ -14711,7 +14770,10 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
                         "org_id": org_id,
                     })
 
-                    # Create alert for high-risk items shared externally
+                    # Create alert for high-risk items shared externally.
+                    # For binaries the file-type adapter sets risk high/critical
+                    # too, so a malware/executable shared externally alerts here
+                    # under its own category (malware/executable) rather than PII.
                     if risk_level in ("high", "critical") and item.get("sharing_scope") in ("external", "public"):
                         existing_alert = await db.execute(text("""
                             SELECT id FROM saas_alerts
@@ -14719,6 +14781,13 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
                               AND resource_id = :rid AND status = 'open'
                         """), {"org_id": org_id, "rid": item["id"]})
                         if not existing_alert.first():
+                            _primary_cat = categories[0] if categories else "SENSITIVE_DATA"
+                            _is_binary = _primary_cat in ("malware", "executable", "archive")
+                            _title = (
+                                f"{_primary_cat.title()} shared externally: {item['item_name'][:80]}"
+                                if _is_binary else
+                                f"Sensitive data shared externally: {item['item_name'][:80]}"
+                            )
                             await db.execute(text("""
                                 INSERT INTO saas_alerts
                                 (org_id, provider, alert_type, severity, title, description,
@@ -14731,10 +14800,10 @@ async def _run_dlp_classification_worker(org_id: str) -> None:
                             """), {
                                 "org_id": org_id,
                                 "provider": item["provider"],
-                                "alert_type": cls_result.get("categories", ["SENSITIVE_DATA"])[0] if cls_result.get("categories") else "SENSITIVE_DATA",
+                                "alert_type": _primary_cat,
                                 "severity": risk_level,
-                                "title": f"Sensitive data shared externally: {item['item_name'][:80]}",
-                                "description": cls_result.get("explanation", "File classified as high-risk and shared externally."),
+                                "title": _title,
+                                "description": explanation,
                                 "rid": item["id"],
                                 "rname": item["item_name"],
                             })
