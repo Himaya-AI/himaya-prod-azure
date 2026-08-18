@@ -221,6 +221,7 @@ resource backendApp 'Microsoft.App/containerApps@2024-03-01' = {
             // ── Threat-detection microservices (remain on AWS ALBs, us-east-1) ──
             { name: 'REPUTATION_SERVICE_URL', value: reputationServiceUrl }
             { name: 'GRAPH_SERVICE_URL', value: graphServiceUrl }
+            { name: 'GRAPH_SERVICE_TIMEOUT', value: '30' }
             { name: 'CLASSIFIER_SERVICE_URL', value: classifierServiceUrl }
             { name: 'ANTHROPIC_API_KEY', secretRef: 'anthropic-api-key' }
             // ── App base URL (CORS, invite links, OAuth post-callback redirects) ──

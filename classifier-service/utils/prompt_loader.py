@@ -25,7 +25,7 @@ def _fetch_system_prompt() -> str:
     try:
         response = s3_client.get_object(Bucket=PROMPT_BUCKET, Key=_SYSTEM_PROMPT_KEY)
         logger.info(f"S3 get_object succeeded for {_SYSTEM_PROMPT_KEY}, reading body...")
-        content = response["Body"].read().decode("utf-8")
+        content = response["Body"].read().decode("utf-8-sig")
         logger.info(f"Loaded {_SYSTEM_PROMPT_KEY}: {len(content)} chars")
         return content
     except Exception as e:
@@ -47,7 +47,17 @@ def _fetch_few_shot_examples() -> list[dict[str, str]]:
 
 
 def get_system_prompt() -> str:
-    return SYSTEM_PROMPT
+    if _SYSTEM_PROMPT_KEY not in _cache:
+        with _lock:
+            if _SYSTEM_PROMPT_KEY not in _cache:
+                try:
+                    _cache[_SYSTEM_PROMPT_KEY] = _fetch_system_prompt()
+                except Exception:
+                    logger.warning(
+                        "S3 system prompt unavailable; using local utils/prompt.py fallback"
+                    )
+                    _cache[_SYSTEM_PROMPT_KEY] = SYSTEM_PROMPT
+    return _cache[_SYSTEM_PROMPT_KEY]
 
 
 def get_few_shot_examples() -> list[dict[str, str]]:
