@@ -311,6 +311,21 @@ const DLP_CATEGORY_LABELS: Record<string, { label: string; color: string }> = {
   itar:               { label: 'ITAR', color: 'bg-red-700/20 border-red-600/40 text-red-200' },
   gdpr:               { label: 'GDPR', color: 'bg-blue-600/20 border-blue-500/40 text-blue-200' },
   bulk_exfil:         { label: 'Bulk Exfil', color: 'bg-red-700/20 border-red-600/40 text-red-200' },
+  // Generic PII / data-class buckets (emitted by the classification engine)
+  pii:                { label: 'PII', color: 'bg-red-500/15 border-red-500/30 text-red-300' },
+  pii_person:         { label: 'PII (Person)', color: 'bg-red-500/15 border-red-500/30 text-red-300' },
+  pci:                { label: 'Payment Card', color: 'bg-red-500/15 border-red-500/30 text-red-300' },
+  phi:                { label: 'Health (PHI)', color: 'bg-purple-500/15 border-purple-500/30 text-purple-300' },
+  credentials:        { label: 'Credentials', color: 'bg-red-600/20 border-red-500/40 text-red-200' },
+  financial:          { label: 'Financial', color: 'bg-yellow-500/15 border-yellow-500/30 text-yellow-300' },
+  customer_data:      { label: 'Customer Data', color: 'bg-rose-500/15 border-rose-500/30 text-rose-300' },
+  ml_data:            { label: 'ML Data', color: 'bg-fuchsia-500/15 border-fuchsia-500/30 text-fuchsia-300' },
+  network:            { label: 'Network', color: 'bg-green-500/15 border-green-500/30 text-green-300' },
+  // Binary / executable classes — routed here by the file-type adapter so
+  // they are never shown as PII. Malware is the highest-signal red.
+  malware:            { label: 'Malware', color: 'bg-red-700/25 border-red-600/50 text-red-200' },
+  executable:         { label: 'Executable', color: 'bg-orange-600/20 border-orange-500/40 text-orange-200' },
+  archive:            { label: 'Archive', color: 'bg-slate-500/15 border-slate-500/30 text-slate-300' },
   // Generic
   sensitive:          { label: 'Sensitive', color: 'bg-amber-500/15 border-amber-500/30 text-amber-300' },
 }
@@ -3770,8 +3785,8 @@ function AIRemediationPanel({
             </span>
           )}
           {data && !data.ai_powered && (
-            <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded">
-              Fallback
+            <span className="text-[10px] bg-[#3b6ef6]/10 text-[#3b6ef6] border border-[#3b6ef6]/20 px-1.5 py-0.5 rounded">
+              Classification Engine
             </span>
           )}
           {data && data.steps.length > 0 && (
@@ -3949,8 +3964,8 @@ function AIResourceRiskPanel({ itemId }: { itemId: string }) {
             </span>
           )}
           {data && !data.ai_powered && (
-            <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded">
-              Fallback
+            <span className="text-[9px] bg-[#3b6ef6]/10 text-[#3b6ef6] border border-[#3b6ef6]/20 px-1.5 py-0.5 rounded">
+              Classification Engine
             </span>
           )}
         </div>
@@ -4589,7 +4604,7 @@ function DataTab({
                   <Th>Name / Location</Th>
                   <Th>Source</Th>
                   <Th>Label</Th>
-                  <Th>DLP Categories</Th>
+                  <Th>Data Classification</Th>
                   <Th>Risk Score</Th>
                   <Th>Sharing</Th>
                   <Th>Owner</Th>
@@ -4691,7 +4706,7 @@ function DataTab({
                                 )}
                                 {categories.length > 0 && (
                                   <div>
-                                    <div className="text-[10px] text-[#52525b] mb-1 uppercase tracking-wide">DLP Categories</div>
+                                    <div className="text-[10px] text-[#52525b] mb-1 uppercase tracking-wide">Data Classification</div>
                                     <div className="flex flex-wrap gap-1">
                                       {categories.map((c, i) => (
                                         <DlpCategoryPill key={i} category={c} />
@@ -4971,6 +4986,10 @@ const DSPM_REGION_DLP_COLORS: Record<string, string> = {
   public_data:    '#9ca3af',  // gray         — public / marketing
   infrastructure: '#6b7280',  // dark gray    — misc infra
   storage:        '#475569',  // slate        — untagged storage
+  pii_person:     '#ef4444',  // red          — PII (person)
+  malware:        '#b91c1c',  // deep red     — malware / test artifacts
+  executable:     '#ea580c',  // orange       — executables / installers
+  archive:        '#64748b',  // slate        — archives
   // Fallback when category is unknown / missing
   unknown:        '#3f3f46',
 }
@@ -4992,6 +5011,10 @@ const DSPM_REGION_DLP_LABELS: Record<string, string> = {
   public_data: 'Public / marketing',
   infrastructure: 'Infrastructure',
   storage: 'Storage (untagged)',
+  pii_person: 'PII (Person)',
+  malware: 'Malware',
+  executable: 'Executable',
+  archive: 'Archive',
   unknown: 'Unclassified',
 }
 
@@ -5100,6 +5123,10 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
   const mapInstanceRef = useRef<unknown>(null);
   const [residency, setResidency] = useState<DataResidencyInfo | null>(null);
   const [loadingRes, setLoadingRes] = useState(true);
+  // Fill mode: colour countries by data-classification CATEGORY
+  // (finance / PII / source code / health …) or by sensitivity tier.
+  // Default to category since that's the primary data-classification view.
+  const [fillMode, setFillMode] = useState<'category' | 'sensitivity'>('category');
 
   useEffect(() => {
     (async () => {
@@ -5299,8 +5326,10 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
       // scale.getValue(value)).  Validated against jsvectormap@1.7.0
       // with jsdom — see /tmp/jvm_test/test.mjs.
       const tierByCode: Record<string, string> = {};
+      const catByCode: Record<string, string> = {};
       Object.entries(countryRollup).forEach(([code, c]) => {
         tierByCode[code.toUpperCase()] = c.topTier || 'unknown';
+        catByCode[code.toUpperCase()] = c.cat || 'unknown';
       });
 
       // De-dupe markers by coords, keeping resource count + category.
@@ -5356,8 +5385,12 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
         // Marker fill = sensitivity tier (so the marker matches the
         // country fill it's sitting on), stroke = DLP category for a
         // second visual signal.
-        const fill = SENSITIVITY_COLOR[info.topTier] ?? SENSITIVITY_COLOR.unknown;
-        const stroke = DSPM_REGION_DLP_COLORS[info.cat] ?? '#fff';
+        const fill = fillMode === 'category'
+          ? (DSPM_REGION_DLP_COLORS[info.cat] ?? DSPM_REGION_DLP_COLORS.unknown)
+          : (SENSITIVITY_COLOR[info.topTier] ?? SENSITIVITY_COLOR.unknown);
+        const stroke = fillMode === 'category'
+          ? (SENSITIVITY_COLOR[info.topTier] ?? '#fff')
+          : (DSPM_REGION_DLP_COLORS[info.cat] ?? '#fff');
         markers.push({
           name: `${info.provider} · ${info.region}`,
           coords: [parseFloat(latStr), parseFloat(lngStr)],
@@ -5385,19 +5418,29 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
           hover:   { fillOpacity: 0.9, cursor: 'pointer' },
         },
         series: {
-          regions: [{
-            attribute: 'fill',
-            // ISO-2 → tier name. jsvectormap will look the tier up in
-            // `scale` and apply the resulting hex as the country's fill.
-            values: tierByCode,
-            scale: {
-              highly_confidential: SENSITIVITY_COLOR.highly_confidential,
-              confidential:        SENSITIVITY_COLOR.confidential,
-              internal:            SENSITIVITY_COLOR.internal,
-              public:              SENSITIVITY_COLOR.public,
-              unknown:             SENSITIVITY_COLOR.unknown,
-            },
-          }],
+          regions: [
+            fillMode === 'category'
+              ? {
+                  attribute: 'fill',
+                  // ISO-2 → dominant DLP category; jsvectormap looks the
+                  // category up in the category colour scale.
+                  values: catByCode,
+                  scale: DSPM_REGION_DLP_COLORS,
+                }
+              : {
+                  attribute: 'fill',
+                  // ISO-2 → tier name. jsvectormap will look the tier up in
+                  // `scale` and apply the resulting hex as the country's fill.
+                  values: tierByCode,
+                  scale: {
+                    highly_confidential: SENSITIVITY_COLOR.highly_confidential,
+                    confidential:        SENSITIVITY_COLOR.confidential,
+                    internal:            SENSITIVITY_COLOR.internal,
+                    public:              SENSITIVITY_COLOR.public,
+                    unknown:             SENSITIVITY_COLOR.unknown,
+                  },
+                },
+          ],
         },
         markerStyle: {
           initial: { fill: '#3b6ef6', fillOpacity: 0.95, stroke: '#fff', strokeWidth: 2, r: 7 },
@@ -5501,7 +5544,7 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
         mapInstanceRef.current = null;
       }
     };
-  }, [validCR, regionDominantCat, countryRollup]);
+  }, [validCR, regionDominantCat, countryRollup, fillMode]);
 
   // Active DLP categories present in the data (for the small bottom-row legend).
   const activeCats = useMemo(() => {
@@ -5511,50 +5554,105 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
     return Array.from(s);
   }, [regionDominantCat]);
 
+  // Category histogram (item counts per data-classification category) for the
+  // category legend, sorted most-frequent first.
+  const catHist = useMemo(() => {
+    const h: Record<string, number> = {};
+    items.forEach(it => {
+      const cats = Array.isArray(it.classification_categories)
+        ? (it.classification_categories as string[]) : [];
+      const cat = cats.length > 0 ? cats[0] : 'unknown';
+      h[cat] = (h[cat] || 0) + 1;
+    });
+    return Object.entries(h).sort((a, b) => b[1] - a[1]);
+  }, [items]);
+
   const countriesShown = Object.keys(countryRollup).length;
 
   return (
     <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
         <Globe size={14} className="text-[#3b6ef6]" />
         <h3 className="text-[13px] font-semibold text-[var(--foreground)]">
           Data Posture by Region
         </h3>
-        <span className="text-[10px] text-[var(--muted)] ml-auto">
+        {/* Fill-mode toggle: colour the map by data-classification category
+            (finance / PII / source code / health …) or by sensitivity tier. */}
+        <div className="ml-auto flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[#0e0e14] p-0.5">
+          {([
+            { key: 'category', label: 'Data category' },
+            { key: 'sensitivity', label: 'Sensitivity' },
+          ] as const).map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => setFillMode(opt.key)}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-colors ${
+                fillMode === opt.key
+                  ? 'bg-[#3b6ef6] text-white'
+                  : 'text-[var(--muted)] hover:text-[var(--foreground)]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[10px] text-[var(--muted)]">
           {loadingRes
             ? 'loading…'
             : `${countriesShown} countries shaded · ${validCR.length} cloud regions · ${items.length} items`}
         </span>
       </div>
       <p className="text-[11px] text-[var(--muted)] mb-3">
-        Countries are shaded by the highest data-sensitivity tier sitting there.
-        Markers show the specific cloud region holding the data; marker fill = sensitivity tier,
-        marker outline = dominant DLP category. Hover any country or marker for the breakdown.
+        {fillMode === 'category' ? (
+          <>Countries are shaded by their dominant <span className="text-[var(--foreground)]/80">data-classification category</span> (finance, PII, source code, health, credentials …).
+          Marker fill = category, marker outline = sensitivity tier. Hover any country or marker for the full breakdown.</>
+        ) : (
+          <>Countries are shaded by the highest <span className="text-[var(--foreground)]/80">data-sensitivity tier</span> sitting there.
+          Marker fill = sensitivity tier, marker outline = dominant data category. Hover any country or marker for the breakdown.</>
+        )}
       </p>
 
-      {/* Sensitivity tier legend (this is the primary legend now — it
-          matches the country fill). */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Sensitivity:</span>
-        {(['highly_confidential', 'confidential', 'internal', 'public', 'unknown'] as const).map(tier => {
-          const n = sensHist[tier] || 0;
-          return (
+      {/* Primary legend — matches the country fill for the active mode. */}
+      {fillMode === 'category' ? (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Data classification:</span>
+          {catHist.slice(0, 10).map(([cat, n]) => (
             <span
-              key={tier}
-              className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--border)] text-[10px] ${
-                n > 0 ? 'bg-[#0e0e14] text-[var(--foreground)]/85' : 'bg-transparent text-[var(--muted)] opacity-60'
-              }`}
+              key={cat}
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--border)] bg-[#0e0e14] text-[10px] text-[var(--foreground)]/85"
             >
               <span
                 className="inline-block w-3 h-3 rounded-sm"
-                style={{ background: SENSITIVITY_COLOR[tier] }}
+                style={{ background: DSPM_REGION_DLP_COLORS[cat] ?? DSPM_REGION_DLP_COLORS.unknown }}
               />
-              {SENSITIVITY_LABEL[tier]}
+              {DSPM_REGION_DLP_LABELS[cat] ?? cat}
               <span className="text-[var(--muted)]">({n})</span>
             </span>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 mb-3">
+          <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Sensitivity:</span>
+          {(['highly_confidential', 'confidential', 'internal', 'public', 'unknown'] as const).map(tier => {
+            const n = sensHist[tier] || 0;
+            return (
+              <span
+                key={tier}
+                className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[var(--border)] text-[10px] ${
+                  n > 0 ? 'bg-[#0e0e14] text-[var(--foreground)]/85' : 'bg-transparent text-[var(--muted)] opacity-60'
+                }`}
+              >
+                <span
+                  className="inline-block w-3 h-3 rounded-sm"
+                  style={{ background: SENSITIVITY_COLOR[tier] }}
+                />
+                {SENSITIVITY_LABEL[tier]}
+                <span className="text-[var(--muted)]">({n})</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
 
       {/* Adnan 2026-06-23 (turn 5): h-[640px] was still too small on
           1440p+ displays. Make the map fill 80% of viewport height with
@@ -5565,21 +5663,36 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
         className="w-full min-h-[640px] h-[80vh] max-h-[1100px] rounded-lg overflow-hidden bg-[#080810] mb-3"
       />
 
-      {/* DLP category legend (smaller — secondary, matches marker outline). */}
+      {/* Secondary legend (smaller — matches the marker outline). In category
+          mode the outline encodes sensitivity; in sensitivity mode it encodes
+          the dominant data category. */}
       <div className="flex flex-wrap gap-1.5">
         <span className="text-[10px] uppercase tracking-wide text-[var(--muted)] self-center mr-1">Marker outline:</span>
-        {activeCats.map(cat => (
-          <span
-            key={cat}
-            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[var(--border)] bg-[#0e0e14] text-[9px] text-[var(--foreground)]/80"
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-full"
-              style={{ background: DSPM_REGION_DLP_COLORS[cat] ?? DSPM_REGION_DLP_COLORS.unknown }}
-            />
-            {DSPM_REGION_DLP_LABELS[cat] ?? cat}
-          </span>
-        ))}
+        {fillMode === 'category'
+          ? (['highly_confidential', 'confidential', 'internal', 'public', 'unknown'] as const).map(tier => (
+              <span
+                key={tier}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[var(--border)] bg-[#0e0e14] text-[9px] text-[var(--foreground)]/80"
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ background: SENSITIVITY_COLOR[tier] }}
+                />
+                {SENSITIVITY_LABEL[tier]}
+              </span>
+            ))
+          : activeCats.map(cat => (
+              <span
+                key={cat}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md border border-[var(--border)] bg-[#0e0e14] text-[9px] text-[var(--foreground)]/80"
+              >
+                <span
+                  className="inline-block w-2 h-2 rounded-full"
+                  style={{ background: DSPM_REGION_DLP_COLORS[cat] ?? DSPM_REGION_DLP_COLORS.unknown }}
+                />
+                {DSPM_REGION_DLP_LABELS[cat] ?? cat}
+              </span>
+            ))}
       </div>
     </div>
   );

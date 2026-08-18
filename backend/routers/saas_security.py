@@ -1941,6 +1941,66 @@ async def get_workspace_stats(
 # ALERT ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _normalize_alert_classification(raw, severity, alert_type, description):
+    """Return a normalized Data-Classification object for an alert.
+
+    AWS/Databricks/CSPM findings put their raw `metadata` jsonb in the
+    classification slot — which is often `{}` or a shape the UI can't read, so
+    the alert drawer rendered "No classification data available". This coerces
+    whatever we have (metadata dict / JSON string / None) into the shape the
+    frontend expects: {risk_level, confidence, categories, explanation}. We
+    always fall back to the finding's severity + type so the panel is never
+    empty for a real alert.
+    """
+    data = {}
+    if isinstance(raw, dict):
+        data = raw
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                data = parsed
+        except Exception:
+            data = {}
+
+    # Categories: accept any of the keys different connectors write.
+    cats: list[str] = []
+    for key in ("categories", "dlp_categories", "ai_categories", "secret_types"):
+        val = data.get(key)
+        if isinstance(val, list):
+            cats.extend(str(c) for c in val if str(c).strip())
+        elif isinstance(val, str) and val.strip():
+            try:
+                arr = json.loads(val)
+                if isinstance(arr, list):
+                    cats.extend(str(c) for c in arr if str(c).strip())
+            except Exception:
+                cats.extend(p.strip() for p in val.split(",") if p.strip())
+    # De-dup, preserve order.
+    seen: set[str] = set()
+    cats = [c for c in cats if not (c in seen or seen.add(c))]
+    # Last-resort category: the finding type itself (e.g. "toxic_combination").
+    if not cats and alert_type and alert_type not in ("security_finding",):
+        cats = [str(alert_type)]
+
+    risk_level = data.get("risk_level") or data.get("dlp_risk_level") or severity or "low"
+    explanation = (
+        data.get("explanation")
+        or data.get("summary")
+        or (description[:400] if isinstance(description, str) and description else None)
+    )
+    confidence = data.get("confidence")
+
+    if not cats and not explanation:
+        return None
+    return {
+        "risk_level": risk_level,
+        "confidence": confidence,
+        "categories": cats,
+        "explanation": explanation,
+    }
+
+
 @router.get("/alerts")
 @cached_endpoint("saas:alerts", ttl=20)
 async def list_alerts(
@@ -2094,7 +2154,10 @@ async def list_alerts(
                 "resource_id": row["resource_id"],
                 "resource_name": row["resource_name"],
                 "resource_url": row["resource_url"],
-                "classification_result": row["classification_result"],
+                "classification_result": _normalize_alert_classification(
+                    row["classification_result"], row["severity"],
+                    row["alert_type"], row["description"],
+                ),
                 "posture_result": row["posture_result"],
                 "status": row["status"],
                 "resolved_at": row["resolved_at"].isoformat() if row["resolved_at"] else None,
@@ -3582,8 +3645,8 @@ def _fallback_resource_risk(item: dict) -> dict:
 
     assessment = (
         f"{name} is a {item.get('item_type') or 'resource'} on {provider} owned by {owner}, "
-        f"classified as {label}. DLP signal: {cats_str}{extras_str}. "
-        f"Manual review is recommended until Claude-based analysis is available."
+        f"classified as {label} by the Himaya classification engine. DLP signal: {cats_str}{extras_str}. "
+        f"The findings below are generated from the resource's live classification and posture signals."
     )
     risks = []
     if scope in ("public", "external"):
@@ -14169,20 +14232,31 @@ async def get_data_residency(
         if wanted_frameworks:
             # Compute compliance percentage per framework from the live
             # compliance_status table, scoped to this org_id.
-            scores_rows = await db.execute(text("""
-                SELECT
-                    cc.framework                         AS framework,
-                    COUNT(*)                              AS total,
-                    COUNT(*) FILTER (WHERE cs.status = 'compliant')     AS compliant,
-                    COUNT(*) FILTER (WHERE cs.status = 'partial')       AS partial,
-                    COUNT(*) FILTER (WHERE cs.status = 'non_compliant') AS non_compliant
-                FROM compliance_controls cc
-                LEFT JOIN compliance_status cs
-                       ON cs.control_id = cc.id
-                      AND cs.org_id     = CAST(:org_id AS UUID)
-                WHERE cc.framework = ANY(:fws)
-                GROUP BY cc.framework
-            """), {"org_id": org_id, "fws": list(wanted_frameworks)})
+            #
+            # IMPORTANT: run this in an ISOLATED session. get_data_residency
+            # issues many best-effort DB reads above; if any one of them hit a
+            # missing table/column it aborts the *request* transaction
+            # (asyncpg InFailedSQLTransactionError — see the identical footgun
+            # documented in compliance_worker._safe_scalar). Every subsequent
+            # execute() on `db` then fails silently, which is exactly why the
+            # overview's Compliance Frameworks tile showed "No data" even though
+            # compliance_status is fully populated. A fresh session gets a clean
+            # transaction that can't be poisoned by the request path.
+            async with AsyncSessionLocal() as db2:
+                scores_rows = await db2.execute(text("""
+                    SELECT
+                        cc.framework                         AS framework,
+                        COUNT(*)                              AS total,
+                        COUNT(*) FILTER (WHERE cs.status = 'compliant')     AS compliant,
+                        COUNT(*) FILTER (WHERE cs.status = 'partial')       AS partial,
+                        COUNT(*) FILTER (WHERE cs.status = 'non_compliant') AS non_compliant
+                    FROM compliance_controls cc
+                    LEFT JOIN compliance_status cs
+                           ON cs.control_id = cc.id
+                          AND cs.org_id     = CAST(:org_id AS UUID)
+                    WHERE cc.framework = ANY(:fws)
+                    GROUP BY cc.framework
+                """), {"org_id": org_id, "fws": list(wanted_frameworks)})
 
             score_by_fw = {}
             for r in scores_rows.mappings():
