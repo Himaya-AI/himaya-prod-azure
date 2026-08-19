@@ -89,7 +89,18 @@ async def list_quarantine(
         filters.append(Threat.detected_at <= datetime.fromisoformat(date_to))
     if status and status != "all":
         if status == "unresolved":
-            filters.append(Threat.status.notin_(["resolved", "false_positive"]))
+            # "Unresolved" = still held in the Himaya-Quarantine folder awaiting an
+            # analyst decision. Auto-triage marks CONTAINED mail status='resolved'
+            # with action_taken='QUARANTINED' (auto_triage_service._apply_verdict),
+            # so filtering on status alone wrongly hid every auto-quarantined email.
+            # Released mail uses action_taken='CLEAN' (already excluded by
+            # quarantine_filter); block/delete are terminal. So "unresolved" here =
+            # still carrying a QUARANTINE action/status and not a confirmed FP.
+            filters.append(Threat.status != "false_positive")
+            filters.append(or_(
+                Threat.action_taken.in_(["QUARANTINE", "QUARANTINED"]),
+                Threat.status == "quarantined",
+            ))
         else:
             filters.append(Threat.status == status)
 
