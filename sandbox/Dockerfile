@@ -71,6 +71,7 @@ RUN mkdir -p /opt/novnc/utils/websockify && \
 # himaya.html embeds the noVNC core RFB client full-screen with no toolbar/logo.
 # It becomes the default landing page so vnc.html (and its noVNC logo) is bypassed.
 COPY himaya_logo.png /opt/novnc/himaya_logo.png
+COPY himaya_favicon.png /opt/novnc/himaya_favicon.png
 COPY himaya.html /opt/novnc/himaya.html
 RUN cp /opt/novnc/himaya.html /opt/novnc/index.html && \
     cp /opt/novnc/himaya_logo.png /usr/share/pixmaps/himaya_logo.png

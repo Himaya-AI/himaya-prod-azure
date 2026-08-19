@@ -53,6 +53,106 @@ Respond ONLY with a valid JSON object matching this exact schema (no markdown, n
 Base your analysis on the actual threat indicators, risk scores, and AI explanation provided. For CLEAN emails, return low scores with empty IOCs. For high-risk emails, include realistic IOCs and MITRE techniques matching the threat type."""
 
 
+def _verdict_from_detonation(detonation_results: list) -> dict:
+    """
+    Derive a DETERMINISTIC verdict from the real detonation signals — redirect
+    chains, credential/login forms, phishing keywords, brand spoofing, automatic
+    downloads and the per-URL detonation risk score.
+
+    This is the authoritative floor for the sandbox verdict: even when the LLM
+    reasoning layer is unavailable (e.g. provider outage / no credits), hard
+    detonation evidence must still translate into a real verdict instead of a
+    blind INCONCLUSIVE. When the LLM IS available its narrative is kept, but it
+    can never downgrade the verdict/score below what was actually observed.
+    """
+    from urllib.parse import urlparse
+    score = 0
+    domains: set = set()
+    urls: list = []
+    indicators: list = []
+    cred_harvest = brand_spoof = multi_redirect = downloads = ran = False
+
+    for dr in detonation_results or []:
+        if getattr(dr, "error", ""):
+            continue
+        ran = True
+        score = max(score, int(getattr(dr, "detonation_risk_score", 0) or 0))
+        chain = list(getattr(dr, "redirect_chain", []) or [])
+        final_url = getattr(dr, "final_url", "") or getattr(dr, "url", "")
+        if final_url:
+            urls.append(final_url)
+        for u in [getattr(dr, "url", "")] + chain + [final_url]:
+            if isinstance(u, str) and u.startswith("http"):
+                try:
+                    host = urlparse(u).hostname
+                    if host:
+                        domains.add(host)
+                except Exception:
+                    pass
+        if getattr(dr, "requests_credentials", False) or getattr(dr, "has_password_field", False) or getattr(dr, "has_login_form", False):
+            cred_harvest = True
+        if getattr(dr, "brand_spoofing_detected", None):
+            brand_spoof = True
+        if len(chain) > 1:
+            multi_redirect = True
+        if getattr(dr, "triggers_download", False):
+            downloads = True
+        indicators.extend(getattr(dr, "risk_indicators", []) or [])
+        indicators.extend(f"phishing_keyword:{k}" for k in (getattr(dr, "phishing_keywords_found", []) or []))
+
+    if cred_harvest:
+        indicators.append("credential_harvesting_form")
+    if brand_spoof:
+        indicators.append("brand_spoofing")
+    if multi_redirect:
+        indicators.append("multi_hop_redirect")
+
+    if brand_spoof or score >= 70:
+        verdict, confidence = "MALICIOUS", 0.85
+    elif cred_harvest or downloads or score >= 40:
+        verdict, confidence = "SUSPICIOUS", 0.7
+    elif multi_redirect:
+        verdict, confidence = "SUSPICIOUS", 0.55
+    elif ran:
+        verdict, confidence = "CLEAN", 0.5
+    else:
+        verdict, confidence = "INCONCLUSIVE", 0.3
+
+    if not ran:
+        summary = "No URLs or attachments were available to detonate, so no behavioural signals were observed."
+    else:
+        bits = []
+        if cred_harvest:
+            bits.append("a credential-harvesting login form")
+        if brand_spoof:
+            bits.append("brand impersonation")
+        if multi_redirect:
+            bits.append("a multi-hop redirect chain")
+        if downloads:
+            bits.append("an automatic file download")
+        kw = sorted({i.split(":", 1)[1] for i in indicators if i.startswith("phishing_keyword:")})
+        if kw:
+            bits.append("phishing keywords (" + ", ".join(kw[:5]) + ")")
+        detail = "; ".join(bits) if bits else "no high-risk page behaviour"
+        summary = (
+            f"Detonation observed {detail}. Highest detonation risk score {score}/100 "
+            f"across {len(urls)} destination(s) spanning {len(domains)} domain(s)."
+        )
+
+    return {
+        "verdict": verdict,
+        "risk_score": score if ran else 0,
+        "confidence": confidence,
+        "summary_en": summary,
+        "domains": sorted(domains),
+        "urls": urls,
+        "indicators": sorted(set(indicators)),
+        "network_activity": ran,
+        "downloads": downloads,
+        "ran": ran,
+    }
+
+
 async def _run_sandbox_analysis(job_id: str, org_id: str, threat_id: str, target: str, job_type: str):
     """Background task: analyse threat with LLM and store result in Redis."""
     import os
@@ -170,6 +270,11 @@ async def _run_sandbox_analysis(job_id: str, org_id: str, threat_id: str, target
         if detonation_summary:
             threat_context += f"\n\nURL DETONATION FINDINGS:{detonation_summary}"
 
+        # Deterministic signal-based verdict — authoritative floor used both when the
+        # LLM reasoning layer is unavailable AND to stop the LLM downgrading below
+        # hard evidence. (redirects, credential forms, hashes/keywords, downloads.)
+        sig = _verdict_from_detonation(detonation_results)
+
         # Call LLM
         result_json = None
         prompt = SANDBOX_PROMPT.format(threat_context=threat_context)
@@ -221,18 +326,38 @@ async def _run_sandbox_analysis(job_id: str, org_id: str, threat_id: str, target
                 logger.warning(f"Sandbox OpenAI failed: {_oe}")
 
         if not result_json:
+            # LLM reasoning unavailable — derive the verdict from the ACTUAL
+            # detonation signals instead of a blind INCONCLUSIVE. Only truly
+            # signal-less runs (nothing to detonate) stay inconclusive.
             result_json = {
-                "verdict": "INCONCLUSIVE",
-                "risk_score": 50,
-                "confidence": 0.3,
-                "behavior_summary_en": "Sandbox analysis could not complete due to a temporary service error. Please retry.",
-                "behavior_summary_ar": "تعذّر إكمال تحليل بيئة الاختبار بسبب خطأ مؤقت في الخدمة. يُرجى المحاولة مرة أخرى.",
-                "iocs": {"ips": [], "domains": [], "urls": [], "files": []},
-                "mitre_techniques": [],
-                "network_activity": False,
+                "verdict": sig["verdict"],
+                "risk_score": sig["risk_score"] if sig["ran"] else 50,
+                "confidence": sig["confidence"],
+                "behavior_summary_en": sig["summary_en"] + (
+                    "" if sig["ran"] else " Sandbox reasoning layer is temporarily unavailable — retry for a full narrative."
+                ),
+                "behavior_summary_ar": (
+                    "تم اشتقاق الحكم من إشارات التفجير الفعلية (طبقة التحليل اللغوي غير متاحة مؤقتاً)."
+                    if sig["ran"] else
+                    "تعذّر إكمال تحليل بيئة الاختبار مؤقتاً ولا توجد روابط أو مرفقات للتفجير. يُرجى المحاولة مرة أخرى."
+                ),
+                "iocs": {"ips": [], "domains": sig["domains"], "urls": sig["urls"], "files": []},
+                "mitre_techniques": ["T1566.002"] if "credential_harvesting_form" in sig["indicators"] else [],
+                "network_activity": sig["network_activity"],
                 "persistence_attempted": False,
-                "data_exfiltration_attempted": False,
+                "data_exfiltration_attempted": sig["downloads"],
+                "signal_indicators": sig["indicators"],
+                "degraded": True,
             }
+        elif sig["ran"]:
+            # LLM produced a narrative — keep it, but FLOOR the verdict/score with
+            # the hard detonation evidence so it can't be downgraded below reality.
+            _rank = {"CLEAN": 0, "INCONCLUSIVE": 1, "SUSPICIOUS": 2, "MALICIOUS": 3}
+            if _rank.get(sig["verdict"], 0) > _rank.get(result_json.get("verdict", "INCONCLUSIVE"), 0):
+                result_json["verdict"] = sig["verdict"]
+            result_json["risk_score"] = max(int(result_json.get("risk_score", 0) or 0), sig["risk_score"])
+            _merged = set(result_json.get("signal_indicators", []) or []) | set(sig["indicators"])
+            result_json["signal_indicators"] = sorted(_merged)
 
         result_json["job_id"] = job_id
         result_json["threat_id"] = threat_id
