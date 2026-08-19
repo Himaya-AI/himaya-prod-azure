@@ -190,7 +190,11 @@ async def _delta_sync_integration_snap(db, redis, integration):
         from backend.services.baseline_ingestion import _refresh_m365_token
         # Pass the per-integration customer tenant so the app-only (client_credentials)
         # path can mint a tenant-wide token; falls back to delegated if not consented.
-        new_token = await _refresh_m365_token(refresh_token, integration.get("tenant_id"))
+        # Azure AD accepts a verified domain (e.g. contoso.onmicrosoft.com) as the
+        # tenant identifier, so use org_domain when the GUID hasn't been stored yet
+        # (older integrations connected before tenant_id capture was added).
+        _m365_tenant = integration.get("tenant_id") or integration.get("org_domain")
+        new_token = await _refresh_m365_token(refresh_token, _m365_tenant)
         if new_token:
             access_token = new_token
             # Note: token is refreshed in-memory for this sync cycle.
@@ -971,7 +975,7 @@ async def _delta_sync_integration_snap(db, redis, integration):
 
                     if _msg_resp.status_code == 401:
                         # Token expired mid-scan — refresh and retry
-                        _new_tok = await _refresh_m365_token(refresh_token, integration.get("tenant_id"))
+                        _new_tok = await _refresh_m365_token(refresh_token, integration.get("tenant_id") or integration.get("org_domain"))
                         if _new_tok:
                             access_token = _new_tok
                             headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
