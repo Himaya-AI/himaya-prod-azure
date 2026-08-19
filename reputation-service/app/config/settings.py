@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,11 @@ class Settings:
     alienvault_otx_api_key: str | None
     urlscan_api_key: str | None
     abusech_api_key: str | None
+    tranco_top1m_path: Path
+    whois_record_ttl_seconds: int
+    whois_negative_ttl_seconds: int
+    whois_max_workers: int
+    whois_socket_timeout_seconds: int
 
 
 def _optional_env(name: str) -> str | None:
@@ -61,4 +67,47 @@ def load_settings() -> Settings:
         alienvault_otx_api_key=_optional_env("ALIENVAULT_OTX_API_KEY"),
         urlscan_api_key=_optional_env("URLSCAN_API_KEY"),
         abusech_api_key=_optional_env("ABUSECH_API_KEY"),
+        tranco_top1m_path=Path(
+            os.getenv(
+                "REPUTATION_TRANCO_TOP1M_PATH",
+                str(SERVICE_ROOT / "app" / "config" / "tranco_W37V9-1m.csv" / "top-1m.csv"),
+            )
+        ),
+        # A domain's creation date never changes, so this can be long.
+        whois_record_ttl_seconds=_int_env("WHOIS_RECORD_TTL_SECONDS", 30 * 24 * 60 * 60),
+        # Short TTL for a failed/unanswered lookup so it self-heals quickly.
+        whois_negative_ttl_seconds=_int_env("WHOIS_NEGATIVE_TTL_SECONDS", 30 * 60),
+        whois_max_workers=_int_env("WHOIS_MAX_WORKERS", 4),
+        whois_socket_timeout_seconds=_int_env("WHOIS_SOCKET_TIMEOUT_SECONDS", 5),
     )
+
+
+@lru_cache(maxsize=2)
+def load_tranco_rank_index(csv_path: str) -> dict[str, int]:
+    """
+    Load Tranco top-1m CSV into a {domain -> rank} lookup map.
+
+    Expected format per line: rank,domain
+    """
+    path = Path(csv_path)
+    ranks: dict[str, int] = {}
+
+    if not path.exists():
+        return ranks
+
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            raw = line.strip()
+            if not raw or "," not in raw:
+                continue
+            rank_part, domain_part = raw.split(",", 1)
+            domain = domain_part.strip().lower().rstrip(".")
+            if not domain:
+                continue
+            try:
+                rank = int(rank_part)
+            except ValueError:
+                continue
+            ranks[domain] = rank
+
+    return ranks

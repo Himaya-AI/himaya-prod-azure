@@ -13,7 +13,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 _GRAPH_SERVICE_URL     = os.getenv("GRAPH_SERVICE_URL", "http://graph-service:8000")
-_GRAPH_SERVICE_TIMEOUT = float(os.getenv("GRAPH_SERVICE_TIMEOUT", "10"))
+# /evaluate often includes a graph LLM (~8–15s). 10s caused ReadTimeout → fallback score 100.
+_GRAPH_SERVICE_TIMEOUT = float(os.getenv("GRAPH_SERVICE_TIMEOUT", "30"))
 
 
 class GraphClient:

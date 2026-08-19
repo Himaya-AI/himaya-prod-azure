@@ -68,14 +68,11 @@ def run_async(coro):
 @celery_app.task(name="process_email_task", bind=True, max_retries=3)
 def process_email_task(self, email_data: dict, org_id: str):
     """Process an email through the full threat detection pipeline."""
-    from backend.database import AsyncSessionLocal
     from backend.services.email_processor import process_email
 
     async def _run():
-        async with AsyncSessionLocal() as db:
-            threat = await process_email(email_data, org_id, db)
-            await db.commit()
-            return str(threat.id) if threat else None
+        threat = await process_email(email_data, org_id)
+        return str(threat.id) if threat else None
 
     try:
         threat_id = run_async(_run())

@@ -817,10 +817,7 @@ async def _ingest_google(
                             # so a failure on one email never poisons the transaction for others
                             try:
                                 from backend.services.email_processor import process_email
-                                from backend.database import AsyncSessionLocal
-                                async with AsyncSessionLocal() as email_db:
-                                    threat = await process_email(email_data, org_id, email_db)
-                                    await email_db.commit()
+                                threat = await process_email(email_data, org_id)
                                 # Retroactive quarantine — move message out of inbox if high-risk
                                 # Pass access_token as fallback if SA (domain-wide delegation) isn't configured
                                 if threat and threat.action_taken in ("QUARANTINED", "QUARANTINE", "BLOCK_DELETE"):

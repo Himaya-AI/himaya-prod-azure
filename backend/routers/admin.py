@@ -10,7 +10,7 @@ import uuid
 import smtplib
 import random
 import string
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -936,6 +936,25 @@ class ForcePasswordResetRequest(BaseModel):
     email: str
     new_password: str
 
+
+class BenchmarkThreatItem(BaseModel):
+    label: Optional[str] = None
+    ground_truth_threat_type: Optional[str] = None
+    sender: str
+    recipient: str
+    subject: str
+    body: str
+    message_id: Optional[str] = None
+    detected_at: Optional[str] = None
+    reply_to: Optional[str] = None
+    auth_results: Optional[dict[str, str]] = None
+    attachments: Optional[list] = None
+
+
+class BenchmarkThreatRequest(BaseModel):
+    emails: list[BenchmarkThreatItem]
+    concurrency: int = 8
+
 @router.post("/maintenance/clean-triage-reasoning", dependencies=[Depends(verify_admin_key)])
 async def clean_triage_reasoning(db: AsyncSession = Depends(get_db)):
     """
@@ -1031,191 +1050,177 @@ async def inject_test_threats(
     def _pick(i):
         return recipients[i % len(recipients)]
 
+    current_email_date = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+
     test_payloads = [
         {
-            "label": "MALWARE — macro attachment lure",
+            "label": "FALSE POSITIVE REGRESSION — legit Snowflake trial reminder",
             "data": {
-                "message_id": f"test-malware-{_uuid.uuid4().hex[:8]}@gulf-capital-investments.co",
-                "sender": "ahmed.alrashidi@gulf-capital-investments.co",
+                "message_id": f"test-snowflake-legit-{_uuid.uuid4().hex[:8]}@snowflake.net",
+                "sender": "no-reply@snowflake.net",
                 "recipient": _pick(0),
-                "subject": "1 Q1 2026 Financial Report — Please Review Before 9 AM",
+                "subject": "Snowflake trial reminder: review billing settings",
                 "body": (
-                    "Dear Colleague, Please find attached the Q1 2026 Financial Report. "
-                    "The document requires macros to be enabled for the interactive charts. "
-                    "Kindly open and review Q1_Financial_Report_2026.xlsm before the 9 AM meeting. "
-                    "The password to unlock the protected sections is: Qfin2026! "
-                    "This message was sent from a secure external server."
+                    "Hello,\n\n"
+                    "This is a reminder that your Snowflake trial for himaya.ai is approaching its end date. "
+                    "To continue after trial, review your organization billing settings in your Snowflake account.\n\n"
+                    "Account console: https://app.snowflake.net\n"
+                    "Documentation: https://docs.snowflake.net\n\n"
+                    "If your team has already configured billing, you can ignore this reminder.\n\n"
+                    "Snowflake"
                 ),
                 "html_body": "",
-                "date": "Mon, 14 Apr 2026 04:30:00 +0000",
-                "auth_results": {"spf": "fail", "dkim": "none", "dmarc": "fail", "sender_ip": "197.210.54.88"},
-                "attachments": [
-                    {"filename": "Q1_Financial_Report_2026.xlsm", "mimeType": "application/vnd.ms-excel.sheet.macroEnabled.12", "size": 89432}
-                ],
+                "date": current_email_date,
+                "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "192.0.2.44"},
+                "attachments": [],
             },
         },
+        {
+            "label": "FALSE POSITIVE REGRESSION — legit tryapollo.io payment reminder",
+            "data": {
+                "message_id": f"test-tryapollo-payment-{_uuid.uuid4().hex[:8]}@tryapollo.io",
+                "sender": "support@tryapollo.io",
+                "recipient": _pick(1),
+                "subject": "Payment reminder: Apollo subscription invoice due soon",
+                "body": (
+                    "Hello,\n\n"
+                    "This is a billing reminder for your Apollo workspace associated with himaya.ai. "
+                    "Your upcoming invoice is due soon, so please review your payment method and billing details.\n\n"
+                    "Billing portal: https://app.apollo.io/settings/billing\n"
+                    "Support: https://www.tryapollo.io/contact\n\n"
+                    "If your finance team has already completed payment, no further action is required.\n\n"
+                    "Apollo Billing Team"
+                ),
+                "html_body": "",
+                "date": current_email_date,
+                "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "198.51.100.54"},
+                "attachments": [],
+            },
+        }
         # {
-        #     "label": "ACCOUNT TAKEOVER — fake Microsoft security alert",
+        #     "label": "MALWARE — macro attachment lure",
         #     "data": {
-        #         "message_id": f"test-ato-{_uuid.uuid4().hex[:8]}@microsoftonline-alerts.net",
-        #         "sender": "security-noreply@microsoftonline-alerts.net",
-        #         "recipient": _pick(1),
-        #         "subject": "1 URGENT: Unusual sign-in to your Microsoft 365 account from Nigeria",
-        #         "body": (
-        #             "We detected a sign-in attempt to your Microsoft 365 account from an unrecognized device. "
-        #             "Location: Lagos, Nigeria. IP Address: 197.210.54.121. "
-        #             "If this was not you, your account may be compromised. You must verify your identity within 24 hours "
-        #             "or your account will be suspended. Click here to secure your account: "
-        #             "http://microsoft-secure-verify.account-protection-now.com/verify?token=eyJhbGciOiJSUzI1NiJ9 "
-        #             "Microsoft Corporation | One Microsoft Way, Redmond WA"
-        #         ),
-        #         "html_body": "",
-        #         "date": "Mon, 14 Apr 2026 04:30:00 +0000",
-        #         "auth_results": {"spf": "fail", "dkim": "fail", "dmarc": "fail", "sender_ip": "185.220.101.42"},
-        #         "attachments": [],
-        #     },
-        # },
-        # {
-        #     "label": "CREDENTIAL HARVESTING — fake Google storage warning",
-        #     "data": {
-        #         "message_id": f"test-cred-{_uuid.uuid4().hex[:8]}@accounts-google-portal.xyz",
-        #         "sender": "no-reply@workspace-google-notification.com",
+        #         "message_id": f"test-malware-{_uuid.uuid4().hex[:8]}@gulf-capital-investments.co",
+        #         "sender": "ahmed.alrashidi@gulf-capital-investments.co",
         #         "recipient": _pick(2),
-        #         "subject": "1 Action Required: Your Google Workspace account storage is 95% full",
+        #         "subject": "1 Q1 2026 Financial Report — Please Review Before 9 AM",
         #         "body": (
-        #             "Your Google Workspace account storage has reached 95% capacity. "
-        #             "To avoid email delivery failures and data loss, you must verify your account and expand your storage. "
-        #             "Accounts not verified within 48 hours will have incoming emails automatically rejected. "
-        #             "Verify your account here: "
-        #             "http://google-workspace-storage-verify.accounts-google-portal.xyz/auth?redirect=storage&email=user@himaya.ai "
-        #             "Action required by: April 16, 2026. Google LLC, 1600 Amphitheatre Parkway."
+        #             "Dear Colleague, Please find attached the Q1 2026 Financial Report. "
+        #             "The document requires macros to be enabled for the interactive charts. "
+        #             "Kindly open and review Q1_Financial_Report_2026.xlsm before the 9 AM meeting. "
+        #             "The password to unlock the protected sections is: Qfin2026! "
+        #             "This message was sent from a secure external server."
         #         ),
         #         "html_body": "",
-        #         "date": "Mon, 14 Apr 2026 04:30:00 +0000",
-        #         "auth_results": {"spf": "fail", "dkim": "none", "dmarc": "fail", "sender_ip": "91.108.4.200"},
-        #         "attachments": [],
-        #     },
-        # },
-        # {
-        #     "label": "MALWARE — known-hash ransomware dropper",
-        #     "data": {
-        #         "message_id": f"test-ransomware-{_uuid.uuid4().hex[:8]}@invoice-delivery-portal.net",
-        #         "sender": "billing@invoice-delivery-portal.net",
-        #         "recipient": _pick(3),
-        #         "subject": "1 Invoice #INV-20260628 — Action Required",
-        #         "body": (
-        #             "Please find attached your invoice INV-20260628 for services rendered in June 2026. "
-        #             "Kindly review and process the payment at your earliest convenience. "
-        #             "The document is password protected for security — password: INV2026. "
-        #             "For queries contact billing@invoice-delivery-portal.net. "
-        #             "This is an automated message from our invoicing system."
-        #         ),
-        #         "html_body": "",
-        #         "date": "Mon, 28 Jun 2026 09:15:00 +0000",
-        #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "91.108.56.179"},
+        #         "date": current_email_date,
+        #         "auth_results": {"spf": "fail", "dkim": "none", "dmarc": "fail", "sender_ip": "197.210.54.88"},
         #         "attachments": [
-        #             {
-        #                 "filename": "Invoice_INV-20260628.pdf.exe",
-        #                 "mimeType": "application/octet-stream",
-        #                 "size": 412680,
-        #                 "sha256": "ad7b9eaa692cbfe6e256b632603baf378c58c06d5f742e55bc9b751b8c022e2f",
-        #             }
+        #             {"filename": "Q1_Financial_Report_2026.xlsm", "mimeType": "application/vnd.ms-excel.sheet.macroEnabled.12", "size": 89432}
         #         ],
         #     },
         # },
         # {
-        #     "label": "PHISHING / BEC — CEO impersonation wire fraud",
+        #     "label": "FALSE POSITIVE REGRESSION — legit Google Workspace billing notification",
         #     "data": {
-        #         "message_id": f"test-bec-{_uuid.uuid4().hex[:8]}@himaya-tech-group.com",
-        #         "sender": "adnan.ahmed.ceo@himaya-tech-group.com",
+        #         "message_id": f"test-gw-legit-{_uuid.uuid4().hex[:8]}@google.com",
+        #         "sender": "workspace-noreply@google.com",
         #         "recipient": _pick(3),
-        #         "subject": "1 Urgent — Confidential Wire Transfer Request",
+        #         "subject": "Payment reminder: Google Workspace Business Standard for himaya.ai",
         #         "body": (
-        #             "Hi, I'm currently in an urgent board meeting and I need your help with something sensitive. "
-        #             "We are finalizing an acquisition deal and I need you to process a wire transfer "
-        #             "of USD $47,500 to our legal escrow account before market close today. "
-        #             "This is time-critical and must be kept confidential until the deal is announced. "
-        #             "Please initiate the transfer to: Bank: Emirates NBD, Account: Argent Legal Holdings Ltd, "
-        #             "IBAN: AE070331234567890123456, Reference: PROJ-ACQ-2026-Q2. "
-        #             "Confirm by reply once done. Do not discuss this with anyone else — legal compliance "
-        #             "requires strict confidentiality. Adnan Ahmed, CEO Himaya Technologies"
+        #             "Hello,\n\n"
+        #             "This is a billing reminder for your Google Workspace Business Standard subscription for himaya.ai. "
+        #             "Please review your current billing profile and invoices in the Google Admin console.\n\n"
+        #             "Admin console: https://admin.google.com/ac/billing\n"
+        #             "Billing help: https://support.google.com/a/answer/2523116\n\n"
+        #             "If your payment method was recently updated, no further action is required.\n\n"
+        #             "The Google Workspace Team"
         #         ),
         #         "html_body": "",
-        #         "date": "Mon, 14 Apr 2026 04:30:00 +0000",
-        #         "auth_results": {"spf": "fail", "dkim": "fail", "dmarc": "fail", "sender_ip": "104.21.34.56"},
+        #         "date": current_email_date,
+        #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "209.85.220.69"},
         #         "attachments": [],
         #     },
         # },
+        # {
+        #     "label": "FALSE POSITIVE REGRESSION — legit Google Workspace payment failure notice",
+        #     "data": {
+        #         "message_id": f"test-gw-payment-failure-{_uuid.uuid4().hex[:8]}@google.com",
+        #         "sender": "workspace-noreply@google.com",
+        #         "recipient": _pick(4),
+        #         "subject": "Payment failure: Google Workspace Business Standard for himaya.ai",
+        #         "body": (
+        #             "Update payment method to avoid suspension\n\n"
+        #             "Don't lose access to Google Workspace Business Standard\n\n"
+        #             "The last payment for your Google Workspace Business Standard subscription "
+        #             "for himaya.ai failed. This indicates that there's something wrong with your payment method.\n\n"
+        #             "To prevent the suspension of all services for all users on September 3, 2026:\n"
+        #             "- Contact your bank or credit card company to resolve the issue with your payment method.\n"
+        #             "- Sign in to your Google Admin console and click Billing to retry or update your payment method and pay your outstanding balance.\n\n"
+        #             "See complete instructions: https://support.google.com/a/answer/2523116?utm_source=9055414&utm_medium=email\n"
+        #             "Support team: https://support.google.com/a/answer/1047213?utm_source=9055414&utm_medium=email\n"
+        #             "Sign in: https://admin.google.com\n\n"
+        #             "Sincerely,\n"
+        #             "The Google Workspace Team"
+        #         ),
+        #         "html_body": "",
+        #         "date": current_email_date,
+        #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "209.85.220.69"},
+        #         "attachments": [],
+        #     },
+        # },
+        # {
+        #     "label": "FALSE POSITIVE REGRESSION — legit OpenAI product update",
+        #     "data": {
+        #         "message_id": f"test-openai-legit-{_uuid.uuid4().hex[:8]}@openai.com",
+        #         "sender": "noreply@openai.com",
+        #         "recipient": _pick(5),
+        #         "subject": "OpenAI account update: new features available in ChatGPT",
+        #         "body": (
+        #             "Hello,\n\n"
+        #             "We have introduced new product updates in ChatGPT and the OpenAI platform. "
+        #             "You can review release notes and account settings from your standard dashboard links below.\n\n"
+        #             "ChatGPT: https://chatgpt.com\n"
+        #             "OpenAI platform dashboard: https://platform.openai.com\n"
+        #             "Release notes: https://help.openai.com\n\n"
+        #             "No immediate action is required for your account.\n\n"
+        #             "OpenAI"
+        #         ),
+        #         "html_body": "",
+        #         "date": current_email_date,
+        #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "198.51.100.25"},
+        #         "attachments": [],
+        #     },
+        # },
+        # {
+        #     "label": "FALSE POSITIVE REGRESSION — legit Microsoft 'Default Directory' verification code (previously misclassified as Himaya-Suspicious)",
+        #     "data": {
+        #         "message_id": f"test-fp-msft-verify-{_uuid.uuid4().hex[:8]}@accountprotection.microsoft.com",
+        #         "sender": "account-security-noreply@accountprotection.microsoft.com",
+        #         "recipient": _pick(6),
+        #         "subject": "Your Default Directory verification code",
+        #         "body": (
+        #             "Default Directory\n\n"
+        #             "Account verification code\n\n"
+        #             "To access Default Directory's apps and resources, please use the code below "
+        #             "for account verification. The code will only work for 30 minutes.\n\n"
+        #             "Account verification code:\n"
+        #             "29682845\n\n"
+        #             "If you didn't request a code, you can ignore this email.\n\n"
+        #             "Privacy Statement\n"
+        #             "Microsoft Corporation, One Microsoft Way, Redmond, WA 98052"
+        #         ),
+        #         "html_body": "",
+        #         "date": current_email_date,
+        #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "40.92.90.104"},
+        #         "attachments": [],
+        #     },
+        # }
     ]
-
-    # Seed prior email history for the trusted sender so the trust gate fires
-    from backend.services.graph_client import graph_client as _gc
-    _trusted_sender = "alice@trusted-corp.com"
-    _trusted_recipient = _pick(0)
-    for _i in range(6):
-        await _gc.write({
-            "message_id": f"seed-trust-gate-{_i}@trusted-corp.com",
-            "sender": _trusted_sender,
-            "sender_domain": "trusted-corp.com",
-            "recipient": _trusted_recipient,
-            "org_id": org_id,
-            "subject_hash": "trusted-seed",
-            "received_at": "2025-01-01T00:00:00Z",
-            "llm_verdict": "CLEAN",
-            "risk_score": 0,
-            "threat_type": None,
-        })
-
-    # test_payloads.append({
-    #     "label": "TRUSTED SENDER — LLM skip gate (trust score ≥ 65)",
-    #     "data": {
-    #         "message_id": f"test-trusted-{_uuid.uuid4().hex[:8]}@trusted-corp.com",
-    #         "sender": _trusted_sender,
-    #         "recipient": _trusted_recipient,
-    #         "subject": "1 Q2 Budget Review — Agenda for Tomorrow",
-    #         "body": (
-    #             "Hi team, please find the agenda for tomorrow's Q2 budget review attached. "
-    #             "We will be covering departmental spend, headcount planning, and the updated "
-    #             "capex forecast. Looking forward to seeing everyone at 10 AM. "
-    #             "Alice Thornton | Finance Director, Trusted Corp"
-    #         ),
-    #         "html_body": "",
-    #         "date": "Mon, 27 Jun 2026 08:00:00 +0000",
-    #         "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "52.84.10.1"},
-    #         "attachments": [],
-    #     },
-    # })
-
-    test_payloads.append({
-        "label": "FALSE POSITIVE REGRESSION — legit Microsoft 'Default Directory' verification code "
-                 "(previously misclassified as Himaya-Suspicious)",
-        "data": {
-            "message_id": f"test-fp-msft-verify-{_uuid.uuid4().hex[:8]}@accountprotection.microsoft.com",
-            "sender": "account-security-noreply@accountprotection.microsoft.com",
-            "recipient": _pick(0),
-            "subject": "Your Default Directory verification code",
-            "body": (
-                "Default Directory\n\n"
-                "Account verification code\n\n"
-                "To access Default Directory's apps and resources, please use the code below "
-                "for account verification. The code will only work for 30 minutes.\n\n"
-                "Account verification code:\n"
-                "29682845\n\n"
-                "If you didn't request a code, you can ignore this email.\n\n"
-                "Privacy Statement\n"
-                "Microsoft Corporation, One Microsoft Way, Redmond, WA 98052"
-            ),
-            "html_body": "",
-            "date": "Tue, 07 Jul 2026 13:37:00 +0000",
-            "auth_results": {"spf": "pass", "dkim": "pass", "dmarc": "pass", "sender_ip": "40.92.90.104"},
-            "attachments": [],
-        },
-    })
 
     results = []
     for tp in test_payloads:
         try:
-            threat = await process_email(tp["data"], org_id=org_id, db=db)
+            threat = await process_email(tp["data"], org_id=org_id)
             results.append({
                 "label": tp["label"],
                 "recipient": tp["data"]["recipient"],
@@ -1229,6 +1234,122 @@ async def inject_test_threats(
             results.append({"label": tp["label"], "error": str(_e)[:200]})
 
     return {"injected": len([r for r in results if "error" not in r and r.get("threat_id")]), "results": results}
+
+
+@router.post("/orgs/{org_id}/benchmark-test-threats", dependencies=[Depends(verify_admin_key)])
+async def benchmark_test_threats(
+    org_id: str,
+    req: BenchmarkThreatRequest,
+):
+    import asyncio as _asyncio
+    import time as _time
+    from collections import Counter as _Counter, defaultdict as _defaultdict
+
+    from backend.services.email_processor import process_email
+
+    def _canonical_label(label: str | None) -> str | None:
+        if not label:
+            return None
+        normalised = label.strip().upper()
+        if normalised in {"SAFE", "BENIGN", "CLEAN"}:
+            return "CLEAN"
+        if normalised in {"DLP_DRAFT"}:
+            return None
+        return normalised
+
+    def _build_email_payload(item: BenchmarkThreatItem) -> dict:
+        payload = {
+            "message_id": item.message_id,
+            "sender": item.sender,
+            "recipient": item.recipient,
+            "subject": item.subject,
+            "body": item.body,
+            "date": item.detected_at,
+            "reply_to": item.reply_to,
+            "auth_results": item.auth_results,
+            "attachments": item.attachments or [],
+        }
+        return {k: v for k, v in payload.items() if v is not None}
+
+    concurrency = max(1, min(req.concurrency, 32))
+    semaphore = _asyncio.Semaphore(concurrency)
+
+    async def _run_item(item: BenchmarkThreatItem) -> dict:
+        started_at = _time.perf_counter()
+        async with semaphore:
+            try:
+                threat = await process_email(
+                    _build_email_payload(item),
+                    org_id=org_id,
+                    skip_dedup=True,
+                )
+                latency_ms = (_time.perf_counter() - started_at) * 1000
+                predicted = threat.threat_type if threat else "SKIPPED"
+                expected = _canonical_label(item.ground_truth_threat_type)
+                evaluated = expected is not None
+                return {
+                    "label": item.label,
+                    "ground_truth_threat_type": expected,
+                    "predicted_threat_type": predicted,
+                    "match": bool(evaluated and predicted == expected),
+                    "evaluated": evaluated,
+                    "recipient": item.recipient,
+                    "sender": item.sender,
+                    "subject": item.subject,
+                    "threat_id": str(threat.id) if threat else None,
+                    "risk_score": threat.risk_score if threat else 0,
+                    "action_taken": threat.action_taken if threat else "NONE",
+                    "status": threat.status if threat else "skipped",
+                    "llm_reasoning": threat.ai_explanation_en if threat else None,
+                    "llm_reasoning_ar": threat.ai_explanation_ar if threat else None,
+                    "latency_ms": round(latency_ms, 2),
+                }
+            except Exception as exc:
+                latency_ms = (_time.perf_counter() - started_at) * 1000
+                return {
+                    "label": item.label,
+                    "ground_truth_threat_type": _canonical_label(item.ground_truth_threat_type),
+                    "predicted_threat_type": "ERROR",
+                    "match": False,
+                    "evaluated": _canonical_label(item.ground_truth_threat_type) is not None,
+                    "recipient": item.recipient,
+                    "sender": item.sender,
+                    "subject": item.subject,
+                    "error": str(exc)[:300],
+                    "llm_reasoning": None,
+                    "llm_reasoning_ar": None,
+                    "latency_ms": round(latency_ms, 2),
+                }
+
+    results = await _asyncio.gather(*[_run_item(item) for item in req.emails])
+    evaluated_results = [r for r in results if r.get("evaluated")]
+    correct = sum(1 for r in evaluated_results if r.get("match"))
+    mismatches = [r for r in evaluated_results if not r.get("match")]
+
+    by_label: dict[str, dict[str, int]] = _defaultdict(lambda: {"total": 0, "correct": 0})
+    for row in evaluated_results:
+        gold = row["ground_truth_threat_type"] or "UNKNOWN"
+        by_label[gold]["total"] += 1
+        if row.get("match"):
+            by_label[gold]["correct"] += 1
+
+    latencies = [r["latency_ms"] for r in results if isinstance(r.get("latency_ms"), (int, float))]
+    latencies_sorted = sorted(latencies)
+    p95 = latencies_sorted[min(len(latencies_sorted) - 1, int(round(len(latencies_sorted) * 0.95)) - 1)] if latencies_sorted else 0
+
+    return {
+        "org_id": org_id,
+        "requested": len(req.emails),
+        "evaluated": len(evaluated_results),
+        "correct": correct,
+        "accuracy": (correct / len(evaluated_results)) if evaluated_results else None,
+        "concurrency": concurrency,
+        "avg_latency_ms": (sum(latencies) / len(latencies)) if latencies else 0,
+        "p95_latency_ms": p95,
+        "by_label": by_label,
+        "mismatches": mismatches,
+        "results": results,
+    }
 
 
 @router.post("/orgs/{org_id}/inject-inbox-threats", dependencies=[Depends(verify_admin_key)])

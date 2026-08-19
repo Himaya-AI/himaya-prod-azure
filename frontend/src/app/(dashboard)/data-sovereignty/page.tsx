@@ -372,6 +372,9 @@ export default function DataSovereigntyPage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3b6ef6]/25 to-[#3b6ef6]/5 border border-[#3b6ef6]/25 flex items-center justify-center shadow-lg shadow-[#3b6ef6]/10">
+            <Globe2 size={24} className="text-[#3b6ef6]" />
+          </div>
           <div>
             <h1 className="text-[20px] font-semibold text-[var(--foreground)]">Data Sovereignty</h1>
           </div>

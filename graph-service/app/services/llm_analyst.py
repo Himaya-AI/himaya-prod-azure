@@ -54,7 +54,8 @@ def should_invoke(rule_verdict: dict) -> bool:
         return False                     # hard fact — never override
 
     if method == "insufficient_history":
-        return True                      # rules can't score; LLM can reason forward
+        # Clean-domain newcomers already got a generous baseline; skip LLM.
+        return score < 55
 
     if 35 <= score <= 55:
         return True                      # deterministic ambiguous zone

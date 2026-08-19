@@ -11,8 +11,10 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.database import AsyncSessionLocal
 from backend.models.db_models import Threat, ComplianceEvidence
 from backend.services.reputation_client import analyze_email_reputation
 from backend.services.graph_client import graph_client
@@ -364,7 +366,13 @@ def _map_compliance_controls(threat_type: str) -> tuple:
     return mapping.get(threat_type, (["3.3.3"], ["2-7-1"]))
 
 
-async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Optional[Threat]:
+async def process_email(
+    email_data: dict,
+    org_id: str,
+    db: Optional[AsyncSession] = None,
+    *,
+    skip_dedup: bool = False,
+) -> Optional[Threat]:
     """
     Full email processing pipeline:
     1. Extract fields
@@ -409,66 +417,58 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
             from datetime import timezone as _store_tz
             email_received_at = email_received_at.astimezone(_store_tz.utc).replace(tzinfo=None)
 
-        # ── Dedup check ──────────────────────────────────────────────────────
-        # Skip re-processing UNLESS the user moved the email back to inbox after quarantine.
-        # If the existing record is 'false_positive', always skip (user explicitly said it's OK).
-        # If the existing record was quarantined/spam and is now 'resolved', re-quarantine it.
-        if message_id and recipient_email:
+        # ── Short DB visit A: dedup + VIP, then release the connection ────────
+        is_vip_recipient = False
+        _org_uuid = uuid.UUID(org_id) if isinstance(org_id, str) else org_id
+        async with AsyncSessionLocal() as pre_db:
+            if message_id and recipient_email and not skip_dedup:
+                try:
+                    _existing = await pre_db.execute(
+                        select(Threat.id, Threat.status, Threat.action_taken, Threat.false_positive).where(
+                            Threat.email_message_id == message_id,
+                            Threat.org_id == _org_uuid,
+                            Threat.recipient_email == recipient_email,
+                        ).limit(1)
+                    )
+                    _row = _existing.one_or_none()
+                    if _row is not None:
+                        _ex_status = _row[1]
+                        _ex_action = _row[2]
+                        _ex_fp     = _row[3]
+                        if _ex_fp:
+                            logger.debug(f"Dedup: skipping false-positive {message_id} for {recipient_email}")
+                            return None
+                        if _ex_status in ("quarantined", "open", "new"):
+                            logger.debug(f"Dedup: skipping still-quarantined {message_id} for {recipient_email}")
+                            return None
+                        if _ex_action in ("CLEAN", "ALLOW", "DELIVER") or _ex_status in ("resolved", "false_positive") and _ex_action not in ("QUARANTINED", "QUARANTINE", "MARKED_SPAM", "BLOCK_DELETE"):
+                            logger.debug(f"Dedup: skipping already-resolved clean {message_id} for {recipient_email}")
+                            return None
+                        if _ex_action in ("QUARANTINED", "QUARANTINE", "MARKED_SPAM") and _ex_status == "resolved":
+                            logger.info(f"Re-quarantine: {message_id} was released by user, re-processing for {recipient_email}")
+                except Exception as _de:
+                    logger.debug(f"Dedup check failed (non-fatal): {_de}")
+
             try:
-                _existing = await db.execute(
-                    select(Threat.id, Threat.status, Threat.action_taken, Threat.false_positive).where(
-                        Threat.email_message_id == message_id,
-                        Threat.org_id == (uuid.UUID(org_id) if isinstance(org_id, str) else org_id),
-                        Threat.recipient_email == recipient_email,
-                    ).limit(1)
+                from backend.models.db_models import User as _VipUser
+                _vip_check = await pre_db.execute(
+                    select(_VipUser).where(
+                        _VipUser.org_id == _org_uuid,
+                        _VipUser.email == recipient_email,
+                        _VipUser.is_vip.is_(True),
+                    )
                 )
-                _row = _existing.one_or_none()
-                if _row is not None:
-                    _ex_status = _row[1]
-                    _ex_action = _row[2]
-                    _ex_fp     = _row[3]
-                    # Always skip false positives — user confirmed it's benign
-                    if _ex_fp:
-                        logger.debug(f"Dedup: skipping false-positive {message_id} for {recipient_email}")
-                        return None
-                    # Skip if it's still actively quarantined/spam (not yet released)
-                    if _ex_status in ("quarantined", "open", "new"):
-                        logger.debug(f"Dedup: skipping still-quarantined {message_id} for {recipient_email}")
-                        return None
-                    # Skip if it was a clean/low-risk email — no need to re-analyse
-                    if _ex_action in ("CLEAN", "ALLOW", "DELIVER") or _ex_status in ("resolved", "false_positive") and _ex_action not in ("QUARANTINED", "QUARANTINE", "MARKED_SPAM", "BLOCK_DELETE"):
-                        logger.debug(f"Dedup: skipping already-resolved clean {message_id} for {recipient_email}")
-                        return None
-                    # If previously quarantined/spam but now 'resolved' (user moved it back to inbox),
-                    # fall through to re-process — Himaya will re-quarantine it.
-                    if _ex_action in ("QUARANTINED", "QUARANTINE", "MARKED_SPAM") and _ex_status == "resolved":
-                        logger.info(f"Re-quarantine: {message_id} was released by user, re-processing for {recipient_email}")
-                        # Don't return — let the full pipeline run again
-            except Exception as _de:
-                logger.debug(f"Dedup check failed (non-fatal): {_de}")
+                is_vip_recipient = _vip_check.scalar_one_or_none() is not None
+                if is_vip_recipient:
+                    logger.info(f"VIP recipient detected: {recipient_email} — applying stricter analysis")
+                    email_data = {**email_data, "_force_llm": True, "_vip_recipient": True}
+            except Exception:
+                pass
+            await pre_db.commit()
 
         # Authentication headers (SPF/DKIM/DMARC) passed from ingestion
         # Always default to a structured dict (never None) so auth_results is stored in DB
         auth_results = email_data.get("auth_results") or {"spf": "none", "dkim": "none", "dmarc": "none"}
-
-        # Step 1b: Check if recipient is a VIP — affects risk thresholds and analysis strictness
-        is_vip_recipient = False
-        try:
-            from backend.models.db_models import User as _VipUser
-            _vip_check = await db.execute(
-                select(_VipUser).where(
-                    _VipUser.org_id == (uuid.UUID(org_id) if isinstance(org_id, str) else org_id),
-                    _VipUser.email == recipient_email,
-                    _VipUser.is_vip.is_(True),
-                )
-            )
-            is_vip_recipient = _vip_check.scalar_one_or_none() is not None
-            if is_vip_recipient:
-                logger.info(f"VIP recipient detected: {recipient_email} — applying stricter analysis")
-                # Force LLM classification for VIP recipients (no heuristic fallback allowed)
-                email_data = {**email_data, "_force_llm": True, "_vip_recipient": True}
-        except Exception:
-            pass
 
         # Step 1c: Check false-positive feedback for this sender domain
         # If previous FP reports exist for this sender+org, apply a BENIGN bias
@@ -747,163 +747,193 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
         # Subject hash (privacy — but also store plain text for search/display)
         subject_hash = hashlib.sha256(subject.encode()).hexdigest()[:64]
 
-        # Step 6: Store threat in DB
-        # If re-processing a previously-quarantined email (user moved it back to inbox),
-        # UPDATE the existing row rather than INSERT (unique index blocks re-insert).
+        # ── Short DB visit C: persist, then release the connection ─────────────
         _raw_body = (email_data.get("html_body") or email_data.get("body") or "").strip()
-        _org_uuid = uuid.UUID(org_id) if isinstance(org_id, str) else org_id
-        _existing_threat_check = await db.execute(
-            select(Threat).where(
-                Threat.email_message_id == message_id,
-                Threat.org_id == _org_uuid,
-                Threat.recipient_email == recipient_email,
-            ).limit(1)
+        _alert_admin_email = None
+        _alert_org_name = "Your Organization"
+        _alert_is_admin_recip = False
+        _HELIOS_SYSTEM_SENDERS_7D = {"noreply@himaya.ai", "no-reply@himaya.ai", "noreply@notify.himaya.ai"}
+        _send_alerts = (
+            risk_result["risk_score"] >= (60 if is_vip_recipient else 80)
+            and action in ("QUARANTINED", "FLAGGED_HIGH")
+            and sender.lower() not in _HELIOS_SYSTEM_SENDERS_7D
         )
-        _existing_threat = _existing_threat_check.scalar_one_or_none()
-        if _existing_threat:
-            # Update the existing row with fresh analysis and reset to quarantined/open
-            _existing_threat.threat_type      = threat_type
-            _existing_threat.risk_score        = risk_result["risk_score"]
-            _existing_threat.score_breakdown   = risk_result["score_breakdown"]
-            _existing_threat.content_score     = content_result["content_score"]
-            _existing_threat.graph_score       = graph_score
-            _existing_threat.reputation_score  = reputation_result["reputation_score"]
-            _existing_threat.action_taken      = action
-            _existing_threat.status            = "open" if action in ("QUARANTINED", "FLAGGED_HIGH") else "resolved"
-            _existing_threat.ai_explanation_en = content_result["ai_explanation_en"]
-            _existing_threat.ai_explanation_ar = content_result["ai_explanation_ar"]
-            _existing_threat.threat_indicators = all_indicators
-            _existing_threat.detected_at       = datetime.utcnow()
-            _existing_threat.false_positive    = False
-            _existing_threat.resolved_at       = None
-            await db.flush()
-            threat = _existing_threat
-            logger.info(f"Re-quarantine: updated existing threat {threat.id} for {recipient_email}")
-        else:
-        # ── Normal INSERT path ─────────────────────────────────────────────────────
-          threat = Threat(
-            org_id=uuid.UUID(org_id) if isinstance(org_id, str) else org_id,
-            email_message_id=message_id,
-            sender=sender,
-            sender_domain=sender_domain,
-            recipient_email=recipient_email,
-            subject=subject[:500] if subject else None,
-            subject_hash=subject_hash,
-            email_received_at=email_received_at,
-            auth_results=auth_results,
-            threat_type=threat_type,
-            risk_score=risk_result["risk_score"],
-            score_breakdown=risk_result["score_breakdown"],
-            graph_score=graph_score,
-            content_score=content_result["content_score"],
-            reputation_score=reputation_result["reputation_score"],
-            status=(
-                "quarantined" if action in ("QUARANTINED", "QUARANTINE", "BLOCK_DELETE") else
-                "new" if action in ("FLAGGED_HIGH", "FLAGGED_LOW", "BANNER", "HOLD") else
-                "resolved"
-            ),
-            action_taken=action,
-            ai_explanation_en=content_result["ai_explanation_en"],
-            ai_explanation_ar=content_result["ai_explanation_ar"],
-            threat_indicators=all_indicators,
-            sama_controls=sama_controls,
-            nca_controls=nca_controls,
-            detected_at=datetime.utcnow(),
-            # Set body preview directly on ORM object — avoids raw SQL that aborts transaction
-            email_body_preview=_raw_body[:8000] if _raw_body else None,
-            # LLM metadata
-            llm_classification=content_result.get("llm_classification"),
-            llm_confidence=content_result.get("llm_confidence"),
-            llm_model=content_result.get("llm_model"),
-            llm_cost_usd=content_result.get("llm_cost_usd"),
-            impersonation_detected=content_result.get("impersonation_detected", False),
-            impersonation_target=content_result.get("impersonation_target"),
-            urgency_score=content_result.get("urgency_score"),
-          )
-          db.add(threat)
-          await db.flush()  # Single flush inside else block
 
-        # Step 7: Create compliance evidence
-        if action in ("QUARANTINED", "FLAGGED_HIGH", "FLAGGED_LOW"):
-            evidence = ComplianceEvidence(
-                org_id=threat.org_id,
-                threat_id=threat.id,
-                control_ids=sama_controls + nca_controls,
-                framework="SAMA_CSF",
-                action_taken=action,
-                outcome=f"Threat {threat_type} detected and {action}",
-                immutable=True,
-                retention_tier="1_year",
-            )
-            db.add(evidence)
-
-        await db.flush()
-
-        # Step 7b: Track usage events (lightweight — fire and forget)
         try:
-            from sqlalchemy import text as _text
-            _org_id_str = str(threat.org_id)
-            await db.execute(
-                _text("INSERT INTO usage_events (org_id, event_type, count) VALUES (:org_id, 'email_scanned', 1)"),
-                {"org_id": _org_id_str},
-            )
-            if threat.risk_score > 30:
-                await db.execute(
-                    _text("INSERT INTO usage_events (org_id, event_type, count) VALUES (:org_id, 'threat_detected', 1)"),
-                    {"org_id": _org_id_str},
+            async with AsyncSessionLocal() as db:
+                _existing_threat_check = await db.execute(
+                    select(Threat).where(
+                        Threat.email_message_id == message_id,
+                        Threat.org_id == _org_uuid,
+                        Threat.recipient_email == recipient_email,
+                    ).limit(1)
                 )
-            await db.flush()
-        except Exception as _ue:
-            logger.warning(f"Usage tracking failed (non-fatal): {_ue}")
-
-        # Step 7b2: Update recipient user's risk score based on threat history
-        try:
-            from sqlalchemy import text as _text2
-            from backend.models.db_models import User as _User
-            # Find recipient user in this org
-            _user_result = await db.execute(
-                select(_User).where(
-                    _User.org_id == (uuid.UUID(org_id) if isinstance(org_id, str) else org_id),
-                    _User.email == recipient_email,
-                )
-            )
-            _user = _user_result.scalar_one_or_none()
-            if _user:
-                # Get recent 30-day threat scores for this user
-                _recent = await db.execute(
-                    _text2("""
-                        SELECT risk_score FROM threats
-                        WHERE recipient_email = :email AND org_id = :org_id
-                          AND detected_at >= NOW() - INTERVAL '30 days'
-                        ORDER BY detected_at DESC LIMIT 50
-                    """),
-                    {"email": recipient_email, "org_id": str(_user.org_id)},
-                )
-                _scores = [r[0] for r in _recent.fetchall() if r[0] is not None]
-                if _scores:
-                    # Weighted: index 0 is newest (DESC order) — highest weight goes to index 0
-                    _weights = [1.0 + ((len(_scores) - 1 - i) * 0.1) for i in range(len(_scores))]
-                    _weighted_avg = sum(s * w for s, w in zip(_scores, _weights)) / sum(_weights)
-                    # Clamp and round
-                    _new_risk = min(100, max(0, round(_weighted_avg)))
-                    _user.risk_score = _new_risk
+                _existing_threat = _existing_threat_check.scalar_one_or_none()
+                if _existing_threat:
+                    _existing_threat.threat_type      = threat_type
+                    _existing_threat.risk_score        = risk_result["risk_score"]
+                    _existing_threat.score_breakdown   = risk_result["score_breakdown"]
+                    _existing_threat.content_score     = content_result["content_score"]
+                    _existing_threat.graph_score       = graph_score
+                    _existing_threat.reputation_score  = reputation_result["reputation_score"]
+                    _existing_threat.action_taken      = action
+                    _existing_threat.status            = "open" if action in ("QUARANTINED", "FLAGGED_HIGH") else "resolved"
+                    _existing_threat.ai_explanation_en = content_result["ai_explanation_en"]
+                    _existing_threat.ai_explanation_ar = content_result["ai_explanation_ar"]
+                    _existing_threat.threat_indicators = all_indicators
+                    _existing_threat.detected_at       = datetime.utcnow()
+                    _existing_threat.false_positive    = False
+                    _existing_threat.resolved_at       = None
                     await db.flush()
-        except Exception as _re:
-            logger.debug(f"Risk score update failed (non-fatal): {_re}")
+                    threat = _existing_threat
+                    logger.info(f"Re-quarantine: updated existing threat {threat.id} for {recipient_email}")
+                else:
+                    threat = Threat(
+                        org_id=_org_uuid,
+                        email_message_id=message_id,
+                        sender=sender,
+                        sender_domain=sender_domain,
+                        recipient_email=recipient_email,
+                        subject=subject[:500] if subject else None,
+                        subject_hash=subject_hash,
+                        email_received_at=email_received_at,
+                        auth_results=auth_results,
+                        threat_type=threat_type,
+                        risk_score=risk_result["risk_score"],
+                        score_breakdown=risk_result["score_breakdown"],
+                        graph_score=graph_score,
+                        content_score=content_result["content_score"],
+                        reputation_score=reputation_result["reputation_score"],
+                        status=(
+                            "quarantined" if action in ("QUARANTINED", "QUARANTINE", "BLOCK_DELETE") else
+                            "new" if action in ("FLAGGED_HIGH", "FLAGGED_LOW", "BANNER", "HOLD") else
+                            "resolved"
+                        ),
+                        action_taken=action,
+                        ai_explanation_en=content_result["ai_explanation_en"],
+                        ai_explanation_ar=content_result["ai_explanation_ar"],
+                        threat_indicators=all_indicators,
+                        sama_controls=sama_controls,
+                        nca_controls=nca_controls,
+                        detected_at=datetime.utcnow(),
+                        email_body_preview=_raw_body[:8000] if _raw_body else None,
+                        llm_classification=content_result.get("llm_classification"),
+                        llm_confidence=content_result.get("llm_confidence"),
+                        llm_model=content_result.get("llm_model"),
+                        llm_cost_usd=content_result.get("llm_cost_usd"),
+                        impersonation_detected=content_result.get("impersonation_detected", False),
+                        impersonation_target=content_result.get("impersonation_target"),
+                        urgency_score=content_result.get("urgency_score"),
+                    )
+                    db.add(threat)
+                    await db.flush()
 
-        # Step 7c: Auto-detonate suspicious URLs in initial flow (non-blocking background task)
+                if action in ("QUARANTINED", "FLAGGED_HIGH", "FLAGGED_LOW"):
+                    db.add(ComplianceEvidence(
+                        org_id=threat.org_id,
+                        threat_id=threat.id,
+                        control_ids=sama_controls + nca_controls,
+                        framework="SAMA_CSF",
+                        action_taken=action,
+                        outcome=f"Threat {threat_type} detected and {action}",
+                        immutable=True,
+                        retention_tier="1_year",
+                    ))
+
+                await db.flush()
+
+                try:
+                    from sqlalchemy import text as _text
+                    _org_id_str = str(threat.org_id)
+                    await db.execute(
+                        _text("INSERT INTO usage_events (org_id, event_type, count) VALUES (:org_id, 'email_scanned', 1)"),
+                        {"org_id": _org_id_str},
+                    )
+                    if threat.risk_score > 30:
+                        await db.execute(
+                            _text("INSERT INTO usage_events (org_id, event_type, count) VALUES (:org_id, 'threat_detected', 1)"),
+                            {"org_id": _org_id_str},
+                        )
+                    await db.flush()
+                except Exception as _ue:
+                    logger.warning(f"Usage tracking failed (non-fatal): {_ue}")
+
+                try:
+                    from sqlalchemy import text as _text2
+                    from backend.models.db_models import User as _User
+                    _user_result = await db.execute(
+                        select(_User).where(
+                            _User.org_id == _org_uuid,
+                            _User.email == recipient_email,
+                        )
+                    )
+                    _user = _user_result.scalar_one_or_none()
+                    if _user:
+                        _recent = await db.execute(
+                            _text2("""
+                                SELECT risk_score FROM threats
+                                WHERE recipient_email = :email AND org_id = :org_id
+                                  AND detected_at >= NOW() - INTERVAL '30 days'
+                                ORDER BY detected_at DESC LIMIT 50
+                            """),
+                            {"email": recipient_email, "org_id": str(_user.org_id)},
+                        )
+                        _scores = [r[0] for r in _recent.fetchall() if r[0] is not None]
+                        if _scores:
+                            _weights = [1.0 + ((len(_scores) - 1 - i) * 0.1) for i in range(len(_scores))]
+                            _weighted_avg = sum(s * w for s, w in zip(_scores, _weights)) / sum(_weights)
+                            _user.risk_score = min(100, max(0, round(_weighted_avg)))
+                            await db.flush()
+                except Exception as _re:
+                    logger.debug(f"Risk score update failed (non-fatal): {_re}")
+
+                if _send_alerts:
+                    try:
+                        from backend.models.db_models import Organization as _Org, User as _User2
+                        _org_res = await db.execute(select(_Org).where(_Org.id == _org_uuid))
+                        _org = _org_res.scalar_one_or_none()
+                        _alert_org_name = _org.name if _org else "Your Organization"
+                        _admin_res = await db.execute(
+                            select(_User2).where(
+                                _User2.org_id == _org_uuid,
+                                _User2.role == "admin",
+                                _User2.is_active.is_(True),
+                            ).limit(1)
+                        )
+                        _admin = _admin_res.scalar_one_or_none()
+                        if _admin and _admin.email:
+                            _alert_admin_email = _admin.email
+                        if recipient_email:
+                            _recip_user_res = await db.execute(
+                                select(_User2).where(_User2.email == recipient_email, _User2.is_active.is_(True))
+                            )
+                            _recip_user = _recip_user_res.scalar_one_or_none()
+                            _alert_is_admin_recip = _recip_user is not None and _recip_user.role in ("admin", "analyst")
+                    except Exception as _ae:
+                        logger.warning(f"Alert recipient lookup failed (non-fatal): {_ae}")
+
+                await db.commit()
+        except IntegrityError:
+            logger.debug(
+                "Dedup race: unique threat already exists for %s / %s",
+                message_id, recipient_email,
+            )
+            return None
+
+        # Side effects below do not hold a DB connection.
+
         try:
             targets_to_detonate = (
                 (link_result.get("malicious_urls") or []) +
                 (link_result.get("suspicious_urls") or [])
             )[:3]
             if targets_to_detonate:
+                _threat_id = str(threat.id)
                 async def _background_detonate():
                     try:
                         from backend.services.url_detonation import detonate_email_urls
                         import redis.asyncio as _aioredis, json as _json
                         det_results = await detonate_email_urls(targets_to_detonate, max_urls=3, timeout_ms=12000)
-                        # Store detonation results in Redis keyed by threat_id
                         _redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
                         _r = _aioredis.from_url(_redis_url, decode_responses=True)
                         stored = []
@@ -919,75 +949,43 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                                 "detonation_risk_score": getattr(dr, "detonation_risk_score", 0),
                                 "screenshot_b64": getattr(dr, "screenshot_b64", None),
                             })
-                        await _r.set(f"detonation:{threat.id}", _json.dumps(stored), ex=86400)
+                        await _r.set(f"detonation:{_threat_id}", _json.dumps(stored), ex=86400)
                         await _r.aclose()
-                        logger.info(f"Auto-detonated {len(det_results)} URLs for threat {threat.id}")
+                        logger.info(f"Auto-detonated {len(det_results)} URLs for threat {_threat_id}")
                     except Exception as _de:
                         logger.debug(f"Background URL detonation failed (non-fatal): {_de}")
                 asyncio.create_task(_background_detonate())
         except Exception as _se:
             logger.debug(f"Sandbox auto-detonate task failed (non-fatal): {_se}")
 
-        # Step 7d: Send threat alerts for high-confidence detections (risk >= 80, or >= 60 for VIPs)
-        # Skip alerts when sender is a Himaya system address (loop guard)
-        _HELIOS_SYSTEM_SENDERS_7D = {"noreply@himaya.ai", "no-reply@himaya.ai", "noreply@notify.himaya.ai"}
-        alert_threshold = 60 if is_vip_recipient else 80
-        if (risk_result["risk_score"] >= alert_threshold
-                and action in ("QUARANTINED", "FLAGGED_HIGH")
-                and sender.lower() not in _HELIOS_SYSTEM_SENDERS_7D):
+        if _send_alerts:
             try:
                 import asyncio as _asyncio
-                from backend.models.db_models import Organization as _Org, User as _User2
                 from backend.services.email_service import send_threat_alert as _send_alert
                 from backend.services.email_service import send_quarantine_notification as _send_qn
 
-                # Fetch org admin email
-                _org_res = await db.execute(
-                    select(_Org).where(_Org.id == (uuid.UUID(org_id) if isinstance(org_id, str) else org_id))
-                )
-                _org = _org_res.scalar_one_or_none()
-
-                # Find org admin user
-                _admin_res = await db.execute(
-                    select(_User2).where(
-                        _User2.org_id == (uuid.UUID(org_id) if isinstance(org_id, str) else org_id),
-                        _User2.role == "admin",
-                        _User2.is_active.is_(True),
-                    ).limit(1)
-                )
-                _admin = _admin_res.scalar_one_or_none()
-                _org_name = _org.name if _org else "Your Organization"
-
-                if _admin and _admin.email:
+                if _alert_admin_email:
                     await _asyncio.to_thread(
                         _send_alert,
-                        to_email=_admin.email,
-                        org_name=_org_name,
+                        to_email=_alert_admin_email,
+                        org_name=_alert_org_name,
                         threat_type=threat_type,
                         risk_score=risk_result["risk_score"],
                         recipient=recipient_email,
                         action=action,
                         detection_time=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
                     )
-                    logger.info(f"Admin threat alert sent to {_admin.email} for threat {threat.id}")
+                    logger.info(f"Admin threat alert sent to {_alert_admin_email} for threat {threat.id}")
 
-                # Send quarantine notification to the affected user — full context
                 if recipient_email:
-                    # Build body preview and attachment list from email_data
                     _body_prev = str(email_data.get("body") or "")[:800]
                     _att_list  = email_data.get("attachments") or []
                     _link_ct   = len(__import__('re').findall(r'https?://\S+', str(email_data.get("body") or "")))
                     _recv_at   = email_data.get("date") or datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-                    # Check if recipient has dashboard access (admin/analyst roles only)
-                    _recip_user_res = await db.execute(
-                        select(_User2).where(_User2.email == recipient_email, _User2.is_active.is_(True))
-                    )
-                    _recip_user = _recip_user_res.scalar_one_or_none()
-                    _is_admin_recip = _recip_user is not None and _recip_user.role in ("admin", "analyst")
                     await _asyncio.to_thread(
                         _send_qn,
                         to_email=recipient_email,
-                        org_name=_org_name,
+                        org_name=_alert_org_name,
                         threat_type=threat_type,
                         risk_score=risk_result["risk_score"],
                         sender_email=sender,
@@ -998,13 +996,10 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                         attachments=_att_list,
                         link_count=_link_ct,
                         received_at=_recv_at,
-                        is_admin_recipient=_is_admin_recip,
+                        is_admin_recipient=_alert_is_admin_recip,
                     )
-                    logger.info(f"Quarantine notification sent to {recipient_email} (admin={_is_admin_recip}) for threat {threat.id}")
+                    logger.info(f"Quarantine notification sent to {recipient_email} (admin={_alert_is_admin_recip}) for threat {threat.id}")
 
-                # ── Sender notification — always notify the sender on QUARANTINE/BLOCK ──
-                # This mirrors the policy engine path. The external sender must be told
-                # their email was intercepted — regardless of how it was detected.
                 if sender and sender != recipient_email:
                     try:
                         from backend.services.email_service import send_sender_block_notification as _send_sender
@@ -1014,7 +1009,7 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                         await _asyncio.to_thread(
                             _send_sender,
                             to_email=sender,
-                            recipient_org=_org_name,
+                            recipient_org=_alert_org_name,
                             subject=subject or "",
                             threat_type=threat_type or "Unknown",
                             action=action,
@@ -1027,12 +1022,9 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                         logger.info(f"Sender block/quarantine notification sent to {sender} for threat {threat.id}")
                     except Exception as _se:
                         logger.warning(f"Sender notification failed (non-fatal): {_se}")
-
             except Exception as _ae:
                 logger.warning(f"Alert send failed (non-fatal): {_ae}")
 
-        # Step 7d2: Geo-enrich sender IP → country (stored in auth_results for threat map)
-        # Only runs when sender_ip is present but country not yet resolved
         try:
             _ar = threat.auth_results or {}
             _sip = _ar.get("sender_ip", "")
@@ -1047,8 +1039,12 @@ async def process_email(email_data: dict, org_id: str, db: AsyncSession) -> Opti
                         _updated_ar = dict(_ar)
                         _updated_ar["sender_country"] = _gd.get("country")
                         _updated_ar["sender_country_code"] = _gd.get("countryCode")
+                        async with AsyncSessionLocal() as geo_db:
+                            _row = await geo_db.get(Threat, threat.id)
+                            if _row is not None:
+                                _row.auth_results = _updated_ar
+                                await geo_db.commit()
                         threat.auth_results = _updated_ar
-                        await db.flush()
         except Exception as _geo_e:
             logger.debug(f"Geo lookup failed (non-fatal): {_geo_e}")
 

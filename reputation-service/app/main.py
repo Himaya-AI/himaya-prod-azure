@@ -12,6 +12,7 @@ from app.core.cache import ReputationCache
 from app.core.correlator import SignalCorrelator
 from app.core.orchestrator import ReputationOrchestrator
 from app.core.scorer import DeterministicScorer
+from app.core.whois_gateway import close_whois_gateway
 from app.sources.registry import load_source_registry
 
 
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        await close_whois_gateway()
         await cache.close()
 
 

@@ -57,13 +57,10 @@ class TrustScorer:
         # ── Insufficient history — can't score yet ────────────────────────────
         if email_count < 5:
             logger.debug("trust_scorer | insufficient_history email_count=%d", email_count)
-            domain_trusted = (
-                flagged_rate is not None
-                and flagged_rate == 0
-                and domain_spread <= 2
-                and orgs_targeted <= 1
-            )
-            neutral = 55 if domain_trusted else 45
+            # Clean domain is enough. Do not require tiny sender-spread — public
+            # domains (gmail, example.com) routinely have many senders.
+            domain_trusted = flagged_rate is not None and flagged_rate == 0
+            neutral = 60 if domain_trusted else 50
             adjusted = max(0, neutral - similar_penalty)
             reason = (
                 f"Only {email_count} email(s) observed — "
@@ -78,7 +75,7 @@ class TrustScorer:
         # Sender volume
         if email_count > 50:
             score += 20
-        elif email_count >= 10:
+        elif email_count >= 5:
             score += 10
 
         # Sender threat rate
@@ -113,11 +110,13 @@ class TrustScorer:
         else:
             score -= 20
 
-        # Domain spread — many senders or orgs targeted signals a shared/abused domain
-        if domain_spread > 10 or orgs_targeted > 5:
-            score -= 20
-        elif domain_spread > 5 or orgs_targeted > 2:
-            score -= 10
+        # Domain spread — only penalize when the domain already has flagged mail.
+        # Many senders + zero flags is normal for shared/public domains.
+        if effective_flagged_rate > 0:
+            if domain_spread > 10 or orgs_targeted > 5:
+                score -= 20
+            elif domain_spread > 5 or orgs_targeted > 2:
+                score -= 10
 
         score = max(0, min(100, score))
 
@@ -163,12 +162,14 @@ def _build_indicators(graph_data: dict) -> list[str]:
         indicators.append(f"known_threat_type:{t}")
 
     orgs_targeted = int(domain.get("orgs_targeted", 0))
+    flagged_emails = int(domain.get("flagged_emails", 0))
 
-    # Domain spread
-    if total_senders > 10 or orgs_targeted > 5:
-        indicators.append(f"domain_wide_campaign:{total_senders}_senders_{orgs_targeted}_orgs")
-    elif total_senders > 5 or orgs_targeted > 2:
-        indicators.append(f"domain_multi_sender:{total_senders}_senders_{orgs_targeted}_orgs")
+    # Domain spread — "campaign" only if some mail on the domain was flagged
+    if flagged_emails > 0:
+        if total_senders > 10 or orgs_targeted > 5:
+            indicators.append(f"domain_wide_campaign:{total_senders}_senders_{orgs_targeted}_orgs")
+        elif total_senders > 5 or orgs_targeted > 2:
+            indicators.append(f"domain_multi_sender:{total_senders}_senders_{orgs_targeted}_orgs")
 
     # Cross-org intel
     reported = int(intel.get("reported_by_other_orgs", 0))

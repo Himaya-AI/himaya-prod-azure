@@ -48,7 +48,6 @@ _CATALOG_TTL = 300.0
 _TABLE_EXISTS_CACHE: dict[str, tuple[float, bool]] = {}
 _TABLE_COLS_CACHE: dict[str, tuple[float, set]] = {}
 
-
 async def _table_exists(db: "AsyncSession", tbl: str) -> bool:
     """Process-wide cached information_schema existence check for optional
     connector tables. Shared by the Data Inventory list + summary endpoints so

@@ -1,26 +1,22 @@
 from __future__ import annotations
 
-import asyncio
-import importlib.util
-import logging
-from datetime import datetime, timezone
 from typing import Any
 
 from app.api.schemas import EntityType, Verdict
 from app.config.settings import Settings
+from app.core.whois_gateway import WhoisGateway, WhoisStatus, get_whois_gateway
 from app.sources.base import AdapterStatus, BaseAdapter, SourceConfig, SourceSignal, TimedLookup
-
-logger = logging.getLogger(__name__)
 
 
 class WhoisAdapter(BaseAdapter):
     def __init__(self, config: SourceConfig, settings: Settings) -> None:
         super().__init__(config)
         self.settings = settings
+        self._gateway: WhoisGateway = get_whois_gateway(settings)
 
     @property
     def is_configured(self) -> bool:
-        return importlib.util.find_spec("whois") is not None
+        return self._gateway.is_available
 
     async def health(self) -> AdapterStatus:
         status = "healthy" if self.is_configured else "not_configured"
@@ -41,49 +37,43 @@ class WhoisAdapter(BaseAdapter):
             return None
 
         with TimedLookup() as timer:
-            try:
-                import whois
+            result = await self._gateway.lookup(value)
 
-                result = await asyncio.to_thread(whois.whois, value)
-                creation_date = _first_date(getattr(result, "creation_date", None))
-                if creation_date is None:
-                    return SourceSignal(
-                        source=self.name,
-                        entity_type=entity_type,
-                        verdict=Verdict.suspicious,
-                        priority=self.config.priority,
-                        confidence=0.45,
-                        indicators=["whois_no_creation_date"],
-                        score_impact=15,
-                        severity="medium",
-                        detail="WHOIS returned no domain creation date",
-                        raw=_safe_raw(result),
-                        latency_ms=timer.latency_ms,
-                    )
-
-                if creation_date.tzinfo is None:
-                    creation_date = creation_date.replace(tzinfo=timezone.utc)
-                age_days = max((datetime.now(timezone.utc) - creation_date).days, 0)
+            if result.status == WhoisStatus.ok:
                 return _age_signal(
                     source=self.name,
                     entity_type=entity_type,
                     priority=self.config.priority,
-                    age_days=age_days,
-                    raw=_safe_raw(result),
+                    age_days=result.age_days or 0,
+                    raw=result.raw,
                     latency_ms=timer.latency_ms,
                 )
-            except Exception as exc:
-                logger.debug("WHOIS lookup failed for %s: %s", value, exc)
+
+            if result.status == WhoisStatus.no_creation_date:
                 return SourceSignal(
                     source=self.name,
                     entity_type=entity_type,
-                    verdict=Verdict.unknown,
+                    verdict=Verdict.suspicious,
                     priority=self.config.priority,
-                    confidence=0.0,
-                    indicators=["whois_error"],
-                    detail="WHOIS lookup failed",
+                    confidence=0.45,
+                    indicators=["whois_no_creation_date"],
+                    score_impact=15,
+                    severity="medium",
+                    detail="WHOIS returned no domain creation date",
+                    raw=result.raw,
                     latency_ms=timer.latency_ms,
                 )
+
+            return SourceSignal(
+                source=self.name,
+                entity_type=entity_type,
+                verdict=Verdict.unknown,
+                priority=self.config.priority,
+                confidence=0.0,
+                indicators=["whois_error"],
+                detail="WHOIS lookup failed",
+                latency_ms=timer.latency_ms,
+            )
 
 
 def _age_signal(
@@ -161,20 +151,3 @@ def _age_signal(
         raw=raw,
         latency_ms=latency_ms,
     )
-
-
-def _first_date(value: Any) -> datetime | None:
-    if isinstance(value, list):
-        for item in value:
-            if isinstance(item, datetime):
-                return item
-        return None
-    return value if isinstance(value, datetime) else None
-
-
-def _safe_raw(result: Any) -> dict[str, Any]:
-    raw: dict[str, Any] = {}
-    for attr in ("registrar", "creation_date", "expiration_date", "updated_date"):
-        value = getattr(result, attr, None)
-        raw[attr] = str(value) if value is not None else None
-    return raw
