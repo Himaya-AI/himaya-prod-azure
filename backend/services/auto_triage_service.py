@@ -951,6 +951,8 @@ async def _apply_verdict(
                             asyncio.create_task(quarantine_gmail_message(
                                 user_email=threat.recipient_email,
                                 gmail_message_id=threat.email_message_id,
+                                org_id=str(org_id) if org_id else None,
+                                threat_id=str(threat.id),
                             ))
                 except Exception as _qe:
                     logger.warning(f"auto_triage: physical quarantine move failed (non-fatal): {_qe}")

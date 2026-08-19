@@ -603,6 +603,8 @@ async def apply_policy_action(
                             user_email=_recipient,
                             gmail_message_id=email_message_id,
                             access_token=access_token,
+                            org_id=str(org_id),
+                            threat_id=str(getattr(threat, "id", "")) or None,
                         )
                     result["moved"] = moved
                 except Exception as e:

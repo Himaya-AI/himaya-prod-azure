@@ -192,9 +192,35 @@ async def release_email(
     if not threat:
         raise HTTPException(status_code=404, detail="Threat not found")
 
-    # Restore email to inbox via Gmail API — SA DWD first, fall back to org OAuth token
-    gmail_restored = False
+    # Preferred restore: if the message was hard-captured (pulled fully out of
+    # the mailbox with an encrypted copy held by Himaya), re-inject that copy.
+    reinjected = False
     if threat.email_message_id and threat.recipient_email:
+        try:
+            from backend.services.mailbox_capture_service import (
+                get_capture_for_release, reinject_gmail, reinject_m365, mark_capture_released,
+            )
+            cap = await get_capture_for_release(
+                org_id=str(current_user.org_id),
+                user_email=threat.recipient_email,
+                original_message_id=threat.email_message_id,
+            )
+            if cap:
+                if cap["provider"] == "m365":
+                    new_id = await reinject_m365(threat.recipient_email, cap["raw"], str(current_user.org_id))
+                else:
+                    new_id = await reinject_gmail(threat.recipient_email, cap["raw"])
+                if new_id:
+                    await mark_capture_released(cap["id"])
+                    reinjected = True
+                    logger.info(f"Released captured message back to {threat.recipient_email} as {new_id}")
+        except Exception as _re:
+            logger.warning(f"capture reinject failed, falling back to label restore: {_re}")
+
+    # Legacy restore: re-add INBOX / strip the hidden quarantine label. Only runs
+    # when there was no captured copy (hidden-folder fallback quarantine).
+    gmail_restored = reinjected
+    if not reinjected and threat.email_message_id and threat.recipient_email:
         try:
             import httpx as _httpx
             import asyncio as _asyncio
@@ -397,6 +423,8 @@ async def manual_quarantine(
                     user_email=threat.recipient_email,
                     gmail_message_id=threat.email_message_id,
                     access_token=None,
+                    org_id=str(current_user.org_id),
+                    threat_id=str(threat.id),
                 )
         except Exception as e:
             import logging

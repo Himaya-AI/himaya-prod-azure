@@ -348,6 +348,26 @@ class Threat(Base):
     compliance_evidence = relationship("ComplianceEvidence", back_populates="threat")
 
 
+class QuarantinedCapture(Base):
+    """Encrypted copy of a quarantined email that was fully removed from the
+    user's mailbox. Held by Himaya so the end user can't see it; re-injected
+    into the inbox on admin release. See services/mailbox_capture_service.py."""
+    __tablename__ = "quarantined_captures"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    org_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False)
+    threat_id = Column(UUID(as_uuid=True), ForeignKey("threats.id", ondelete="SET NULL"), nullable=True)
+    provider = Column(String(20), nullable=False)          # 'google' | 'm365'
+    user_email = Column(String(255), nullable=False)       # recipient mailbox
+    original_message_id = Column(Text, nullable=False)      # provider message id pre-delete
+    internet_message_id = Column(Text, nullable=True)       # RFC822 Message-ID
+    raw_encrypted = Column(Text, nullable=False)            # base64(fernet(gzip(mime)))
+    size_bytes = Column(Integer, default=0)
+    status = Column(String(20), default="held")            # 'held' | 'released'
+    captured_at = Column(TIMESTAMPTZ, default=_utcnow)
+    released_at = Column(TIMESTAMPTZ, nullable=True)
+
+
 class Policy(Base):
     __tablename__ = "policies"
 

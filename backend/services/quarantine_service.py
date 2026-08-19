@@ -38,11 +38,22 @@ async def _get_sa_headers_async(user_email: str) -> dict | None:
         return None
 
 
-async def quarantine_gmail_message(user_email: str, gmail_message_id: str, access_token: str = None) -> bool:
+async def quarantine_gmail_message(
+    user_email: str, gmail_message_id: str, access_token: str = None,
+    org_id: str | None = None, threat_id: str | None = None,
+) -> bool:
     """
-    Move a Gmail message to "Himaya-Quarantine" label and remove from INBOX.
-    Uses service account impersonation (DWD) if configured, falls back to OAuth token.
-    Returns True if successful.
+    Quarantine a Gmail message.
+
+    Preferred path (QUARANTINE_HARD_CAPTURE, default on): pull the message fully
+    OUT of the mailbox — Himaya keeps an encrypted copy and the original is
+    hard-deleted so the user cannot see it anywhere (not even All Mail). Requires
+    org_id (to key the stored copy) and the full mail DWD scope.
+
+    Fallback (capture disabled/failed, or no org_id): the legacy behaviour —
+    move to the hidden "Himaya-Quarantine" label and remove from INBOX.
+
+    Returns True if the message was quarantined by either path.
     """
     if not gmail_message_id or not user_email:
         return False
@@ -53,6 +64,19 @@ async def quarantine_gmail_message(user_email: str, gmail_message_id: str, acces
     if not headers:
         logger.warning(f"No auth available to quarantine {gmail_message_id} for {user_email}")
         return False
+
+    # Try full capture-and-remove first; fall back to hidden move on any failure.
+    try:
+        from backend.services.mailbox_capture_service import hard_capture_enabled, capture_gmail
+        if hard_capture_enabled() and org_id:
+            if await capture_gmail(
+                user_email=user_email, msg_id=gmail_message_id, headers=headers,
+                org_id=org_id, threat_id=threat_id,
+            ):
+                return True
+            logger.info(f"gmail capture fell back to hidden move for {gmail_message_id}")
+    except Exception as _ce:
+        logger.warning(f"gmail capture path errored, using hidden move: {_ce}")
 
     try:
         async with httpx.AsyncClient(timeout=15) as client:
@@ -650,6 +674,19 @@ async def quarantine_m365_message_with_fallback(
     if not token:
         logger.warning(f"quarantine_m365: no token for {user_email}")
         return False
+
+    # Try full capture-and-remove first; fall back to hidden folder move.
+    try:
+        from backend.services.mailbox_capture_service import hard_capture_enabled, capture_m365
+        if hard_capture_enabled() and org_id:
+            if await capture_m365(
+                user_email=user_email, msg_id=m365_message_id, token=token,
+                org_id=str(org_id),
+            ):
+                return True
+            logger.info(f"m365 capture fell back to hidden move for {m365_message_id}")
+    except Exception as _ce:
+        logger.warning(f"m365 capture path errored, using hidden move: {_ce}")
 
     return await quarantine_m365_message(user_email, m365_message_id, token)
 

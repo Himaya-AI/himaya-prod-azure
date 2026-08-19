@@ -103,8 +103,8 @@ async def submit_phish_report(
         is_m365 = provider == "outlook" or (len(message_id) > 100 or message_id.startswith("AAMk"))
         try:
             if is_m365:
-                from backend.services.quarantine_service import quarantine_m365_message
-                asyncio.create_task(quarantine_m365_message(
+                from backend.services.quarantine_service import quarantine_m365_message_with_fallback
+                asyncio.create_task(quarantine_m365_message_with_fallback(
                     user_email=reporter_email,
                     m365_message_id=message_id,
                     org_id=str(org.id),
@@ -114,6 +114,7 @@ async def submit_phish_report(
                 asyncio.create_task(quarantine_gmail_message(
                     user_email=reporter_email,
                     gmail_message_id=message_id,
+                    org_id=str(org.id),
                 ))
         except Exception as _e:
             logger.debug(f"phish_report: quarantine failed (non-fatal): {_e}")

@@ -421,7 +421,8 @@ async def perform_action(
                         except Exception:
                             pass
                     success = await quarantine_gmail_message(
-                        t.recipient_email, t.email_message_id, access_token=fallback_token
+                        t.recipient_email, t.email_message_id, access_token=fallback_token,
+                        org_id=str(org_id), threat_id=str(t.id),
                     )
             except Exception as _e:
                 import logging as _logging
