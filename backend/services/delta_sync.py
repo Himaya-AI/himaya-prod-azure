@@ -724,7 +724,17 @@ async def _delta_sync_integration_snap(db, redis, integration):
     elif provider == "m365":
         async with httpx.AsyncClient(timeout=30) as client:
             headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-            since_iso = since.strftime("%Y-%m-%dT%H:%M:%SZ")
+            # M365 inbound delta-window fix: Exchange Online Protection stamps
+            # receivedDateTime at true arrival but only exposes the message to
+            # Graph a bit later (after anti-phishing scanning). With a strict
+            # `receivedDateTime ge {last_cycle}` filter, `since` advances past the
+            # message before it becomes queryable, so it's silently skipped
+            # forever ("0 new messages"). Always look back at least LOOKBACK from
+            # now so the window overlaps; process_email dedups by
+            # (org, message_id, recipient) so re-scans are harmless.
+            _m365_lookback = int(os.getenv("M365_INBOUND_LOOKBACK_SECONDS", "600"))
+            _m365_since = min(since, datetime.now(timezone.utc) - timedelta(seconds=_m365_lookback))
+            since_iso = _m365_since.strftime("%Y-%m-%dT%H:%M:%SZ")
 
             # ── M365 user directory refresh (same cadence as email delta) ──────
             try:
