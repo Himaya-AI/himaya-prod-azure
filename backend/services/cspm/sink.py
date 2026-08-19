@@ -130,6 +130,18 @@ async def write_findings(
     updated = 0
     mirrored = 0
 
+    # Defensive reset: the caller often hands us a session whose transaction
+    # was already aborted upstream (e.g. a best-effort SELECT elsewhere in the
+    # background scan raised and wasn't rolled back). asyncpg then rejects every
+    # subsequent statement with InFailedSQLTransactionError, which is exactly
+    # why CSPM findings silently stopped persisting in prod even though scans
+    # kept detecting them. Clear any stale/aborted transaction before we start
+    # so the upserts run on a clean connection.
+    try:
+        await db.rollback()
+    except Exception:
+        pass
+
     for f in findings:
         # Skip OK results — only persist warn/fail/unknown
         if f.status == PluginStatus.OK:
@@ -183,12 +195,19 @@ async def write_findings(
                 params,
             )
             row = result.first()
+            # Commit each finding independently so one bad row (or a mid-batch
+            # transaction abort) can never discard the findings already written.
+            await db.commit()
             if row and row[0]:
                 inserted += 1
             else:
                 updated += 1
         except Exception as exc:
             logger.warning(f"cspm_findings upsert failed for {f.fingerprint}: {exc}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
             continue
 
         # Mirror high+critical into saas_alerts (best effort)
@@ -237,11 +256,15 @@ async def write_findings(
                         }),
                     },
                 )
+                await db.commit()
                 mirrored += 1
             except Exception as exc:
                 logger.debug(f"saas_alerts mirror failed: {exc}")
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
 
-    await db.commit()
     return {"inserted": inserted, "updated": updated, "mirrored": mirrored}
 
 
@@ -303,6 +326,10 @@ async def mark_resolved(
     if not seen_fingerprints:
         return 0
     try:
+        await db.rollback()  # start from a clean transaction
+    except Exception:
+        pass
+    try:
         # Use a temp array param
         result = await db.execute(
             text("""
@@ -325,4 +352,8 @@ async def mark_resolved(
         return len(rows)
     except Exception as exc:
         logger.warning(f"cspm_findings auto-resolve failed: {exc}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         return 0

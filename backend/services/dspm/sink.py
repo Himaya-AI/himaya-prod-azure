@@ -129,6 +129,15 @@ async def write_findings(
     updated = 0
     mirrored = 0
 
+    # Defensive reset: clear any stale/aborted transaction handed to us by the
+    # caller so a poisoned session upstream can't make every upsert fail with
+    # InFailedSQLTransactionError (which silently stopped DSPM findings from
+    # persisting in prod even while scans kept detecting them).
+    try:
+        await db.rollback()
+    except Exception:
+        pass
+
     for f in findings:
         params = {
             "org_id": org_id,
@@ -177,12 +186,19 @@ async def write_findings(
                 params,
             )
             row = result.first()
+            # Commit each finding independently so one bad row (or a mid-batch
+            # transaction abort) can never discard findings already written.
+            await db.commit()
             if row and row[0]:
                 inserted += 1
             else:
                 updated += 1
         except Exception as exc:
             logger.warning(f"dspm_findings upsert failed for {f.fingerprint}: {exc}")
+            try:
+                await db.rollback()
+            except Exception:
+                pass
             continue
 
         # Mirror HIGH/CRITICAL into saas_alerts so they surface in Alerts tab
@@ -238,11 +254,15 @@ async def write_findings(
                         }),
                     },
                 )
+                await db.commit()
                 mirrored += 1
             except Exception as exc:
                 logger.debug(f"saas_alerts mirror failed: {exc}")
+                try:
+                    await db.rollback()
+                except Exception:
+                    pass
 
-    await db.commit()
     return {"inserted": inserted, "updated": updated, "mirrored": mirrored}
 
 
@@ -305,6 +325,10 @@ async def mark_resolved(
     if not seen_fingerprints:
         return 0
     try:
+        await db.rollback()  # start from a clean transaction
+    except Exception:
+        pass
+    try:
         result = await db.execute(
             text("""
                 UPDATE dspm_findings
@@ -326,4 +350,8 @@ async def mark_resolved(
         return len(rows)
     except Exception as exc:
         logger.warning(f"dspm_findings auto-resolve failed: {exc}")
+        try:
+            await db.rollback()
+        except Exception:
+            pass
         return 0
