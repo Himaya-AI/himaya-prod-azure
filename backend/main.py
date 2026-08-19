@@ -1241,40 +1241,77 @@ async def lifespan(app: FastAPI):
             """Re-spawn auto-triage loops for all orgs that had it enabled before restart.
             Source of truth is Postgres org_metadata.auto_triage_enabled (survives Redis flushes).
             Redis key is re-synced here so the loop can read it without a DB call each cycle.
+
+            Hardened: this runs as a fire-and-forget task, so any unhandled exception here
+            previously died SILENTLY and left every org's loop unstarted after a deploy
+            (the toggle looked "on" in the UI but nothing detonated). We now retry the DB
+            read at boot, treat Redis as best-effort, isolate per-org failures, and always
+            log a summary.
             """
             await asyncio.sleep(5)  # Let rest of startup complete first
             from backend.utils.redis_client import get_redis
-            _r = get_redis()
-            try:
-                async with AsyncSessionLocal() as _at_db:
-                    _org_res = await _at_db.execute(_at_sel(_ATOrg))
-                    orgs = _org_res.scalars().all()
 
-                restored = 0
-                for _org in orgs:
+            # Load orgs with a short retry — the DB pool may not be warm at boot.
+            orgs = None
+            for _attempt in range(1, 6):
+                try:
+                    async with AsyncSessionLocal() as _at_db:
+                        _org_res = await _at_db.execute(_at_sel(_ATOrg))
+                        orgs = _org_res.scalars().all()
+                    break
+                except Exception as _db_e:
+                    logger.warning(f"auto_triage: restore DB read failed (attempt {_attempt}/5): {_db_e}")
+                    await asyncio.sleep(5 * _attempt)
+            if orgs is None:
+                logger.error("auto_triage: restore aborted — could not read orgs after retries")
+                return
+
+            try:
+                _r = get_redis()
+            except Exception as _re:
+                _r = None
+                logger.warning(f"auto_triage: restore Redis unavailable, using DB flag only: {_re}")
+
+            restored = 0
+            for _org in orgs:
+                try:
                     _oid = str(_org.id)
                     meta = _org.org_metadata or {}
-                    db_enabled = meta.get("auto_triage_enabled", False)
+                    db_enabled = bool(meta.get("auto_triage_enabled", False))
 
-                    # Also check Redis as fallback for orgs toggled before this deploy
-                    redis_enabled = await _r.get(f"auto_triage:enabled:{_oid}")
+                    redis_enabled = False
+                    if _r is not None:
+                        try:
+                            redis_enabled = bool(await _r.get(f"auto_triage:enabled:{_oid}"))
+                        except Exception:
+                            redis_enabled = False
 
                     if db_enabled or redis_enabled:
-                        # Re-sync Redis key with no TTL (persistent until disabled)
-                        await _r.set(f"auto_triage:enabled:{_oid}", "1")
+                        if _r is not None:
+                            try:
+                                await _r.set(f"auto_triage:enabled:{_oid}", "1")
+                            except Exception:
+                                pass
                         task = asyncio.create_task(_spawn_triage_loop(_oid))
                         _active_triage_tasks[_oid] = task
                         restored += 1
-                        logger.info(f"auto_triage: restored loop for org={_oid} (db={db_enabled} redis={bool(redis_enabled)})")
+                        logger.info(f"auto_triage: restored loop for org={_oid} (db={db_enabled} redis={redis_enabled})")
+                except Exception as _org_e:
+                    logger.warning(f"auto_triage: restore failed for one org (non-fatal): {_org_e}")
 
-                if restored:
-                    logger.info(f"auto_triage: {restored} org loop(s) restored on startup")
-                else:
-                    logger.info("auto_triage: no orgs had auto-triage enabled — nothing to restore")
-            finally:
-                pass  # shared pooled Redis client — do not close
+            if restored:
+                logger.info(f"auto_triage: {restored} org loop(s) restored on startup")
+            else:
+                logger.info("auto_triage: no orgs had auto-triage enabled — nothing to restore")
 
-        asyncio.create_task(_restore_auto_triage_loops())
+        async def _restore_auto_triage_loops_guarded():
+            # Ensures a crash in restore is logged with a traceback instead of vanishing.
+            try:
+                await _restore_auto_triage_loops()
+            except Exception as _e:
+                logger.error(f"auto_triage: startup restore crashed: {_e}", exc_info=True)
+
+        asyncio.create_task(_restore_auto_triage_loops_guarded())
         logger.info("Auto-triage startup restore task scheduled (with auto-restart on crash)")
 
         # Store spawn function for use by the enable endpoint

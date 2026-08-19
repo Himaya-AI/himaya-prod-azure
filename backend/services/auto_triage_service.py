@@ -1202,8 +1202,19 @@ async def run_auto_triage_loop(org_id: str) -> None:
     Each org gets its own loop task when toggled on.
     """
     from backend.utils.redis_client import get_redis
+    import uuid as _uuid_mod
 
-    logger.info(f"auto_triage: loop started for org={org_id}")
+    # Single-owner lease: the backend runs >=2 replicas, and both the startup
+    # restore and the enable endpoint may spawn this loop on multiple replicas.
+    # Without a lease every replica would process the same threats and fire
+    # duplicate (costly) ACI detonations. Each loop instance gets a unique id and
+    # only the lease holder does work; the rest idle as hot standbys and take
+    # over within OWNER_TTL if the holder dies.
+    _owner_id = _uuid_mod.uuid4().hex
+    _owner_key = f"auto_triage:owner:{org_id}"
+    _owner_ttl = 180
+
+    logger.info(f"auto_triage: loop started for org={org_id} owner={_owner_id[:8]}")
 
     while True:
         # Shared, hardened Redis client (bounded timeouts) — a Redis hiccup
@@ -1213,7 +1224,25 @@ async def run_auto_triage_loop(org_id: str) -> None:
             enabled = await _redis.get(f"auto_triage:enabled:{org_id}")
             if not enabled:
                 logger.info(f"auto_triage: loop stopping for org={org_id} (disabled)")
+                try:
+                    if await _redis.get(_owner_key) == _owner_id:
+                        await _redis.delete(_owner_key)
+                except Exception:
+                    pass
                 break
+
+            # Acquire/refresh the per-org ownership lease. If another replica owns
+            # it, idle as a standby (poll every 60s) instead of double-processing.
+            try:
+                _got = await _redis.set(_owner_key, _owner_id, nx=True, ex=_owner_ttl)
+                if not _got:
+                    _cur = await _redis.get(_owner_key)
+                    if _cur != _owner_id:
+                        await asyncio.sleep(60)
+                        continue
+                    await _redis.set(_owner_key, _owner_id, ex=_owner_ttl)
+            except Exception:
+                pass  # Redis degraded — best-effort: fall through and process
 
             # Write loop status — TTL slightly longer than the 2-min sleep so it
             # never goes stale between cycles (was 300s which caused running=False)
