@@ -428,19 +428,27 @@ async def _m365_list_users(client: httpx.AsyncClient, headers: dict, org_id: str
     return users
 
 
-async def _refresh_m365_token(refresh_token: str) -> Optional[str]:
+async def _refresh_m365_token(refresh_token: str, tenant_id: Optional[str] = None) -> Optional[str]:
     """
     Get a valid M365 access token.
 
     Strategy (in order):
-    1. Client-credentials flow using M365_TENANT_ID env var — works when the app has
-       application permissions (Mail.Read, User.Read.All etc.) granted in Azure AD.
-       This is the preferred path for tenant-wide scanning.
-    2. Delegated refresh_token grant — fallback for orgs still using user-delegated auth.
+    1. Client-credentials flow using the tenant id — works when the app has
+       application permissions (Mail.Read, User.Read.All etc.) granted + admin-
+       consented in the customer's Azure AD. This is the preferred path for
+       tenant-wide scanning (the Graph equivalent of Google domain-wide delegation).
+    2. Delegated refresh_token grant — fallback for orgs still using user-delegated
+       auth (only covers the consenting user's own mailbox).
+
+    ``tenant_id`` should be the per-integration customer tenant (e.g. the org's
+    ``OrgIntegration.tenant_id``). It falls back to the global ``M365_TENANT_ID``
+    env only when the caller doesn't supply one. Note that client_credentials
+    cannot use the ``common`` endpoint — a concrete tenant is required.
     """
     client_id = os.getenv("M365_CLIENT_ID", "")
     client_secret = os.getenv("M365_CLIENT_SECRET", "")
-    tenant_id = os.getenv("M365_TENANT_ID", "")
+    # Prefer the per-integration customer tenant; fall back to the env default.
+    tenant_id = (tenant_id or "").strip() or os.getenv("M365_TENANT_ID", "")
 
     if not client_id or not client_secret:
         return None

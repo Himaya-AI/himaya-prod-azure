@@ -410,6 +410,7 @@ async def m365_callback(
     access_token = ""
     refresh_token = ""
     real_domain = None
+    real_tenant_id = None
 
     if M365_CLIENT_ID != "demo-client-id" and code:
         import httpx
@@ -441,6 +442,32 @@ async def m365_callback(
                         me_data = me.json()
                         email = me_data.get("mail") or me_data.get("userPrincipalName", "")
                         real_domain = email.split("@")[1] if "@" in email else None
+
+                    # Capture the customer's Azure AD tenant id — required for the
+                    # app-only (client_credentials) token that enables tenant-wide
+                    # mailbox scanning. Prefer Graph /organization; fall back to the
+                    # access_token 'tid' claim.
+                    try:
+                        org_resp = await client.get(
+                            "https://graph.microsoft.com/v1.0/organization?$select=id",
+                            headers={"Authorization": f"Bearer {access_token}"},
+                        )
+                        if org_resp.status_code == 200:
+                            _vals = org_resp.json().get("value", [])
+                            if _vals:
+                                real_tenant_id = _vals[0].get("id") or None
+                    except Exception:
+                        pass
+                    if not real_tenant_id:
+                        try:
+                            import base64 as _b64, json as _json
+                            _payload = access_token.split(".")[1]
+                            _payload += "=" * (-len(_payload) % 4)
+                            real_tenant_id = _json.loads(
+                                _b64.urlsafe_b64decode(_payload)
+                            ).get("tid") or None
+                        except Exception:
+                            pass
         except Exception as exc:
             import logging as _log
             _log.getLogger(__name__).error(f"M365 callback exception: {exc}")
@@ -472,6 +499,8 @@ async def m365_callback(
             existing.access_token_enc = encrypt_token(access_token)
             existing.refresh_token_enc = encrypt_token(refresh_token)
             existing.org_domain = real_domain  # always update per-provider domain
+            if real_tenant_id:
+                existing.tenant_id = real_tenant_id
             existing.status = "active"
             existing.updated_at = datetime.utcnow()
         else:
@@ -481,6 +510,7 @@ async def m365_callback(
                 access_token_enc=encrypt_token(access_token),
                 refresh_token_enc=encrypt_token(refresh_token),
                 org_domain=real_domain,
+                tenant_id=real_tenant_id,
                 scope="openid email profile offline_access User.Read User.Read.All Mail.Read Mail.ReadWrite Mail.ReadBasic.All MailboxSettings.Read MailboxSettings.ReadWrite Calendars.Read Directory.Read.All Group.Read.All",
                 status="active",
             )
