@@ -29,16 +29,22 @@ class RuleConditions:
     detectors: frozenset[str] = field(default_factory=frozenset)
     min_confidence: float = 0.0
     min_match_count: int = 1
+    min_llm_confidence: float = 0.0
     llm_classifications: frozenset[str] = field(
         default_factory=frozenset
     )
     llm_categories: frozenset[str] = field(default_factory=frozenset)
     external_recipients_only: bool = False
     recipient_domains: frozenset[str] = field(default_factory=frozenset)
+    match_all: bool = False
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.min_confidence <= 1.0:
             raise ValueError("min_confidence must be between 0 and 1")
+        if not 0.0 <= self.min_llm_confidence <= 1.0:
+            raise ValueError(
+                "min_llm_confidence must be between 0 and 1"
+            )
         if self.min_match_count < 1:
             raise ValueError("min_match_count must be at least 1")
         object.__setattr__(
@@ -303,6 +309,18 @@ class PolicyEvaluator:
             )
         ):
             return None
+        if (
+            (
+                conditions.llm_classifications
+                or conditions.llm_categories
+            )
+            and classification.llm_confidence
+            < conditions.min_llm_confidence
+        ):
+            return None
+
+        if conditions.match_all:
+            return ()
 
         has_finding_conditions = bool(
             conditions.entity_types or conditions.detectors

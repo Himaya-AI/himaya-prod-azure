@@ -257,3 +257,82 @@ def test_disabled_blank_external_only_rule_does_not_match() -> None:
 
     assert decision.matched_rule_ids == ()
     assert decision.effective_action == PolicyAction.ALLOW
+
+
+def test_match_all_rule_matches_without_findings() -> None:
+    policy = PolicySet(
+        version="test-match-all",
+        rules=(
+            PolicyRule(
+                rule_id="catch.all",
+                name="Catch all hold",
+                action=PolicyAction.HOLD,
+                priority=100,
+                conditions=RuleConditions(
+                    match_all=True,
+                    external_recipients_only=True,
+                ),
+            ),
+        ),
+    )
+
+    decision = PolicyEvaluator().evaluate(
+        policy=policy,
+        classification=_classification(),
+        limitations=(),
+        context=_context("bob@external.test"),
+        mode=TenantMode.ENFORCE,
+    )
+
+    assert decision.effective_action == PolicyAction.HOLD
+    assert decision.matched_rule_ids == ("catch.all",)
+
+
+def test_min_llm_confidence_filters_low_confidence_llm_match() -> None:
+    policy = PolicySet(
+        version="test-llm-confidence",
+        rules=(
+            PolicyRule(
+                rule_id="llm.sensitive",
+                name="Sensitive",
+                action=PolicyAction.HOLD,
+                conditions=RuleConditions(
+                    llm_classifications=frozenset({"SENSITIVE"}),
+                    min_llm_confidence=0.8,
+                    external_recipients_only=True,
+                ),
+            ),
+        ),
+    )
+    low = ClassificationOutcome(
+        findings=(),
+        llm_classification="SENSITIVE",
+        llm_confidence=0.4,
+        llm_categories=(),
+        llm_reasoning="test",
+    )
+    high = ClassificationOutcome(
+        findings=(),
+        llm_classification="SENSITIVE",
+        llm_confidence=0.9,
+        llm_categories=(),
+        llm_reasoning="test",
+    )
+
+    missed = PolicyEvaluator().evaluate(
+        policy=policy,
+        classification=low,
+        limitations=(),
+        context=_context("bob@external.test"),
+        mode=TenantMode.ENFORCE,
+    )
+    matched = PolicyEvaluator().evaluate(
+        policy=policy,
+        classification=high,
+        limitations=(),
+        context=_context("bob@external.test"),
+        mode=TenantMode.ENFORCE,
+    )
+
+    assert missed.matched_rule_ids == ()
+    assert matched.matched_rule_ids == ("llm.sensitive",)

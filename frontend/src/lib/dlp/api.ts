@@ -12,6 +12,7 @@ import type {
   DlpTenantSettingsUpdate,
   PolicyDocument,
   PolicyVersion,
+  PolicyCapabilities,
 } from '@/lib/dlp/types'
 
 const BASE = '/api/dlp/v2'
@@ -36,6 +37,10 @@ export async function getActiveDlpPolicy(): Promise<PolicyVersion> {
 
 export async function getDlpPolicyDraft(): Promise<PolicyVersion | null> {
   return (await api.get<PolicyVersion | null>(`${BASE}/policy/draft`)).data
+}
+
+export async function getDlpPolicyCapabilities(): Promise<PolicyCapabilities> {
+  return (await api.get<PolicyCapabilities>(`${BASE}/policy/capabilities`)).data
 }
 
 export async function saveDlpPolicyDraft(

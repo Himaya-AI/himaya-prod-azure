@@ -33,13 +33,11 @@ import {
   uniqueSuffix,
   type PolicyRuleTemplate,
 } from '@/lib/dlp/policy-templates'
-import {
-  DLP_DETECTORS,
-  DLP_ENTITY_TYPES,
-  DLP_LLM_CLASSIFICATIONS,
-} from '@/lib/dlp/policy-options'
+import { describeRule, hasContentFilters } from '@/lib/dlp/policy-summary'
 import type {
+  DlpTenantSettings,
   PolicyAction,
+  PolicyCapabilities,
   PolicyDocument,
   PolicyRule,
   PolicyVersion,
@@ -50,6 +48,8 @@ interface Props {
   activePolicy: PolicyVersion
   draftPolicy: PolicyVersion | null
   draftLoadError?: boolean
+  capabilities: PolicyCapabilities
+  settings: DlpTenantSettings
   canManage: boolean
   onChanged: () => Promise<void>
 }
@@ -181,21 +181,11 @@ function PolicyChipSelect({
   )
 }
 
-function ruleHasNoContentConditions(rule: PolicyRule): boolean {
-  const conditions = rule.conditions
-  return (
-    conditions.entity_types.length === 0 &&
-    conditions.detectors.length === 0 &&
-    conditions.llm_classifications.length === 0 &&
-    conditions.llm_categories.length === 0 &&
-    conditions.recipient_domains.length === 0
-  )
-}
-
 function RuleEditor({
   rule,
   disabled,
   expanded,
+  capabilities,
   onToggleExpanded,
   onChange,
   onDuplicate,
@@ -207,6 +197,7 @@ function RuleEditor({
   rule: PolicyRule
   disabled: boolean
   expanded: boolean
+  capabilities: PolicyCapabilities
   onToggleExpanded: () => void
   onChange: (rule: PolicyRule) => void
   onDuplicate: () => void
@@ -223,14 +214,27 @@ function RuleEditor({
     patch({ conditions: { ...rule.conditions, ...values } })
   }
 
-  const detectChips = [
-    ...rule.conditions.detectors,
-    ...rule.conditions.entity_types.slice(0, 3),
-  ]
   const hasFindingConditions = (
     rule.conditions.detectors.length > 0
     || rule.conditions.entity_types.length > 0
   )
+  const hasLlmConditions = (
+    rule.conditions.llm_classifications.length > 0
+    || rule.conditions.llm_categories.length > 0
+  )
+  const catchAllLocked = Boolean(rule.conditions.match_all)
+  const detectorOptions = capabilities.detectors.map((detector) => ({
+    value: detector.value,
+    label: detector.label,
+  }))
+  const entityOptions = capabilities.entity_types.map((entity) => ({
+    value: entity.value,
+    label: entity.label,
+  }))
+  const llmOptions = capabilities.llm_classifications.map((classification) => ({
+    value: classification,
+    label: classification,
+  }))
 
   return (
     <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#13131a]">
@@ -259,20 +263,8 @@ function RuleEditor({
             <span className="truncate text-sm font-medium text-white">{rule.name}</span>
             <ActionChip action={rule.action} />
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className="text-[11px] text-[#71717a]">
-              Priority {rule.priority}
-            </span>
-            {detectChips.length > 0 ? detectChips.map((chip, chipIndex) => (
-              <span
-                key={`${chip}-${chipIndex}`}
-                className="rounded border border-white/[0.07] bg-[#1e1e2c] px-1.5 py-0.5 text-[10px] text-[#a1a1aa]"
-              >
-                {chip.replaceAll('_', ' ')}
-              </span>
-            )) : (
-              <span className="text-[11px] text-[#52525b]">No detectors set</span>
-            )}
+          <div className="mt-1 text-[11px] leading-relaxed text-[#a1a1aa]">
+            {describeRule(rule)}
           </div>
         </button>
         <button
@@ -344,8 +336,21 @@ function RuleEditor({
                 max={1}
                 step={0.05}
                 value={rule.conditions.min_confidence}
-                disabled={disabled || !hasFindingConditions}
+                disabled={disabled || catchAllLocked || !hasFindingConditions}
                 onChange={(event) => patchConditions({ min_confidence: Number(event.target.value) })}
+                className="w-full rounded-lg border border-white/[0.08] bg-[#0d0d12] px-3 py-2 text-xs text-white outline-none disabled:opacity-60"
+              />
+            </label>
+            <label>
+              <span className="mb-1.5 block text-[11px] font-medium text-[#71717a]">Min LLM confidence</span>
+              <input
+                type="number"
+                min={0}
+                max={1}
+                step={0.05}
+                value={rule.conditions.min_llm_confidence ?? 0}
+                disabled={disabled || catchAllLocked || !hasLlmConditions}
+                onChange={(event) => patchConditions({ min_llm_confidence: Number(event.target.value) })}
                 className="w-full rounded-lg border border-white/[0.08] bg-[#0d0d12] px-3 py-2 text-xs text-white outline-none disabled:opacity-60"
               />
             </label>
@@ -355,63 +360,92 @@ function RuleEditor({
                 type="number"
                 min={1}
                 value={rule.conditions.min_match_count}
-                disabled={disabled || !hasFindingConditions}
+                disabled={disabled || catchAllLocked || !hasFindingConditions}
                 onChange={(event) => patchConditions({ min_match_count: Number(event.target.value) })}
                 className="w-full rounded-lg border border-white/[0.08] bg-[#0d0d12] px-3 py-2 text-xs text-white outline-none disabled:opacity-60"
               />
             </label>
           </div>
 
-          {ruleHasNoContentConditions(rule) && (
+          {!hasContentFilters(rule) && !rule.conditions.match_all && (
             <div className="flex gap-2 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2">
               <AlertTriangle size={14} className="mt-0.5 shrink-0 text-amber-400" />
               <p className="text-xs text-amber-200/80">
-                {rule.conditions.external_recipients_only
-                  ? 'This rule has no content conditions and will match every external message if enabled.'
-                  : 'This rule has no content conditions and will match every message if enabled.'}
+                {rule.enabled && (rule.action === 'hold' || rule.action === 'stop')
+                  ? 'Enabled Hold/Stop rules need content conditions, or Match all to acknowledge a catch-all.'
+                  : rule.conditions.external_recipients_only
+                    ? 'This rule has no content conditions and will match every remaining external message if enabled.'
+                    : 'This rule has no content conditions and will match every remaining message if enabled.'}
               </p>
             </div>
           )}
-          {!hasFindingConditions && (
+          <label className="flex items-start gap-2 rounded-lg border border-white/[0.07] px-3 py-2">
+            <input
+              type="checkbox"
+              checked={Boolean(rule.conditions.match_all)}
+              disabled={disabled}
+              onChange={(event) => {
+                if (event.target.checked) {
+                  patchConditions({
+                    match_all: true,
+                    detectors: [],
+                    entity_types: [],
+                    llm_classifications: [],
+                    llm_categories: [],
+                    min_confidence: 0,
+                    min_llm_confidence: 0,
+                    min_match_count: 1,
+                  })
+                  return
+                }
+                patchConditions({ match_all: false })
+              }}
+              className="mt-0.5 accent-[#3b6ef6]"
+            />
+            <span className="text-xs text-[#a1a1aa]">
+              Match all messages that pass the recipient filters. Required to save an enabled Hold or Stop rule with no content conditions.
+            </span>
+          </label>
+          {!hasFindingConditions && !catchAllLocked && (
             <p className="text-[11px] text-[#52525b]">
               Min confidence and min matches apply only when detectors or entity types are set.
+              Detectors and entity types are combined with AND.
+            </p>
+          )}
+          {hasFindingConditions && (
+            <p className="text-[11px] text-[#52525b]">
+              Detectors and entity types are combined with AND. A finding must satisfy both lists when both are set.
             </p>
           )}
 
           <div className="grid gap-3 md:grid-cols-2">
             <PolicyChipSelect
               label="Detectors"
-              options={DLP_DETECTORS}
+              options={detectorOptions}
               value={rule.conditions.detectors}
-              onChange={(detectors) => patchConditions({ detectors })}
-              disabled={disabled}
+              onChange={(detectors) => patchConditions({ detectors, match_all: false })}
+              disabled={disabled || catchAllLocked}
             />
             <PolicyChipSelect
               label="Entity types"
-              options={DLP_ENTITY_TYPES.map((entityType) => ({
-                value: entityType,
-                label: entityType.replaceAll('_', ' '),
-              }))}
+              options={entityOptions}
               value={rule.conditions.entity_types}
-              onChange={(entity_types) => patchConditions({ entity_types })}
-              disabled={disabled}
+              onChange={(entity_types) => patchConditions({ entity_types, match_all: false })}
+              disabled={disabled || catchAllLocked}
             />
             <PolicyChipSelect
               label="LLM classifications"
-              options={DLP_LLM_CLASSIFICATIONS.map((classification) => ({
-                value: classification,
-                label: classification,
-              }))}
+              options={llmOptions}
               value={rule.conditions.llm_classifications}
-              onChange={(llm_classifications) => patchConditions({ llm_classifications })}
-              disabled={disabled}
+              onChange={(llm_classifications) => patchConditions({ llm_classifications, match_all: false })}
+              disabled={disabled || catchAllLocked}
             />
             <PolicyField
               label="LLM categories"
               value={rule.conditions.llm_categories}
-              onChange={(llm_categories) => patchConditions({ llm_categories })}
+              onChange={(llm_categories) => patchConditions({ llm_categories, match_all: false })}
               placeholder="financial, legal"
-              disabled={disabled}
+              disabled={disabled || catchAllLocked}
               onEditingChange={onEditingChange}
               onPendingChange={(raw) => onPendingChange?.('llm_categories', raw)}
             />
@@ -501,6 +535,8 @@ export default function DlpPolicyTab({
   activePolicy,
   draftPolicy,
   draftLoadError = false,
+  capabilities,
+  settings,
   canManage,
   onChanged,
 }: Props) {
@@ -582,18 +618,32 @@ export default function DlpPolicyTab({
   const valid =
     duplicateIds.length === 0 &&
     document.rules.length <= 500 &&
-    document.rules.every((rule) =>
-      Boolean(rule.rule_id.trim()) &&
-      Boolean(rule.name.trim()) &&
-      isWholeNumber(rule.priority) &&
-      rule.priority >= 0 &&
-      rule.priority <= 10000 &&
-      Number.isFinite(rule.conditions.min_confidence) &&
-      rule.conditions.min_confidence >= 0 &&
-      rule.conditions.min_confidence <= 1 &&
-      isWholeNumber(rule.conditions.min_match_count) &&
-      rule.conditions.min_match_count >= 1,
-    )
+    document.rules.every((rule) => {
+      const minLlm = rule.conditions.min_llm_confidence ?? 0
+      const catchAllBlocked = (
+        rule.enabled
+        && (rule.action === 'hold' || rule.action === 'stop')
+        && !hasContentFilters(rule)
+        && !rule.conditions.match_all
+      )
+      return (
+        Boolean(rule.rule_id.trim()) &&
+        !rule.rule_id.trim().toLowerCase().startsWith('system.') &&
+        Boolean(rule.name.trim()) &&
+        isWholeNumber(rule.priority) &&
+        rule.priority >= 0 &&
+        rule.priority <= 10000 &&
+        Number.isFinite(rule.conditions.min_confidence) &&
+        rule.conditions.min_confidence >= 0 &&
+        rule.conditions.min_confidence <= 1 &&
+        Number.isFinite(minLlm) &&
+        minLlm >= 0 &&
+        minLlm <= 1 &&
+        isWholeNumber(rule.conditions.min_match_count) &&
+        rule.conditions.min_match_count >= 1 &&
+        !catchAllBlocked
+      )
+    })
   const editingLocked = !canManage || saving || publishing || draftLoadError
 
   function applyPendingFields(base: PolicyDocument): PolicyDocument {
@@ -652,7 +702,10 @@ export default function DlpPolicyTab({
 
   async function saveDraft() {
     if (!canManage || !valid || saving || publishing || draftLoadError) return
-    const submittedDocument = applyPendingFields(document)
+    const submittedDocument = {
+      ...applyPendingFields(document),
+      schema_version: document.schema_version ?? 1,
+    }
     const submitted = JSON.stringify(submittedDocument)
     if (submittedDocument !== document) setDocument(submittedDocument)
     setSaving(true)
@@ -784,6 +837,13 @@ export default function DlpPolicyTab({
           <p className="mt-1 text-[12px] text-[#71717a]">
             Active version {activePolicy.version}. Stop outranks Hold, then Allow; lower priority numbers win remaining ties.
             {' '}On/Off and other edits stay in this browser until you Save draft. Switching tabs keeps unsaved work; a full page reload discards it.
+          </p>
+          <p className="mt-2 text-[12px] text-[#a1a1aa]">
+            {settings.enabled ? 'DLP is on' : 'DLP is off (published actions still record, delivery is ALLOW)'}.
+            {' '}Mode: {settings.mode === 'monitor' ? 'Monitor — published Stop/Hold still deliver' : 'Enforce — published Stop/Hold are applied'}.
+            {' '}Internal domains are an exact match of {settings.organization_domain || 'the organization domain'}
+            {settings.domains.length ? ` plus ${settings.domains.length} alias${settings.domains.length === 1 ? '' : 'es'} in Settings` : ''}.
+            {' '}mail.example.com is external unless that exact domain is listed.
           </p>
         </div>
         <div className="flex gap-2">
@@ -923,6 +983,7 @@ export default function DlpPolicyTab({
             key={`${index}-${rule.rule_id}`}
             rule={rule}
             disabled={editingLocked}
+            capabilities={capabilities}
             expanded={expandedRule === rule.rule_id}
             onToggleExpanded={() => setExpandedRule(
               expandedRule === rule.rule_id ? null : rule.rule_id,

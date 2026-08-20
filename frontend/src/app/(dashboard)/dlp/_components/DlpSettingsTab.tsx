@@ -236,8 +236,16 @@ export default function DlpSettingsTab({
           Internal domains
         </h2>
         <p className="mt-1 text-[12px] text-[#71717a]">
-          One domain per line. These determine whether recipients are external.
+          Recipients are internal only when their domain exactly matches the
+          organization domain{settings.organization_domain ? ` (${settings.organization_domain})` : ''}
+          {' '}or one of the aliases below. Subdomains such as mail.example.com
+          are external unless listed.
         </p>
+        {settings.organization_domain && (
+          <p className="mt-3 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-[12px] text-[#a1a1aa]">
+            Always internal: <span className="font-mono text-white">{settings.organization_domain}</span>
+          </p>
+        )}
         <textarea
           value={domainsText}
           disabled={!canManage}

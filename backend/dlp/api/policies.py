@@ -23,9 +23,13 @@ from backend.dlp.persistence.models import (
     DlpTenantConfig,
 )
 from backend.dlp.policy import (
+    PolicyCapabilitiesResponse,
     PolicyDocument,
+    PolicyWriteError,
     build_default_policy,
+    build_policy_capabilities,
     policy_to_document,
+    validate_policy_write,
 )
 from backend.models.db_models import User
 
@@ -37,6 +41,13 @@ def _draft_conflict() -> HTTPException:
         status_code=409,
         detail="Policy draft has changed. Reload and try again.",
     )
+
+
+def _require_writable_policy(document: PolicyDocument) -> None:
+    try:
+        validate_policy_write(document)
+    except PolicyWriteError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/policy", response_model=PolicyVersionResponse)
@@ -63,6 +74,16 @@ async def get_active_policy(
 
 
 @router.get(
+    "/policy/capabilities",
+    response_model=PolicyCapabilitiesResponse,
+)
+async def get_policy_capabilities(
+    _current_user: User = Depends(require_dlp_enterprise),
+) -> PolicyCapabilitiesResponse:
+    return build_policy_capabilities()
+
+
+@router.get(
     "/policy/draft", response_model=PolicyVersionResponse | None
 )
 async def get_policy_draft(
@@ -81,6 +102,7 @@ async def save_policy_draft(
     current_user: User = Depends(require_dlp_admin),
     session: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
+    _require_writable_policy(payload.document)
     draft = await _latest_draft(
         session, current_user.org_id, for_update=True
     )
@@ -144,6 +166,7 @@ async def publish_policy(
     current_user: User = Depends(require_dlp_admin),
     session: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
+    _require_writable_policy(payload.document)
     draft = await _latest_draft(
         session, current_user.org_id, for_update=True
     )

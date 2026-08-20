@@ -35,11 +35,13 @@ function conditionFields(conditions: RuleConditions): Array<[string, string]> {
     ['Detectors', formatList(conditions.detectors)],
     ['Entity types', formatList(conditions.entity_types)],
     ['Min confidence', String(conditions.min_confidence)],
+    ['Min LLM confidence', String(conditions.min_llm_confidence ?? 0)],
     ['Min matches', String(conditions.min_match_count)],
     ['LLM classifications', formatList(conditions.llm_classifications)],
     ['LLM categories', formatList(conditions.llm_categories)],
     ['Recipient domains', formatList(conditions.recipient_domains)],
     ['External recipients only', formatBool(conditions.external_recipients_only)],
+    ['Match all', formatBool(Boolean(conditions.match_all))],
   ]
 }
 

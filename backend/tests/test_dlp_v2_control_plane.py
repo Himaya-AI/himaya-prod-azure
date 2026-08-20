@@ -26,9 +26,12 @@ from backend.dlp.policy import (
     PolicyAction,
     PolicyDocument,
     PolicyRuleDocument,
+    PolicyWriteError,
     RuleConditionsDocument,
+    build_policy_capabilities,
     policy_from_document,
     policy_to_document,
+    validate_policy_write,
 )
 
 
@@ -58,6 +61,7 @@ def test_control_plane_routes_are_versioned() -> None:
     assert "/api/dlp/v2/settings" in route_paths
     assert "/api/dlp/v2/policy/draft" in route_paths
     assert "/api/dlp/v2/policy/publish" in route_paths
+    assert "/api/dlp/v2/policy/capabilities" in route_paths
     assert "/api/dlp/v2/messages/{message_id}/release" in route_paths
     assert "/api/dlp/v2/messages/{message_id}/stop" in route_paths
 
@@ -87,6 +91,9 @@ def test_policy_document_round_trip_normalizes_rules() -> None:
     assert serialized.rules[0].conditions.recipient_domains == [
         "external.test"
     ]
+    assert serialized.schema_version == 1
+    assert serialized.rules[0].conditions.match_all is False
+    assert serialized.rules[0].conditions.min_llm_confidence == 0.0
 
 
 def test_policy_document_rejects_duplicate_rule_ids() -> None:
@@ -99,6 +106,127 @@ def test_policy_document_rejects_duplicate_rule_ids() -> None:
 
     with pytest.raises(ValidationError, match="unique"):
         PolicyDocument.model_validate({"rules": [rule, rule]})
+
+
+def test_policy_capabilities_cover_classifier_detectors() -> None:
+    capabilities = build_policy_capabilities()
+    detector_values = {item.value for item in capabilities.detectors}
+    entity_values = {item.value for item in capabilities.entity_types}
+
+    assert detector_values == {"credential", "pii", "ner", "lexicon"}
+    assert "CRYPTO" in entity_values
+    assert "EMAIL_ADDRESS" in entity_values
+    assert "PERSON" in entity_values
+    assert "CLASSIFICATION_BANNER" in entity_values
+    assert "SENSITIVE" in capabilities.llm_classifications
+    assert capabilities.domain_matching == "exact"
+    assert capabilities.detector_entity_logic == "and"
+
+
+def test_write_validation_rejects_unknown_detector() -> None:
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="bad.detector",
+                name="Bad detector",
+                action=PolicyAction.HOLD,
+                conditions=RuleConditionsDocument(detectors=["presidio"]),
+            )
+        ]
+    )
+    with pytest.raises(PolicyWriteError, match="Unknown detector"):
+        validate_policy_write(document)
+
+
+def test_write_validation_rejects_reserved_rule_id() -> None:
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="system.catch-all",
+                name="Reserved",
+                action=PolicyAction.HOLD,
+                conditions=RuleConditionsDocument(match_all=True),
+            )
+        ]
+    )
+    with pytest.raises(PolicyWriteError, match="reserved"):
+        validate_policy_write(document)
+
+
+def test_write_validation_requires_match_all_for_empty_stop() -> None:
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="empty.stop",
+                name="Empty stop",
+                action=PolicyAction.STOP,
+                conditions=RuleConditionsDocument(),
+            )
+        ]
+    )
+    with pytest.raises(PolicyWriteError, match="match_all"):
+        validate_policy_write(document)
+
+    acknowledged = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="empty.stop",
+                name="Empty stop",
+                action=PolicyAction.STOP,
+                conditions=RuleConditionsDocument(match_all=True),
+            )
+        ]
+    )
+    validate_policy_write(acknowledged)
+
+
+def test_write_validation_allows_empty_allow_without_match_all() -> None:
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="empty.allow",
+                name="Empty allow",
+                action=PolicyAction.ALLOW,
+                conditions=RuleConditionsDocument(),
+            )
+        ]
+    )
+    validate_policy_write(document)
+
+
+def test_write_validation_rejects_match_all_with_content_filters() -> None:
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="mixed.catch-all",
+                name="Mixed catch-all",
+                action=PolicyAction.HOLD,
+                conditions=RuleConditionsDocument(
+                    match_all=True,
+                    detectors=["pii"],
+                ),
+            )
+        ]
+    )
+    with pytest.raises(PolicyWriteError, match="match_all"):
+        validate_policy_write(document)
+
+
+def test_write_validation_allows_credential_entity_types() -> None:
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="creds.github",
+                name="GitHub tokens",
+                action=PolicyAction.STOP,
+                conditions=RuleConditionsDocument(
+                    detectors=["credential"],
+                    entity_types=["GITHUB_FINE_GRAINED_PAT"],
+                ),
+            )
+        ]
+    )
+    validate_policy_write(document)
 
 
 def test_domain_normalization_rejects_email_addresses() -> None:
@@ -580,3 +708,57 @@ async def test_publish_rejects_stale_revision(monkeypatch) -> None:
 
     assert exc.value.status_code == 409
     assert draft.status == "draft"
+
+
+@pytest.mark.asyncio
+async def test_save_rejects_unknown_detector(monkeypatch) -> None:
+    from backend.dlp.api.policies import save_policy_draft
+
+    monkeypatch.setattr(
+        "backend.dlp.api.policies._latest_draft",
+        AsyncMock(return_value=None),
+    )
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="bad.detector",
+                name="Bad detector",
+                action=PolicyAction.HOLD,
+                conditions=RuleConditionsDocument(detectors=["presidio"]),
+            )
+        ]
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await save_policy_draft(
+            payload=PolicyDraftRequest(document=document),
+            current_user=SimpleNamespace(id=uuid4(), org_id=uuid4()),
+            session=SimpleNamespace(),
+        )
+
+    assert exc.value.status_code == 422
+    assert "Unknown detector" in str(exc.value.detail)
+
+
+def test_policy_document_accepts_legacy_payloads_without_new_fields() -> None:
+    document = PolicyDocument.model_validate(
+        {
+            "default_action": "allow",
+            "rules": [
+                {
+                    "rule_id": "legacy.pii",
+                    "name": "Legacy PII",
+                    "action": "hold",
+                    "conditions": {
+                        "detectors": ["pii"],
+                        "entity_types": ["credit_card"],
+                    },
+                }
+            ],
+        }
+    )
+
+    assert document.schema_version == 1
+    assert document.rules[0].conditions.match_all is False
+    assert document.rules[0].conditions.min_llm_confidence == 0
+    assert document.rules[0].conditions.entity_types == ["CREDIT_CARD"]

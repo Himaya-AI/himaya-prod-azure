@@ -20,6 +20,7 @@ import { toast } from '@/components/ui/Toast'
 import {
   getActiveDlpPolicy,
   getDlpErrorMessage,
+  getDlpPolicyCapabilities,
   getDlpPolicyDraft,
   getDlpSettings,
   getDlpStatus,
@@ -30,6 +31,7 @@ import type {
   DlpNavigateTarget,
   DlpStatus,
   DlpTenantSettings,
+  PolicyCapabilities,
   PolicyVersion,
 } from '@/lib/dlp/types'
 import { getUser } from '@/lib/auth'
@@ -108,6 +110,7 @@ export default function DlpPage() {
   const [status, setStatus] = useState<DlpStatus | null>(null)
   const [settings, setSettings] = useState<DlpTenantSettings | null>(null)
   const [activePolicy, setActivePolicy] = useState<PolicyVersion | null>(null)
+  const [capabilities, setCapabilities] = useState<PolicyCapabilities | null>(null)
   const [draftPolicy, setDraftPolicy] = useState<PolicyVersion | null>(null)
   const [draftLoadError, setDraftLoadError] = useState(false)
   const [recentMessages, setRecentMessages] = useState<DlpMessageSummary[]>([])
@@ -128,12 +131,14 @@ export default function DlpPage() {
         statusResult,
         settingsResult,
         policyResult,
+        capabilitiesResult,
         draftResult,
         messagesResult,
       ] = await Promise.allSettled([
         getDlpStatus(),
         getDlpSettings(),
         getActiveDlpPolicy(),
+        getDlpPolicyCapabilities(),
         getDlpPolicyDraft(),
         listDlpMessages({ limit: 10 }),
       ])
@@ -143,8 +148,9 @@ export default function DlpPage() {
         statusResult.status !== 'fulfilled'
         || settingsResult.status !== 'fulfilled'
         || policyResult.status !== 'fulfilled'
+        || capabilitiesResult.status !== 'fulfilled'
       ) {
-        const failed = [statusResult, settingsResult, policyResult].find(
+        const failed = [statusResult, settingsResult, policyResult, capabilitiesResult].find(
           (result): result is PromiseRejectedResult => result.status === 'rejected',
         )
         const message = getDlpErrorMessage(
@@ -159,6 +165,7 @@ export default function DlpPage() {
       setStatus(statusResult.value)
       setSettings(settingsResult.value)
       setActivePolicy(policyResult.value)
+      setCapabilities(capabilitiesResult.value)
       setError(null)
       hydratedRef.current = true
 
@@ -238,7 +245,7 @@ export default function DlpPage() {
 
   if (loading) return <LoadingPage />
 
-  if (!status || !settings || !activePolicy) {
+  if (!status || !settings || !activePolicy || !capabilities) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
@@ -343,6 +350,8 @@ export default function DlpPage() {
               activePolicy={activePolicy}
               draftPolicy={draftPolicy}
               draftLoadError={draftLoadError}
+              capabilities={capabilities}
+              settings={settings}
               canManage={canManage}
               onChanged={reloadPolicies}
             />

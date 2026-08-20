@@ -18,7 +18,7 @@ from backend.dlp.persistence.models import (
     DlpPolicyVersion,
     DlpTenantConfig,
 )
-from backend.models.db_models import User
+from backend.models.db_models import Organization, User
 
 router = APIRouter()
 
@@ -29,7 +29,9 @@ async def get_settings(
     session: AsyncSession = Depends(get_db),
 ) -> TenantSettingsResponse:
     config = await session.get(DlpTenantConfig, current_user.org_id)
-    return await _settings_response(session, config)
+    return await _settings_response(
+        session, config, current_user.org_id
+    )
 
 
 @router.put("/settings", response_model=TenantSettingsResponse)
@@ -58,11 +60,15 @@ async def update_settings(
         config.updated_by = current_user.id
         config.updated_at = datetime.now(timezone.utc)
     await session.flush()
-    return await _settings_response(session, config)
+    return await _settings_response(
+        session, config, current_user.org_id
+    )
 
 
 async def _settings_response(
-    session: AsyncSession, config: DlpTenantConfig | None
+    session: AsyncSession,
+    config: DlpTenantConfig | None,
+    org_id,
 ) -> TenantSettingsResponse:
     defaults = get_dlp_settings()
     active_version = None
@@ -71,6 +77,10 @@ async def _settings_response(
             DlpPolicyVersion, config.active_policy_version_id
         )
         active_version = policy.version if policy else None
+    organization = await session.get(Organization, org_id)
+    organization_domain = None
+    if organization is not None and organization.domain:
+        organization_domain = str(organization.domain).lower().rstrip(".")
     return TenantSettingsResponse(
         enabled=(
             config.enabled
@@ -83,6 +93,7 @@ async def _settings_response(
             else defaults.tenant_mode
         ),
         domains=list(config.domains) if config is not None else [],
+        organization_domain=organization_domain,
         lexicon_version=(
             config.lexicon_version if config is not None else "v1"
         ),

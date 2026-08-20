@@ -2,14 +2,26 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.dlp.policy.capabilities import CURRENT_POLICY_SCHEMA_VERSION
 from backend.dlp.policy.evaluator import (
     PolicyAction,
     PolicyRule,
     PolicySet,
     RuleConditions,
 )
+
+
+def _unique_normalized(
+    values: list[str], *, transform
+) -> list[str]:
+    seen: list[str] = []
+    for item in values:
+        normalized = transform(str(item).strip())
+        if normalized and normalized not in seen:
+            seen.append(normalized)
+    return seen
 
 
 class RuleConditionsDocument(BaseModel):
@@ -19,10 +31,39 @@ class RuleConditionsDocument(BaseModel):
     detectors: list[str] = Field(default_factory=list)
     min_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     min_match_count: int = Field(default=1, ge=1)
+    min_llm_confidence: float = Field(default=0.0, ge=0.0, le=1.0)
     llm_classifications: list[str] = Field(default_factory=list)
     llm_categories: list[str] = Field(default_factory=list)
     external_recipients_only: bool = False
     recipient_domains: list[str] = Field(default_factory=list)
+    match_all: bool = False
+
+    @field_validator("entity_types")
+    @classmethod
+    def normalize_entity_types(cls, value: list[str]) -> list[str]:
+        return _unique_normalized(value, transform=str.upper)
+
+    @field_validator("detectors")
+    @classmethod
+    def normalize_detectors(cls, value: list[str]) -> list[str]:
+        return _unique_normalized(value, transform=str.lower)
+
+    @field_validator("llm_classifications")
+    @classmethod
+    def normalize_llm_classifications(cls, value: list[str]) -> list[str]:
+        return _unique_normalized(value, transform=str.upper)
+
+    @field_validator("llm_categories")
+    @classmethod
+    def normalize_llm_categories(cls, value: list[str]) -> list[str]:
+        return _unique_normalized(value, transform=str.lower)
+
+    @field_validator("recipient_domains")
+    @classmethod
+    def normalize_recipient_domains(cls, value: list[str]) -> list[str]:
+        return _unique_normalized(
+            value, transform=lambda item: item.lower().rstrip(".")
+        )
 
 
 class PolicyRuleDocument(BaseModel):
@@ -35,10 +76,23 @@ class PolicyRuleDocument(BaseModel):
     priority: int = Field(default=100, ge=0, le=10000)
     enabled: bool = True
 
+    @field_validator("rule_id", "name")
+    @classmethod
+    def strip_text(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("must not be blank")
+        return stripped
+
 
 class PolicyDocument(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    schema_version: int = Field(
+        default=CURRENT_POLICY_SCHEMA_VERSION,
+        ge=CURRENT_POLICY_SCHEMA_VERSION,
+        le=CURRENT_POLICY_SCHEMA_VERSION,
+    )
     default_action: PolicyAction = PolicyAction.ALLOW
     rules: list[PolicyRuleDocument] = Field(
         default_factory=list, max_length=500
@@ -79,6 +133,9 @@ def policy_from_document(
                     min_match_count=(
                         rule.conditions.min_match_count
                     ),
+                    min_llm_confidence=(
+                        rule.conditions.min_llm_confidence
+                    ),
                     llm_classifications=frozenset(
                         rule.conditions.llm_classifications
                     ),
@@ -91,6 +148,7 @@ def policy_from_document(
                     recipient_domains=frozenset(
                         rule.conditions.recipient_domains
                     ),
+                    match_all=rule.conditions.match_all,
                 ),
                 priority=rule.priority,
                 enabled=rule.enabled,
@@ -102,6 +160,7 @@ def policy_from_document(
 
 def policy_to_document(policy: PolicySet) -> PolicyDocument:
     return PolicyDocument(
+        schema_version=CURRENT_POLICY_SCHEMA_VERSION,
         default_action=policy.default_action,
         rules=[
             PolicyRuleDocument(
@@ -121,6 +180,9 @@ def policy_to_document(policy: PolicySet) -> PolicyDocument:
                     min_match_count=(
                         rule.conditions.min_match_count
                     ),
+                    min_llm_confidence=(
+                        rule.conditions.min_llm_confidence
+                    ),
                     llm_classifications=sorted(
                         rule.conditions.llm_classifications
                     ),
@@ -133,6 +195,7 @@ def policy_to_document(policy: PolicySet) -> PolicyDocument:
                     recipient_domains=sorted(
                         rule.conditions.recipient_domains
                     ),
+                    match_all=rule.conditions.match_all,
                 ),
             )
             for rule in policy.rules

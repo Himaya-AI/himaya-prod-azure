@@ -47,6 +47,7 @@ class TenantSettingsResponse(BaseModel):
     enabled: bool
     mode: Literal["monitor", "enforce"]
     domains: list[str]
+    organization_domain: str | None = None
     lexicon_version: str
     active_policy_version: int | None
 

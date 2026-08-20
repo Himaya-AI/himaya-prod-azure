@@ -1,4 +1,3 @@
-import { DLP_ENTITY_TYPES } from './policy-options'
 import type { PolicyRule, RuleConditions } from './types'
 
 export interface PolicyRuleTemplate {
@@ -12,16 +11,31 @@ export interface PolicyRuleTemplate {
   conditions: Partial<RuleConditions>
 }
 
+const IDENTITY_ENTITY_TYPES = [
+  'CREDIT_CARD',
+  'IBAN_CODE',
+  'US_BANK_NUMBER',
+  'US_SSN',
+  'US_PASSPORT',
+  'US_DRIVER_LICENSE',
+  'UK_NHS',
+  'UK_NINO',
+  'IN_AADHAAR',
+  'IN_PAN',
+] as const
+
 function baseConditions(overrides: Partial<RuleConditions> = {}): RuleConditions {
   return {
     entity_types: [],
     detectors: [],
     min_confidence: 0.8,
     min_match_count: 1,
+    min_llm_confidence: 0,
     llm_classifications: [],
     llm_categories: [],
     external_recipients_only: true,
     recipient_domains: [],
+    match_all: false,
     ...overrides,
   }
 }
@@ -36,7 +50,7 @@ export const POLICY_RULE_TEMPLATES: readonly PolicyRuleTemplate[] = [
     action: 'hold',
     priority: 20,
     conditions: {
-      entity_types: [...DLP_ENTITY_TYPES],
+      entity_types: [...IDENTITY_ENTITY_TYPES],
       min_confidence: 0.8,
       external_recipients_only: true,
     },

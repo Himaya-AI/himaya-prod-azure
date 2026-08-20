@@ -30,6 +30,7 @@ export interface DlpTenantSettings {
   enabled: boolean
   mode: DlpMode
   domains: string[]
+  organization_domain?: string | null
   lexicon_version: string
   active_policy_version: number | null
 }
@@ -46,10 +47,12 @@ export interface RuleConditions {
   detectors: string[]
   min_confidence: number
   min_match_count: number
+  min_llm_confidence: number
   llm_classifications: string[]
   llm_categories: string[]
   external_recipients_only: boolean
   recipient_domains: string[]
+  match_all: boolean
 }
 
 export interface PolicyRule {
@@ -62,8 +65,31 @@ export interface PolicyRule {
 }
 
 export interface PolicyDocument {
+  schema_version?: number
   default_action: PolicyAction
   rules: PolicyRule[]
+}
+
+export interface PolicyDetectorCapability {
+  value: string
+  label: string
+  open_entity_types: boolean
+}
+
+export interface PolicyEntityCapability {
+  value: string
+  label: string
+  detector: string
+}
+
+export interface PolicyCapabilities {
+  schema_version: number
+  detectors: PolicyDetectorCapability[]
+  entity_types: PolicyEntityCapability[]
+  llm_classifications: string[]
+  domain_matching: 'exact'
+  detector_entity_logic: 'and'
+  reserved_rule_id_prefixes: string[]
 }
 
 export interface PolicyVersion {
