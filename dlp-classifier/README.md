@@ -106,7 +106,29 @@ requirements.txt
 ## Configuration
 
 All settings are loaded via `pydantic-settings` from the environment / a
-local `.env` file (see `config/settings.py`):
+local `.env` file (see `config/settings.py`).
+
+Example `.env`:
+
+```env
+# Required
+REDIS_URL=redis://localhost:6379
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+AWS_REGION=eu-north-1
+
+# LLM (Bedrock / Kimi)
+KIMI_MODEL_ID=moonshotai.kimi-k2.5
+LLM_TEMPERATURE=0.1
+LLM_MAX_TOKENS=20000
+
+# Optional overrides
+REDIS_KEY_PREFIX=dlp
+LEXICON_TTL_SECONDS=3600
+APP_HOST=0.0.0.0
+APP_PORT=8000
+LOG_LEVEL=info
+```
 
 | Variable | Default | Used by |
 |---|---|---|
@@ -127,6 +149,10 @@ directly from env via `python-dotenv`: `KIMI_MODEL_ID`, `LLM_TIMEOUT_SECONDS`,
 `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`, `AWS_REGION`, plus standard AWS
 credential env vars picked up by `boto3`.
 
+Redis is **not** BullMQ here — it only stores tenant lexicon JSON under
+`dlp:lexicon:{tenant_id}`. The app still `ping()`s Redis on boot, so Redis
+must be up even if you have no lexicon data yet.
+
 ## Startup sequence (`app/main.py`)
 
 1. Verify the BetterLeaks binary exists and is executable — fails fast with
@@ -140,52 +166,133 @@ credential env vars picked up by `boto3`.
 
 Everything is constructed once and hung off `app.state`.
 
-## API
+## Prerequisites
 
-### `POST /classify`
+- Python 3.12+
+- Redis running and reachable (tenant lexicon store; required at startup)
+- AWS credentials with access to Bedrock model `moonshotai.kimi-k2.5` (Tier 2)
+- Docker (optional — only if you run via the image)
 
-Request:
-```json
-{
-  "text": "raw email content",
-  "tenant_id": "default",
-  "message_id": "optional",
-  "lexicon_version": "v1"
-}
-```
-
-Response:
-```json
-{
-  "findings": [ /* one DetectionResult per Tier 0 detector */ ],
-  "llm_result": { "classification": "...", "confidence": 0.0, "categories": [], "reasoning": "..." }
-}
-```
-
-### `GET /health`
-
-Returns `{"status": "ok"}`.
-
-## Running locally
+From the parent repo you can start Redis with compose:
 
 ```bash
+cd ..   # himaya-prod-azure
+docker compose up -d redis
+```
+
+## Running locally (without Docker)
+
+```bash
+cd dlp-classifier
+
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
 pip install -r requirements.txt
-./scripts/install_betterleaks.sh        # installs BetterLeaks v1.6.1
-export REDIS_URL=redis://localhost:6379/0
+./scripts/install_betterleaks.sh   # installs BetterLeaks v1.6.1 to /usr/local/bin
+
+# ensure Redis is up, then:
 python -m app.main
 ```
 
-## Docker
+Service listens on `http://0.0.0.0:8000` by default.
+
+## Running with Docker
+
+Build:
 
 ```bash
-docker build -t dlp-classifier .
-docker run -p 8000:8000 --env-file .env dlp-classifier
+cd dlp-classifier
+docker build -t dlp-classifier:latest .
 ```
+
+Run — Redis on the host (simplest on Linux):
+
+```bash
+docker run --rm --network host --env-file .env dlp-classifier:latest
+```
+
+Or bridge networking (map port 8000, point Redis at the host):
+
+```bash
+docker run --rm -p 8000:8000 --env-file .env \
+  -e REDIS_URL=redis://host.docker.internal:6379 \
+  --add-host=host.docker.internal:host-gateway \
+  dlp-classifier:latest
+```
+
+Do **not** use `REDIS_URL=redis://localhost:6379` inside a bridge-network
+container — `localhost` is the container itself, not your host Redis.
 
 The image installs BetterLeaks during build (pinned version, checksum
 verified), installs Python deps (including the `en_core_web_sm` spaCy model,
 pulled via its direct wheel URL in `requirements.txt`), and runs as a
-non-root user.
+non-root user. Redis is a separate service; it is not installed in the image.
+
+## How to use
+
+### Health check
+
+```bash
+curl -s http://localhost:8000/health
+# {"status":"ok"}
+```
+
+### Classify text
+
+```bash
+curl -s -X POST http://localhost:8000/classify \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Hi Alice, my card is 4111 1111 1111 1111 and SSN is 123-45-6789.",
+    "tenant_id": "default",
+    "message_id": "msg-001",
+    "lexicon_version": "v1"
+  }' | jq .
+```
+
+Request body:
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `text` | string | *(required)* | Plain extracted email/body text |
+| `tenant_id` | string | `"default"` | Used for lexicon lookup key |
+| `message_id` | string \| null | `null` | Optional correlation id |
+| `lexicon_version` | string | `"v1"` | Busts the in-process lexicon automaton cache |
+
+Response shape:
+
+```json
+{
+  "findings": [
+    {
+      "detector": "pii",
+      "matches": [ /* span matches */ ],
+      "escalate": false,
+      "error": null
+    }
+  ],
+  "llm_result": {
+    "classification": "...",
+    "confidence": 0.0,
+    "categories": [],
+    "reasoning": "..."
+  }
+}
+```
+
+`findings` has one entry per Tier 0 detector (`pii`, `ner`, `lexicon`,
+`credentials`). `llm_result` is always populated by the Bedrock Kimi call
+(with Tier 0 findings as context).
+
+### Optional: seed a tenant lexicon in Redis
+
+```bash
+redis-cli SET 'dlp:lexicon:default' '["CONFIDENTIAL","PROJECT-ORION","trade secret"]'
+```
+
+Then call `/classify` with matching terms in `text` and
+`tenant_id: "default"` — the lexicon detector should report matches.
 
 ## What's not built yet
 
