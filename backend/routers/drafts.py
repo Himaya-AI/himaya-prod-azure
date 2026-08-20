@@ -943,8 +943,14 @@ async def _scan_org_drafts(org_id: str, db: AsyncSession) -> dict:
                                         DO UPDATE SET
                                             risk_score = EXCLUDED.risk_score,
                                             ai_explanation_en = EXCLUDED.ai_explanation_en,
-                                            threat_indicators = EXCLUDED.threat_indicators,
-                                            detected_at = NOW()
+                                            threat_indicators = EXCLUDED.threat_indicators
+                                            -- NOTE: do NOT bump detected_at here. The draft
+                                            -- scanner re-upserts every existing draft each
+                                            -- cycle; resetting detected_at=NOW() made old
+                                            -- drafts perpetually resurface at the top of the
+                                            -- queue as "new" and appear unresolvable. Keep
+                                            -- the original discovery time so a draft is
+                                            -- surfaced once, when first discovered.
                                     """),
                                     {
                                         "org_id": str(org_uuid),

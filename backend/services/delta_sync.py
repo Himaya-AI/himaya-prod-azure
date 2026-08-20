@@ -209,6 +209,14 @@ async def _delta_sync_integration_snap(db, redis, integration):
         since = datetime.now(timezone.utc) - timedelta(hours=24)
 
     since_epoch = int(since.timestamp())
+    # Gmail's search index lags delivery (same class of problem as M365's EOP
+    # scan delay handled below): a just-delivered email may not match
+    # `after:{cursor}` yet, and once the cursor advances past it the message is
+    # skipped forever ("0 new messages"). Look back at least LOOKBACK seconds so
+    # the window overlaps. The Redis seen-set below keeps the overlap cheap and
+    # process_email dedups by (org, message_id, recipient), so re-scans are safe.
+    _gmail_lookback = int(os.getenv("GMAIL_INBOUND_LOOKBACK_SECONDS", "600"))
+    since_epoch = min(since_epoch, int(datetime.now(timezone.utc).timestamp()) - _gmail_lookback)
     now_ts = datetime.now(timezone.utc).timestamp()
     new_count = 0
     enqueue_failures = 0
@@ -348,6 +356,15 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         msg_id = msg_ref.get("id")
                         if not msg_id:
                             continue
+                        # Skip messages already processed in a prior overlapping
+                        # lookback window so the overlap doesn't re-fetch full
+                        # metadata and inflate Gmail API usage / 429s.
+                        _seen_key = f"delta_seen:google:{org_id}:{msg_id}"
+                        try:
+                            if await redis.get(_seen_key):
+                                continue
+                        except Exception:
+                            pass
                         meta = await client.get(
                             f"{GMAIL_API_BASE}/users/{user_email}/messages/{msg_id}",
                             headers=user_headers,
@@ -355,6 +372,13 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         )
                         if meta.status_code != 200:
                             continue
+                        # Mark processed so overlapping lookback cycles skip the
+                        # expensive re-fetch. Cleared on enqueue failure below so
+                        # transient failures are still retried next cycle.
+                        try:
+                            await redis.set(_seen_key, "1", ex=7200)
+                        except Exception:
+                            pass
                         msg_json = meta.json()
                         # Check if this is an outbound (SENT) message
                         _label_ids = msg_json.get("labelIds", [])
@@ -710,6 +734,10 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         except Exception as _pe:
                             enqueue_failures += 1
                             logger.warning(f"Delta enqueue failed for {msg_id}: {_pe}")
+                            try:
+                                await redis.delete(_seen_key)  # allow retry next cycle
+                            except Exception:
+                                pass
                             continue
 
                         try:
