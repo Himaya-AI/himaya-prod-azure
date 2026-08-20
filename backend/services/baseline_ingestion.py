@@ -542,6 +542,11 @@ def _get_service_account_headers_sync(subject_email: str = None, scopes: list[st
         import google.auth.transport.requests as ga_requests
         sa_info = _json.loads(base64.b64decode(sa_b64).decode())
         scopes = scopes or [
+            # Full mailbox scope — REQUIRED for hard-capture quarantine
+            # (users.messages.delete = permanent removal). Must be authorized in
+            # the Google Workspace Admin Domain-Wide Delegation grant for this
+            # SA's client ID (DWD is all-or-nothing). Superset of gmail.modify.
+            "https://mail.google.com/",
             "https://www.googleapis.com/auth/gmail.modify",           # quarantine (move out of inbox)
             "https://www.googleapis.com/auth/gmail.settings.basic",   # posture: read/write inbox filters
             "https://www.googleapis.com/auth/admin.directory.user.readonly",
