@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.dlp.contracts.commands import GatewayMessageState
+from backend.dlp.contracts.commands import GatewayMessageState, CommandType
 
 
 class CaptureEvent(BaseModel):
@@ -93,3 +93,31 @@ class DeliveryEvent(BaseModel):
     @property
     def deduplication_key(self) -> str:
         return f"{self.event_type}:{self.attempt_id}"
+
+
+class CommandAckStatus(str, Enum):
+    APPLIED = "applied"
+    DUPLICATE = "duplicate"
+    NOOP = "noop"
+
+
+class CommandAckEvent(BaseModel):
+    """Gateway result for one consumed command."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: int = Field(default=1, ge=1)
+    event_type: str = "dlp.message.command.v1"
+    event_id: UUID
+    command_id: UUID
+    message_id: UUID
+    org_id: str
+    command_type: CommandType
+    status: CommandAckStatus
+    resulting_state: GatewayMessageState
+    reason: str | None = None
+    occurred_at: datetime
+
+    @property
+    def deduplication_key(self) -> str:
+        return f"{self.event_type}:{self.command_id}"

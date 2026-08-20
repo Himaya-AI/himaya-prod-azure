@@ -19,7 +19,7 @@ import {
 import Button from '@/components/ui/Button'
 import { Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui/Table'
 import { toast } from '@/components/ui/Toast'
-import { ActionChip, OutcomeChip, StateChip } from './DlpChrome'
+import { ActionChip, OutcomeChip, StateChip, formatRecipientList, snippetText } from './DlpChrome'
 import {
   getDlpErrorMessage,
   getDlpMessage,
@@ -37,6 +37,8 @@ interface Props {
   canManage: boolean
   defaultFilter?: string
   variant?: 'queue' | 'messages'
+  refreshEpoch?: number
+  onReviewed?: () => void
 }
 
 interface PendingReview {
@@ -45,21 +47,184 @@ interface PendingReview {
   idempotencyKey: string
 }
 
-const FILTERS = [
-  { value: '', label: 'All messages' },
-  { value: 'reviewable', label: 'Held / reviewable' },
-  { value: 'received', label: 'Received' },
-  { value: 'classified', label: 'Classified' },
-  { value: 'decided', label: 'Decided' },
-  { value: 'release_requested', label: 'Release requested' },
-  { value: 'stop_requested', label: 'Stop requested' },
-  { value: 'retry_scheduled', label: 'Retry scheduled' },
-  { value: 'delivery_retry_exhausted', label: 'Retry exhausted' },
-  { value: 'provider_accepted', label: 'Provider accepted' },
-  { value: 'partially_accepted', label: 'Partially accepted' },
-  { value: 'outcome_uncertain', label: 'Outcome uncertain' },
-  { value: 'failed', label: 'Failed' },
+const MESSAGE_FILTER_GROUPS: Array<{
+  label: string
+  options: Array<{ value: string; label: string }>
+}> = [
+  {
+    label: 'All',
+    options: [{ value: '', label: 'All traffic' }],
+  },
+  {
+    label: 'Review',
+    options: [
+      { value: 'reviewable', label: 'Held / reviewable' },
+      { value: 'release_requested', label: 'Release requested' },
+      { value: 'stop_requested', label: 'Stop requested' },
+      { value: 'stopped', label: 'Stopped' },
+      { value: 'decided', label: 'Decided (pipeline; held review is Queue)' },
+    ],
+  },
+  {
+    label: 'Delivered',
+    options: [
+      { value: 'provider_accepted', label: 'Provider accepted' },
+    ],
+  },
+  {
+    label: 'In flight',
+    options: [
+      { value: 'retry_scheduled', label: 'Retry scheduled' },
+      { value: 'allow_pending', label: 'Allow pending' },
+      { value: 'submitting', label: 'Submitting' },
+    ],
+  },
+  {
+    label: 'Needs attention',
+    options: [
+      { value: 'failed', label: 'Failed' },
+      { value: 'delivery_retry_exhausted', label: 'Retry exhausted' },
+      { value: 'outcome_uncertain', label: 'Outcome uncertain' },
+      { value: 'partially_accepted', label: 'Partially accepted' },
+    ],
+  },
+  {
+    label: 'Pipeline (usually empty)',
+    options: [
+      { value: 'received', label: 'Received' },
+      { value: 'classified', label: 'Classified' },
+    ],
+  },
 ]
+
+const POLL_SETTLED_STATES = new Set([
+  'provider_accepted',
+  'failed',
+  'delivery_retry_exhausted',
+  'outcome_uncertain',
+  'partially_accepted',
+  'stopped',
+])
+
+function emptyCopy(isQueue: boolean, filter: string) {
+  if (isQueue) {
+    return {
+      title: 'No held messages are waiting for review.',
+      detail: 'Queue is held mail only. Policy-stopped mail is under Messages as Stop requested, then Stopped after the gateway ack. Decided is a pipeline state, not this list.',
+    }
+  }
+  if (filter === 'received' || filter === 'classified') {
+    return {
+      title: 'No messages at this pipeline step.',
+      detail: 'Received and Classified are usually empty unless a message is stuck before a decision.',
+    }
+  }
+  if (filter === 'stopped') {
+    return {
+      title: 'No stopped messages.',
+      detail: 'Stopped is the terminal result after the gateway applies a stop command. In-flight stops stay in Stop requested until that ack arrives.',
+    }
+  }
+  if (filter === 'stop_requested') {
+    return {
+      title: 'No stop commands are in flight.',
+      detail: 'Stop requested means the control plane queued a stop and is waiting for the gateway ack. Completed stops are under Stopped.',
+    }
+  }
+  if (filter === 'decided') {
+    return {
+      title: 'No messages in Decided.',
+      detail: 'Decided includes allow, hold, and stop decisions that have not moved on yet. Held mail awaiting review is in Queue.',
+    }
+  }
+  if (filter === 'reviewable') {
+    return {
+      title: 'No held messages match this filter.',
+      detail: 'Held review also lives in the Queue tab.',
+    }
+  }
+  if (filter === 'release_requested') {
+    return {
+      title: 'No release commands are in flight.',
+      detail: 'Release requested means the control plane queued a release and is waiting for the gateway to apply it. Failed releases that are still held return to Queue.',
+    }
+  }
+  return {
+    title: 'No messages match this filter.',
+    detail: 'Traffic appears here after the gateway captures a message.',
+  }
+}
+
+function toSummary(detail: DlpMessageDetail): DlpMessageSummary {
+  return {
+    message_id: detail.message_id,
+    envelope_from: detail.envelope_from,
+    envelope_to: detail.envelope_to,
+    state: detail.state,
+    received_at: detail.received_at,
+    intended_action: detail.intended_action,
+    effective_action: detail.effective_action,
+    explanation: detail.explanation,
+    reviewable: detail.reviewable,
+  }
+}
+
+function matchesListQuery(
+  message: Pick<DlpMessageSummary, 'state' | 'reviewable'>,
+  variant: 'queue' | 'messages',
+  filter: string,
+) {
+  if (variant === 'queue' || filter === 'reviewable') return message.reviewable
+  if (filter) return message.state === filter
+  return true
+}
+
+function applyPolledMessage(
+  current: DlpMessageSummary[],
+  detail: DlpMessageDetail,
+  variant: 'queue' | 'messages',
+  filter: string,
+) {
+  if (!matchesListQuery(detail, variant, filter)) {
+    return current.filter((item) => item.message_id !== detail.message_id)
+  }
+  const summary = toSummary(detail)
+  return current.map((item) => (
+    item.message_id === detail.message_id ? summary : item
+  ))
+}
+
+function uniqueMessages(items: DlpMessageSummary[]) {
+  return [...new Map(items.map((item) => [item.message_id, item])).values()]
+}
+
+function MessagePreviewCell({
+  message,
+  subject,
+}: {
+  message: DlpMessageSummary
+  subject: string | null
+}) {
+  const snippet = snippetText(message.explanation)
+  const recipients = formatRecipientList(message.envelope_to)
+  return (
+    <Td className="max-w-[360px] align-top">
+      <p className="truncate text-xs text-white">
+        {subject || message.envelope_from}
+      </p>
+      <p className="mt-0.5 truncate text-[11px] text-[#a1a1aa]">
+        {subject
+          ? `${message.envelope_from} → ${recipients}`
+          : `To: ${recipients}`}
+      </p>
+      {snippet && (
+        <p className="mt-1 line-clamp-2 text-[11px] text-[#71717a]">
+          {snippet}
+        </p>
+      )}
+    </Td>
+  )
+}
 
 function makeIdempotencyKey() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -70,10 +235,12 @@ function makeIdempotencyKey() {
 
 function ReviewDialog({
   review,
+  isQueue,
   onClose,
   onComplete,
 }: {
   review: PendingReview
+  isQueue: boolean
   onClose: () => void
   onComplete: () => Promise<void>
 }) {
@@ -81,6 +248,7 @@ function ReviewDialog({
   const [submitting, setSubmitting] = useState(false)
 
   async function submit() {
+    if (submitting) return
     const trimmed = reason.trim()
     if (trimmed.length < 3) return
     setSubmitting(true)
@@ -153,7 +321,9 @@ function ReviewDialog({
                 : <Undo2 size={15} className="mt-0.5 text-[#93b4fd]" />}
               <p className="text-xs leading-relaxed text-[#a1a1aa]">
                 {review.action === 'stop'
-                  ? 'This queues a gateway command to permanently stop delivery.'
+                  ? (isQueue
+                    ? 'This queues a gateway command to permanently stop delivery. The message leaves Queue immediately and appears in Messages as Stop requested until the gateway ack moves it to Stopped.'
+                    : 'This queues a gateway command to permanently stop delivery. The row stays Stop requested until the gateway ack moves it to Stopped.')
                   : 'This queues a gateway command to release the held message.'}
                 {' '}Queued does not mean gateway processing has completed.
               </p>
@@ -222,11 +392,11 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
         </p>
       </div>
 
-      {detail.matched_rule_ids.length > 0 && (
+      {(detail.matched_rule_ids ?? []).length > 0 && (
         <div>
           <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Matched rules</p>
           <div className="flex flex-wrap gap-1.5">
-            {detail.matched_rule_ids.map((ruleId) => (
+            {(detail.matched_rule_ids ?? []).map((ruleId) => (
               <span
                 key={ruleId}
                 className="rounded border border-white/[0.07] bg-[#1e1e2c] px-2 py-0.5 text-[11px] text-[#a1a1aa]"
@@ -238,11 +408,11 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
         </div>
       )}
 
-      {detail.findings.length > 0 && (
+      {(detail.findings ?? []).length > 0 && (
         <div>
           <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Findings</p>
           <div className="space-y-1.5">
-            {detail.findings.map((finding, index) => (
+            {(detail.findings ?? []).map((finding, index) => (
               <div
                 key={`${finding.detector}-${finding.entity_type}-${index}`}
                 className="flex flex-wrap items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2"
@@ -277,11 +447,11 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
         </p>
       )}
 
-      {detail.extraction_limitations.length > 0 && (
+      {(detail.extraction_limitations ?? []).length > 0 && (
         <div>
           <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Limitations</p>
           <ul className="space-y-1 text-xs text-amber-200/80">
-            {detail.extraction_limitations.map((item, index) => (
+            {(detail.extraction_limitations ?? []).map((item, index) => (
               <li key={`${item.code}-${index}`}>
                 <span className="font-medium">{item.code}</span>
                 {item.detail ? `: ${item.detail}` : ''}
@@ -293,15 +463,73 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
 
       <div>
         <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">
+          Gateway commands
+        </p>
+        {(detail.commands ?? []).length === 0 ? (
+          <p className="text-[11px] text-[#52525b]">
+            No gateway commands have been queued for this message.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {(detail.commands ?? []).map((command) => (
+              <div
+                key={command.command_id}
+                className="rounded-lg border border-white/[0.06] px-3 py-2"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    title={
+                      command.status === 'sent'
+                        ? 'Published to the gateway command queue. This is not confirmation that the gateway applied it.'
+                        : command.status === 'queued'
+                          ? 'Waiting to be published to the gateway command queue.'
+                          : command.status === 'failed'
+                            ? 'Publishing this command failed. If the message is still held, retry from Queue.'
+                            : undefined
+                    }
+                    className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                    command.status === 'failed'
+                      ? 'border-red-500/20 bg-red-500/10 text-red-400'
+                      : command.status === 'sent'
+                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                        : 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                  }`}>
+                    {command.status.toUpperCase()}
+                  </span>
+                  <span className="text-xs capitalize text-[#a1a1aa]">
+                    {command.command_type.replaceAll('_', ' ')}
+                  </span>
+                  {command.gateway_status && (
+                    <span className="text-[11px] text-[#71717a]">
+                      gateway: {command.gateway_status.replaceAll('_', ' ')}
+                    </span>
+                  )}
+                  <span className="ml-auto text-[11px] text-[#71717a]">
+                    {new Date(command.created_at).toLocaleString()}
+                  </span>
+                </div>
+                {command.last_error && (
+                  <p className="mt-1 text-[11px] leading-relaxed text-red-300/80">
+                    {command.last_error}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">
           Delivery attempts
         </p>
-        {detail.deliveries.length === 0 ? (
+        {(detail.deliveries ?? []).length === 0 ? (
           <p className="text-[11px] text-[#52525b]">
             No delivery attempts recorded yet.
           </p>
         ) : (
           <div className="space-y-2">
-            {detail.deliveries.map((attempt, index) => (
+            {(detail.deliveries ?? []).map((attempt, index) => (
               <div
                 key={`${attempt.attempt_number}-${attempt.occurred_at}-${index}`}
                 className="rounded-lg border border-white/[0.06] px-3 py-2"
@@ -356,11 +584,11 @@ function MessageDetailPanel({ detail }: { detail: DlpMessageDetail }) {
         )}
       </div>
 
-      {detail.review_history.length > 0 && (
+      {(detail.review_history ?? []).length > 0 && (
         <div>
           <p className="mb-2 text-[10px] uppercase tracking-wide text-[#52525b]">Review history</p>
           <div className="space-y-2">
-            {detail.review_history.map((item, index) => (
+            {(detail.review_history ?? []).map((item, index) => (
               <div
                 key={`${item.action}-${item.created_at}-${index}`}
                 className="rounded-lg border border-white/[0.06] px-3 py-2"
@@ -391,10 +619,13 @@ export default function DlpMessagesTab({
   canManage,
   defaultFilter = '',
   variant = 'messages',
+  refreshEpoch = 0,
+  onReviewed,
 }: Props) {
   const [messages, setMessages] = useState<DlpMessageSummary[]>([])
   const [filter, setFilter] = useState(defaultFilter)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [nextId, setNextId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -402,56 +633,122 @@ export default function DlpMessagesTab({
   const [details, setDetails] = useState<Record<string, DlpMessageDetail>>({})
   const [detailLoading, setDetailLoading] = useState<string | null>(null)
   const [review, setReview] = useState<PendingReview | null>(null)
-  const pollTimers = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const pollTimers = useRef(new Map<string, Array<ReturnType<typeof setTimeout>>>())
   const expandedRef = useRef<string | null>(null)
+  const listGeneration = useRef(0)
+  const detailRequest = useRef(0)
+  const previousRefreshEpoch = useRef(refreshEpoch)
+
+  function clearPolls(messageId?: string) {
+    const timers = pollTimers.current
+    if (messageId) {
+      timers.get(messageId)?.forEach(clearTimeout)
+      timers.delete(messageId)
+      return
+    }
+    for (const list of timers.values()) {
+      list.forEach(clearTimeout)
+    }
+    timers.clear()
+  }
 
   useEffect(() => {
     expandedRef.current = expanded
   }, [expanded])
 
   useEffect(() => {
-    const timers = pollTimers.current
-    return () => {
-      timers.forEach(clearTimeout)
-      timers.length = 0
-    }
-  }, [filter])
+    setFilter(defaultFilter)
+  }, [defaultFilter])
 
-  const load = useCallback(async (
+  const load = useCallback(async ({
     append = false,
-    cursor: string | null = null,
+    cursor = null,
+    cursorId = null,
     background = false,
-  ) => {
+    quiet = false,
+  }: {
+    append?: boolean
+    cursor?: string | null
+    cursorId?: string | null
+    background?: boolean
+    quiet?: boolean
+  } = {}) => {
+    const generation = listGeneration.current
     if (append) setLoadingMore(true)
-    else if (!background) setLoading(true)
-    setError(null)
+    else if (!background && !quiet) setLoading(true)
+    if (!background && !quiet) setError(null)
+    const queryFilter = variant === 'queue' ? 'reviewable' : filter
     try {
       const response = await listDlpMessages({
-        reviewable: filter === 'reviewable' ? true : undefined,
-        state: filter && filter !== 'reviewable' ? filter : undefined,
+        reviewable: queryFilter === 'reviewable' ? true : undefined,
+        state: queryFilter && queryFilter !== 'reviewable' ? queryFilter : undefined,
         before: append ? cursor ?? undefined : undefined,
+        before_id: append ? cursorId ?? undefined : undefined,
         limit: 50,
       })
+      if (generation !== listGeneration.current) {
+        return { ok: false as const, items: [] as DlpMessageSummary[] }
+      }
       setMessages((current) => {
-        const combined = append ? [...current, ...response.items] : response.items
-        return [...new Map(combined.map((item) => [item.message_id, item])).values()]
+        if (append) return uniqueMessages([...current, ...response.items])
+        if (background) {
+          const incoming = new Map(response.items.map((item) => [item.message_id, item]))
+          return current.map((item) => incoming.get(item.message_id) ?? item)
+        }
+        return uniqueMessages(response.items)
       })
-      setNextCursor(response.next_cursor)
+      if (!background) {
+        setNextCursor(response.next_cursor)
+        setNextId(response.next_id ?? null)
+      }
+      return { ok: true as const, items: response.items }
     } catch (requestError) {
-      setError(getDlpErrorMessage(requestError, 'Could not load DLP messages.'))
+      if (generation !== listGeneration.current) {
+        return { ok: false as const, items: [] as DlpMessageSummary[] }
+      }
+      const message = getDlpErrorMessage(requestError, 'Could not load DLP messages.')
+      if (background) return { ok: false as const, items: [] as DlpMessageSummary[] }
+      if (append) {
+        toast.error(message)
+        return { ok: false as const, items: [] as DlpMessageSummary[] }
+      }
+      if (quiet) {
+        toast.error(message)
+        return { ok: false as const, items: [] as DlpMessageSummary[] }
+      }
+      setError(message)
+      return { ok: false as const, items: [] as DlpMessageSummary[] }
     } finally {
-      setLoading(false)
-      setLoadingMore(false)
+      if (generation !== listGeneration.current) return
+      if (append) setLoadingMore(false)
+      else if (!background && !quiet) setLoading(false)
     }
-  }, [filter])
+  }, [filter, variant])
 
   useEffect(() => {
+    listGeneration.current += 1
+    clearPolls()
     setMessages([])
     setNextCursor(null)
+    setNextId(null)
     setExpanded(null)
     setDetails({})
-    void load(false, null)
+    void load()
   }, [filter, load])
+
+  useEffect(() => {
+    if (previousRefreshEpoch.current === refreshEpoch) return
+    previousRefreshEpoch.current = refreshEpoch
+    listGeneration.current += 1
+    setNextCursor(null)
+    setNextId(null)
+    void load({ quiet: true })
+  }, [load, refreshEpoch])
+
+  useEffect(() => () => {
+    listGeneration.current += 1
+    clearPolls()
+  }, [])
 
   const refreshDetail = useCallback(async (messageId: string) => {
     try {
@@ -463,52 +760,79 @@ export default function DlpMessagesTab({
   }, [])
 
   const scheduleFollowUpRefresh = useCallback((messageId: string) => {
-    pollTimers.current.forEach(clearTimeout)
-    pollTimers.current.length = 0
-    for (const delay of [3000, 8000, 15000]) {
-      pollTimers.current.push(
-        setTimeout(() => {
-          void load(false, null, true)
-          if (expandedRef.current === messageId) {
-            void refreshDetail(messageId)
-          }
-        }, delay),
-      )
+    clearPolls(messageId)
+    let settled = false
+    const timers: Array<ReturnType<typeof setTimeout>> = []
+    pollTimers.current.set(messageId, timers)
+
+    const tick = async () => {
+      if (settled || pollTimers.current.get(messageId) !== timers) return
+      try {
+        const detail = await getDlpMessage(messageId)
+        if (settled || pollTimers.current.get(messageId) !== timers) return
+        setMessages((current) => applyPolledMessage(current, detail, variant, filter))
+        setDetails((current) => (
+          current[messageId] || expandedRef.current === messageId
+            ? { ...current, [messageId]: detail }
+            : current
+        ))
+        if (
+          !matchesListQuery(detail, variant, filter)
+          || POLL_SETTLED_STATES.has(detail.state)
+        ) {
+          settled = true
+          clearPolls(messageId)
+        }
+      } catch {
+        if (expandedRef.current === messageId) {
+          void refreshDetail(messageId)
+        }
+      }
     }
-  }, [load, refreshDetail])
+
+    for (const delay of [3000, 8000, 15000, 30000, 45000]) {
+      timers.push(setTimeout(() => { void tick() }, delay))
+    }
+  }, [filter, refreshDetail, variant])
 
   async function toggleDetail(messageId: string) {
     if (expanded === messageId) {
       setExpanded(null)
       return
     }
+    const requestId = ++detailRequest.current
     setExpanded(messageId)
     if (details[messageId]) return
     setDetailLoading(messageId)
     try {
       const detail = await getDlpMessage(messageId)
+      if (requestId !== detailRequest.current) return
       setDetails((current) => ({ ...current, [messageId]: detail }))
     } catch (requestError) {
+      if (requestId !== detailRequest.current) return
       toast.error(getDlpErrorMessage(requestError, 'Could not load message detail.'))
-      setExpanded(null)
+      setExpanded((current) => (current === messageId ? null : current))
     } finally {
-      setDetailLoading(null)
+      if (requestId === detailRequest.current) setDetailLoading(null)
     }
   }
 
   const isQueue = variant === 'queue'
+  const knownFilters = new Set(
+    MESSAGE_FILTER_GROUPS.flatMap((group) => group.options.map((option) => option.value)),
+  )
+  const empty = emptyCopy(isQueue, isQueue ? 'reviewable' : filter)
 
   return (
     <div className="space-y-4">
-      {isQueue && (
-        <div className="flex items-center gap-2 rounded-xl border border-[#3b6ef6]/20 bg-[#3b6ef6]/[0.06] px-4 py-3 text-[12px] text-[#93b4fd]">
-          <Info size={13} className="shrink-0" />
-          <span>
-            Held messages await human review. Release or stop queues a gateway command;
-            queued does not mean delivery has completed.
-          </span>
-        </div>
-      )}
+      <div className="flex items-start gap-2 rounded-xl border border-[#3b6ef6]/20 bg-[#3b6ef6]/[0.06] px-4 py-3 text-[12px] text-[#93b4fd]">
+        <Info size={13} className="mt-0.5 shrink-0" />
+        <span>
+          {isQueue
+            ? 'Queue is held mail only — effective action hold, still awaiting review. Policy-stopped mail moves to Messages as Stop requested, then Stopped after the gateway ack. Decided is a pipeline state, not this queue.'
+            : 'Messages is all captured mail. Use Queue for held review. Stop requested is in flight; Stopped is the gateway ack. Decided is not the held queue.'}
+        </span>
+      </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -517,26 +841,39 @@ export default function DlpMessagesTab({
           </h2>
           <p className="mt-1 text-[12px] text-[#71717a]">
             {isQueue
-              ? 'Held decisions with findings and a bounded sanitized preview.'
-              : 'All observed messages, including delivery and retry states.'}
+              ? 'Release or stop queues a gateway command. Queued does not mean delivery has completed.'
+              : 'Filter by delivery and review states. Pipeline filters are usually empty unless mail is stuck.'}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <select
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            className="rounded-lg border border-white/[0.08] bg-[#13131a] px-3 py-2 text-xs text-white outline-none"
-          >
-            {FILTERS.map((item) => (
-              <option key={item.value} value={item.value}>{item.label}</option>
-            ))}
-          </select>
+          {!isQueue && (
+            <select
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              className="max-w-[260px] rounded-lg border border-white/[0.08] bg-[#13131a] px-3 py-2 text-xs text-white outline-none"
+            >
+              {MESSAGE_FILTER_GROUPS.map((group) => (
+                <optgroup key={group.label} label={group.label}>
+                  {group.options.map((item) => (
+                    <option key={item.value || 'all'} value={item.value}>{item.label}</option>
+                  ))}
+                </optgroup>
+              ))}
+              {filter && !knownFilters.has(filter) && (
+                <optgroup label="Current">
+                  <option value={filter}>{filter.replaceAll('_', ' ')}</option>
+                </optgroup>
+              )}
+            </select>
+          )}
           <Button
             variant="outline"
             size="sm"
             onClick={() => {
+              listGeneration.current += 1
               setNextCursor(null)
-              void load(false, null)
+              setNextId(null)
+              void load()
             }}
             loading={loading}
           >
@@ -559,7 +896,7 @@ export default function DlpMessagesTab({
           <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
             <AlertTriangle size={20} className="text-red-400" />
             <p className="text-sm text-red-300">{error}</p>
-            <Button variant="outline" size="sm" onClick={() => void load(false, null)}>
+            <Button variant="outline" size="sm" onClick={() => void load()}>
               Retry
             </Button>
           </div>
@@ -574,23 +911,15 @@ export default function DlpMessagesTab({
             {isQueue
               ? <Inbox size={23} className="text-[#52525b]" />
               : <Mail size={23} className="text-[#52525b]" />}
-            <p className="mt-3 text-[13px] text-[#71717a]">
-              {isQueue && filter === 'reviewable'
-                ? 'No held messages are waiting for review.'
-                : 'No messages match this filter.'}
-            </p>
-            <p className="mt-1 text-[11px] text-[#52525b]">
-              {isQueue
-                ? 'Held mail appears here when policy decides to hold outbound delivery.'
-                : 'Traffic appears here after the gateway captures a message.'}
-            </p>
+            <p className="mt-3 text-[13px] text-[#71717a]">{empty.title}</p>
+            <p className="mt-1 max-w-md text-[11px] text-[#52525b]">{empty.detail}</p>
           </div>
         ) : (
           <Table>
             <Thead>
               <Tr>
                 <Th>Received</Th>
-                <Th>Sender / recipients</Th>
+                <Th>Message</Th>
                 <Th>State</Th>
                 <Th>Decision</Th>
                 <Th className="text-right">Review</Th>
@@ -603,12 +932,10 @@ export default function DlpMessagesTab({
                     <Td className="whitespace-nowrap align-top text-xs">
                       {new Date(message.received_at).toLocaleString()}
                     </Td>
-                    <Td className="max-w-[320px] align-top">
-                      <p className="truncate text-xs text-white">{message.envelope_from}</p>
-                      <p className="mt-1 truncate text-[11px] text-[#71717a]">
-                        To: {message.envelope_to.join(', ')}
-                      </p>
-                    </Td>
+                    <MessagePreviewCell
+                      message={message}
+                      subject={details[message.message_id]?.subject?.trim() || null}
+                    />
                     <Td className="align-top">
                       <StateChip state={message.state} />
                     </Td>
@@ -687,7 +1014,11 @@ export default function DlpMessagesTab({
         <div className="flex justify-center">
           <Button
             variant="outline"
-            onClick={() => void load(true, nextCursor)}
+            onClick={() => void load({
+              append: true,
+              cursor: nextCursor,
+              cursorId: nextId,
+            })}
             loading={loadingMore}
           >
             Load more
@@ -698,13 +1029,21 @@ export default function DlpMessagesTab({
       {review && (
         <ReviewDialog
           review={review}
+          isQueue={isQueue}
           onClose={() => setReview(null)}
           onComplete={async () => {
-            const expandedId = expandedRef.current
-            setDetails({})
-            await load(false, null)
-            if (expandedId) await refreshDetail(expandedId)
-            scheduleFollowUpRefresh(review.message.message_id)
+            const messageId = review.message.message_id
+            try {
+              const detail = await getDlpMessage(messageId)
+              setMessages((current) => applyPolledMessage(current, detail, variant, filter))
+              setDetails((current) => ({ ...current, [messageId]: detail }))
+            } catch {
+              if (isQueue) {
+                setMessages((current) => current.filter((item) => item.message_id !== messageId))
+              }
+            }
+            onReviewed?.()
+            scheduleFollowUpRefresh(messageId)
           }}
         />
       )}

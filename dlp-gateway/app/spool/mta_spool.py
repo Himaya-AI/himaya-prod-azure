@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 from app.domain.models import (
+    CommandAckEvent,
     DeliveryEvent,
     DeliveryOutcome,
     MessageState,
@@ -47,6 +48,7 @@ class FilesystemSpoolStore:
             "done",
             "failed",
             "delivery-events/ready",
+            "command-acks/ready",
             "relay-attempts/active",
         ):
             (self.root / name).mkdir(parents=True, exist_ok=True)
@@ -236,6 +238,38 @@ class FilesystemSpoolStore:
         self._fsync_dir(event_path.parent)
         return updated
 
+    def record_command_ack(
+        self, event: CommandAckEvent
+    ) -> CommandAckEvent:
+        path = self._command_ack_path(event.event_id)
+        if path.exists():
+            return CommandAckEvent.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        self._write_atomic(
+            path,
+            event.model_dump_json(indent=2).encode("utf-8"),
+        )
+        return event
+
+    def list_pending_command_acks(self) -> list[CommandAckEvent]:
+        ready = self.root / "command-acks" / "ready"
+        events = [
+            CommandAckEvent.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+            for path in ready.glob("*.json")
+        ]
+        return sorted(events, key=lambda event: event.occurred_at)
+
+    def mark_command_ack_published(self, event_id: str | UUID) -> None:
+        path = self._command_ack_path(event_id)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        self._fsync_dir(path.parent)
+
     def recover_stale_submissions(
         self, *, full_scan: bool = False
     ) -> int:
@@ -320,6 +354,14 @@ class FilesystemSpoolStore:
         return (
             self.root
             / "delivery-events"
+            / "ready"
+            / f"{event_id}.json"
+        )
+
+    def _command_ack_path(self, event_id: str | UUID) -> Path:
+        return (
+            self.root
+            / "command-acks"
             / "ready"
             / f"{event_id}.json"
         )

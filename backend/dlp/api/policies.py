@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select, update
@@ -12,13 +13,16 @@ from backend.database import get_db
 from backend.dlp.api.deps import require_dlp_admin, require_dlp_enterprise
 from backend.dlp.api.schemas import (
     PolicyDraftRequest,
+    PolicyPublishRequest,
     PolicyVersionResponse,
 )
+from backend.dlp.config import get_dlp_settings
 from backend.dlp.persistence.models import (
     DlpPolicyVersion,
     DlpTenantConfig,
 )
 from backend.dlp.policy import (
+    PolicyDocument,
     build_default_policy,
     policy_to_document,
 )
@@ -69,7 +73,22 @@ async def save_policy_draft(
     current_user: User = Depends(require_dlp_admin),
     session: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
-    draft = await _latest_draft(session, current_user.org_id)
+    draft = await _latest_draft(
+        session, current_user.org_id, for_update=True
+    )
+    if payload.expected_id is not None:
+        if (
+            draft is None
+            or draft.id != payload.expected_id
+            or (
+                payload.expected_version is not None
+                and draft.version != payload.expected_version
+            )
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="Policy draft has changed. Reload and try again.",
+            )
     if draft is None:
         latest_version = await session.scalar(
             select(
@@ -101,13 +120,32 @@ async def save_policy_draft(
     "/policy/publish", response_model=PolicyVersionResponse
 )
 async def publish_policy(
+    payload: PolicyPublishRequest,
     current_user: User = Depends(require_dlp_admin),
     session: AsyncSession = Depends(get_db),
 ) -> PolicyVersionResponse:
-    draft = await _latest_draft(session, current_user.org_id)
+    draft = await _latest_draft(
+        session, current_user.org_id, for_update=True
+    )
     if draft is None:
         raise HTTPException(
             status_code=404, detail="No DLP policy draft to publish"
+        )
+    if (
+        draft.id != payload.draft_id
+        or draft.version != payload.expected_version
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Policy draft has changed. Reload and try again.",
+        )
+    stored = PolicyDocument.model_validate(draft.policy_document)
+    if stored.model_dump(mode="json") != payload.document.model_dump(
+        mode="json"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="Policy draft has changed. Reload and try again.",
         )
     await session.execute(
         update(DlpPolicyVersion)
@@ -119,12 +157,18 @@ async def publish_policy(
     )
     draft.status = "published"
     draft.published_at = datetime.now(timezone.utc)
-    config = await session.get(DlpTenantConfig, current_user.org_id)
+    config_result = await session.execute(
+        select(DlpTenantConfig)
+        .where(DlpTenantConfig.org_id == current_user.org_id)
+        .with_for_update()
+    )
+    config = config_result.scalar_one_or_none()
     if config is None:
+        defaults = get_dlp_settings()
         config = DlpTenantConfig(
             org_id=current_user.org_id,
-            enabled=False,
-            mode="monitor",
+            enabled=defaults.gateway_pipeline_enabled,
+            mode=defaults.tenant_mode,
             domains=[],
             active_policy_version_id=draft.id,
             updated_by=current_user.id,
@@ -139,9 +183,12 @@ async def publish_policy(
 
 
 async def _latest_draft(
-    session: AsyncSession, org_id
+    session: AsyncSession,
+    org_id: UUID,
+    *,
+    for_update: bool = False,
 ) -> DlpPolicyVersion | None:
-    result = await session.execute(
+    statement = (
         select(DlpPolicyVersion)
         .where(
             DlpPolicyVersion.org_id == org_id,
@@ -150,6 +197,9 @@ async def _latest_draft(
         .order_by(DlpPolicyVersion.version.desc())
         .limit(1)
     )
+    if for_update:
+        statement = statement.with_for_update()
+    result = await session.execute(statement)
     return result.scalar_one_or_none()
 
 

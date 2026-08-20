@@ -41,13 +41,6 @@ export default function DlpSettingsTab({
   const [lexiconVersion, setLexiconVersion] = useState(settings.lexicon_version)
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    setEnabled(settings.enabled)
-    setMode(settings.mode)
-    setDomainsText(settings.domains.join('\n'))
-    setLexiconVersion(settings.lexicon_version)
-  }, [settings])
-
   const domains = useMemo(() => normalizeDomains(domainsText), [domainsText])
   const invalidDomains = domains.filter((domain) => {
     const labels = domain.split('.')
@@ -74,6 +67,14 @@ export default function DlpSettingsTab({
     domains.length <= 100 &&
     lexiconVersion.trim().length > 0 &&
     lexiconVersion.trim().length <= 64
+
+  useEffect(() => {
+    if (dirty) return
+    setEnabled(settings.enabled)
+    setMode(settings.mode)
+    setDomainsText(settings.domains.join('\n'))
+    setLexiconVersion(settings.lexicon_version)
+  }, [dirty, settings])
 
   async function save() {
     if (!canManage || !valid) return

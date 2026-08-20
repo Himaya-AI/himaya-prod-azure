@@ -80,6 +80,28 @@ def test_delivery_event_matches_gateway_wire_shape() -> None:
     assert event.model_dump(mode="json")["outcome"] == "uncertain"
 
 
+def test_command_ack_event_matches_gateway_wire_shape() -> None:
+    from backend.dlp.contracts import CommandAckEvent, CommandAckStatus
+
+    command_id = uuid4()
+    event = CommandAckEvent(
+        event_id=uuid4(),
+        command_id=command_id,
+        message_id=uuid4(),
+        org_id=str(uuid4()),
+        command_type=CommandType.STOP,
+        status=CommandAckStatus.APPLIED,
+        resulting_state=GatewayMessageState.STOPPED,
+        reason="policy stop",
+        occurred_at=datetime.now(timezone.utc),
+    )
+    wire = event.model_dump(mode="json")
+    assert wire["event_type"] == "dlp.message.command.v1"
+    assert wire["status"] == "applied"
+    assert wire["command_type"] == "stop"
+    assert event.deduplication_key.endswith(str(command_id))
+
+
 def test_gateway_command_serializes_gateway_enum_values() -> None:
     command = GatewayCommand(
         command_type=CommandType.ALLOW,

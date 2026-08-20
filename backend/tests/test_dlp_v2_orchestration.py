@@ -62,6 +62,12 @@ def test_gateway_command_id_is_deterministic() -> None:
     assert first.expected_state.value == "captured"
 
 
+def test_stop_decision_publishes_stop_command() -> None:
+    command = _gateway_command(_event(), _decision(PolicyAction.STOP))
+    assert command is not None
+    assert command.command_type == CommandType.STOP
+
+
 def test_hold_decision_does_not_publish_gateway_command() -> None:
     assert (
         _gateway_command(_event(), _decision(PolicyAction.HOLD))

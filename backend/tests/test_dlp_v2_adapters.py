@@ -139,6 +139,34 @@ async def test_filesystem_bus_settles_delivery(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_filesystem_bus_settles_command_ack(tmp_path: Path) -> None:
+    from backend.dlp.contracts import CommandAckEvent, CommandAckStatus
+
+    bus = FilesystemDlpMessageBus(tmp_path)
+    event = CommandAckEvent(
+        event_id=uuid4(),
+        command_id=uuid4(),
+        message_id=uuid4(),
+        org_id=str(uuid4()),
+        command_type=CommandType.STOP,
+        status=CommandAckStatus.APPLIED,
+        resulting_state=GatewayMessageState.STOPPED,
+        occurred_at=datetime.now(timezone.utc),
+    )
+    ready = tmp_path / "command-acks" / "ready" / "ack.json"
+    ready.write_text(event.model_dump_json(), encoding="utf-8")
+
+    received = await bus.receive_command_acks(
+        max_messages=1, wait_seconds=0
+    )
+    assert received[0].event == event
+    await bus.complete_command_ack(received[0].receipt)
+    assert (
+        tmp_path / "command-acks" / "done" / "ack.json"
+    ).exists()
+
+
+@pytest.mark.asyncio
 async def test_service_bus_receives_and_settles_delivery() -> None:
     event = _delivery_event()
 
@@ -168,6 +196,7 @@ async def test_service_bus_receives_and_settles_delivery() -> None:
     bus._client = object()  # type: ignore[attr-defined]
     bus._receiver = object()  # type: ignore[attr-defined]
     bus._delivery_receiver = receiver  # type: ignore[attr-defined]
+    bus._command_ack_receiver = object()  # type: ignore[attr-defined]
     bus._sender = object()  # type: ignore[attr-defined]
 
     deliveries = await bus.receive_deliveries(

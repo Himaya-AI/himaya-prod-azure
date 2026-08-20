@@ -107,7 +107,7 @@ async def test_local_allow_and_stop_flow() -> None:
         blocked_decision = await _wait_for_decision(blocked_sender)
         assert blocked_decision["intended_action"] == "stop"
         assert blocked_decision["effective_action"] == "stop"
-        assert blocked_decision["state"] == "decided"
+        assert blocked_decision["state"] in {"stop_requested", "stopped"}
 
         await asyncio.sleep(2)
         response = await mailhog.get("/api/v2/messages")

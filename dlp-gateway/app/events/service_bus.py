@@ -14,6 +14,7 @@ from azure.servicebus import (
 
 from app.domain.models import (
     CaptureEvent,
+    CommandAckEvent,
     DeliveryEvent,
     GatewayCommand,
 )
@@ -28,6 +29,7 @@ class AzureServiceBusEventBus:
         capture_queue_name: str,
         command_queue_name: str,
         delivery_queue_name: str,
+        command_ack_queue_name: str,
         connection_string: str = "",
         fully_qualified_namespace: str = "",
     ) -> None:
@@ -52,12 +54,16 @@ class AzureServiceBusEventBus:
         self._delivery_sender = self._client.get_queue_sender(
             queue_name=delivery_queue_name
         )
+        self._command_ack_sender = self._client.get_queue_sender(
+            queue_name=command_ack_queue_name
+        )
         self._command_receiver = self._client.get_queue_receiver(
             queue_name=command_queue_name,
             receive_mode=ServiceBusReceiveMode.PEEK_LOCK,
         )
         self._capture_sender.__enter__()
         self._delivery_sender.__enter__()
+        self._command_ack_sender.__enter__()
         self._command_receiver.__enter__()
         self._inflight_commands: dict[str, Any] = {}
 
@@ -77,6 +83,17 @@ class AzureServiceBusEventBus:
                 event.model_dump_json(),
                 message_id=str(event.event_id),
                 correlation_id=str(event.message_id),
+                content_type="application/json",
+                subject=event.event_type,
+            )
+        )
+
+    def publish_command_ack(self, event: CommandAckEvent) -> None:
+        self._command_ack_sender.send_messages(
+            ServiceBusMessage(
+                event.model_dump_json(),
+                message_id=str(event.event_id),
+                correlation_id=str(event.command_id),
                 content_type="application/json",
                 subject=event.event_type,
             )
@@ -146,6 +163,7 @@ class AzureServiceBusEventBus:
 
     def close(self) -> None:
         self._command_receiver.__exit__(None, None, None)
+        self._command_ack_sender.__exit__(None, None, None)
         self._delivery_sender.__exit__(None, None, None)
         self._capture_sender.__exit__(None, None, None)
         self._client.close()

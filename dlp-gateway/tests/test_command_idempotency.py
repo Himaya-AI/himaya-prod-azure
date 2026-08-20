@@ -21,6 +21,8 @@ from app.domain.models import (
     SpoolRecord,
 )
 from app.events.bus import FilesystemEventBus
+from app.events.delivery_worker import DeliveryEventPublisherWorker
+from app.events.publisher import EventPublisher
 from app.spool.mta_spool import FilesystemSpoolStore, sha256_hex
 
 
@@ -105,6 +107,58 @@ def test_stop_is_terminal_for_later_allow(tmp_path: Path) -> None:
         )
 
     assert relay.calls == 0
+
+
+def test_stop_records_durable_command_ack(tmp_path: Path) -> None:
+    spool, record = _captured_message(tmp_path)
+    processor = CommandProcessor(
+        spool, _AcceptingRelay(spool)  # type: ignore[arg-type]
+    )
+    command = GatewayCommand(
+        command_type=CommandType.STOP,
+        message_id=record.message_id,
+        org_id=record.org_id,
+        expected_state=MessageState.CAPTURED,
+        reason="policy stop",
+    )
+
+    assert processor.process(command) == CommandProcessingStatus.APPLIED
+    acks = spool.list_pending_command_acks()
+    assert len(acks) == 1
+    assert acks[0].command_id == command.command_id
+    assert acks[0].status.value == "applied"
+    assert acks[0].resulting_state == MessageState.STOPPED
+    assert acks[0].event_type == "dlp.message.command.v1"
+
+    assert processor.process(command) == CommandProcessingStatus.DUPLICATE
+    assert len(spool.list_pending_command_acks()) == 1
+
+
+def test_command_ack_is_published_without_relaying(
+    tmp_path: Path,
+) -> None:
+    spool, record = _captured_message(tmp_path)
+    processor = CommandProcessor(
+        spool, _AcceptingRelay(spool)  # type: ignore[arg-type]
+    )
+    command = GatewayCommand(
+        command_type=CommandType.STOP,
+        message_id=record.message_id,
+        org_id=record.org_id,
+        expected_state=MessageState.CAPTURED,
+    )
+    processor.process(command)
+
+    bus = FilesystemEventBus(tmp_path / "queues")
+    worker = DeliveryEventPublisherWorker(spool, EventPublisher(bus))
+    assert worker.run_once() == 1
+    assert spool.list_pending_command_acks() == []
+    ready = tmp_path / "queues" / "command-acks" / "ready"
+    published = list(ready.glob("*.json"))
+    assert len(published) == 1
+    payload = published[0].read_text(encoding="utf-8")
+    assert '"event_type": "dlp.message.command.v1"' in payload
+    assert str(command.command_id) in payload
 
 
 def test_expected_state_is_enforced(tmp_path: Path) -> None:

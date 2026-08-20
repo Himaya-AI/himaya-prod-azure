@@ -49,4 +49,24 @@ class DeliveryEventPublisherWorker:
                 attempt_id=str(event.attempt_id),
                 outcome=event.outcome.value,
             )
+        for event in self.spool.list_pending_command_acks():
+            try:
+                self.publisher.publish_command_ack(event)
+                self.spool.mark_command_ack_published(str(event.event_id))
+            except Exception:
+                log.exception(
+                    "command_ack.publish_failed",
+                    event_id=str(event.event_id),
+                    message_id=str(event.message_id),
+                    command_id=str(event.command_id),
+                )
+                continue
+            published += 1
+            log.info(
+                "command_ack.published",
+                event_id=str(event.event_id),
+                message_id=str(event.message_id),
+                command_id=str(event.command_id),
+                status=event.status.value,
+            )
         return published

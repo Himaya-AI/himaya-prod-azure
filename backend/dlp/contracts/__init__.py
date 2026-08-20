@@ -14,6 +14,8 @@ from backend.dlp.contracts.commands import (
 )
 from backend.dlp.contracts.events import (
     CaptureEvent,
+    CommandAckEvent,
+    CommandAckStatus,
     DeliveryEvent,
     DeliveryOutcome,
     SmtpStage,
@@ -23,6 +25,8 @@ __all__ = [
     "CaptureEvent",
     "ClassifyRequest",
     "ClassifyResponse",
+    "CommandAckEvent",
+    "CommandAckStatus",
     "CommandType",
     "DetectionMatch",
     "DetectionResult",

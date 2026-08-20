@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     capture_queue_name: str = "dlp-capture"
     command_queue_name: str = "dlp-commands"
     delivery_queue_name: str = "dlp-delivery"
+    command_ack_queue_name: str = "dlp-command-acks"
 
     force_allow: bool = True
 

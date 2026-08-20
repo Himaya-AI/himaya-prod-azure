@@ -6,7 +6,12 @@ import time
 import uuid
 from pathlib import Path
 
-from app.domain.models import CaptureEvent, DeliveryEvent, GatewayCommand
+from app.domain.models import (
+    CaptureEvent,
+    CommandAckEvent,
+    DeliveryEvent,
+    GatewayCommand,
+)
 from app.logging_setup import get_logger
 
 log = get_logger(__name__)
@@ -30,6 +35,10 @@ class FilesystemEventBus:
             "deliveries/processing",
             "deliveries/done",
             "deliveries/dead",
+            "command-acks/ready",
+            "command-acks/processing",
+            "command-acks/done",
+            "command-acks/dead",
         ):
             (self.root / name).mkdir(parents=True, exist_ok=True)
 
@@ -50,6 +59,9 @@ class FilesystemEventBus:
 
     def publish_delivery(self, event: DeliveryEvent) -> None:
         self._enqueue("deliveries", event.model_dump(mode="json"))
+
+    def publish_command_ack(self, event: CommandAckEvent) -> None:
+        self._enqueue("command-acks", event.model_dump(mode="json"))
 
     def consume_deliveries(
         self, max_items: int = 10
@@ -91,7 +103,7 @@ class FilesystemEventBus:
     def recover_stale(
         self, kind: str, stale_after_seconds: int
     ) -> int:
-        if kind not in {"captures", "commands", "deliveries"}:
+        if kind not in {"captures", "commands", "deliveries", "command-acks"}:
             raise ValueError(f"Unsupported queue kind: {kind}")
         now = time.time()
         recovered = 0

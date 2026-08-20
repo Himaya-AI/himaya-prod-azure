@@ -84,9 +84,10 @@ def test_service_bus_startup_uses_least_privilege_queues(
         capture_queue_name="capture",
         command_queue_name="commands",
         delivery_queue_name="delivery",
+        command_ack_queue_name="command-acks",
         connection_string="Endpoint=sb://test/",
     )
-    assert client.senders == ["capture", "delivery"]
+    assert client.senders == ["capture", "delivery", "command-acks"]
     assert client.receivers == ["commands"]
     bus.close()
 

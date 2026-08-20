@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.dlp.contracts import (
     CaptureEvent,
+    CommandAckEvent,
     DeliveryEvent,
     GatewayCommand,
 )
@@ -93,6 +94,23 @@ class MessageEventRepository:
         ).scalar_one_or_none() is not None
 
     async def record_delivery(self, event: DeliveryEvent) -> bool:
+        statement = (
+            insert(DlpMessageEvent)
+            .values(
+                message_id=event.message_id,
+                event_key=event.deduplication_key,
+                event_type=event.event_type,
+                payload=event.model_dump(mode="json"),
+                occurred_at=event.occurred_at,
+            )
+            .on_conflict_do_nothing(index_elements=["event_key"])
+            .returning(DlpMessageEvent.id)
+        )
+        return (
+            await self._session.execute(statement)
+        ).scalar_one_or_none() is not None
+
+    async def record_command_ack(self, event: CommandAckEvent) -> bool:
         statement = (
             insert(DlpMessageEvent)
             .values(
@@ -208,3 +226,13 @@ class CommandOutboxRepository:
         )
         row.updated_at = _utcnow()
         await self._session.flush()
+
+    async def list_for_message(
+        self, message_id: UUID
+    ) -> list[DlpCommandOutbox]:
+        result = await self._session.execute(
+            select(DlpCommandOutbox)
+            .where(DlpCommandOutbox.message_id == message_id)
+            .order_by(DlpCommandOutbox.created_at.asc())
+        )
+        return list(result.scalars())

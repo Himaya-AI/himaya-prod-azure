@@ -47,8 +47,8 @@ class WorkerSupervisor:
             try:
                 self.capture.run_once()
                 self.auto_allow.run_once()
-                self.delivery_events.run_once()
                 self.commands.run_once()
+                self.delivery_events.run_once()
             except Exception:
                 log.exception("workers.tick_failed")
             self._stop.wait(self.poll_interval_sec)

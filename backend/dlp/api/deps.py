@@ -10,7 +10,7 @@ from backend.models.db_models import Organization, User
 from backend.routers.auth import get_current_user
 
 _ENTERPRISE_TIERS = frozenset({"enterprise", "enterprise trial"})
-_ADMIN_ROLES = frozenset({"admin", "superadmin", "super_admin"})
+_ADMIN_ROLES = frozenset({"admin", "superadmin", "super_admin", "owner"})
 
 
 async def require_dlp_enterprise(

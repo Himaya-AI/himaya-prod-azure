@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from enum import Enum
 
-from app.domain.models import CommandType, GatewayCommand, MessageState
+from app.domain.models import (
+    CommandAckEvent,
+    CommandAckStatus,
+    CommandType,
+    GatewayCommand,
+    MessageState,
+    command_ack_event_id,
+)
 from app.logging_setup import get_logger
 from app.relay.dispatcher import RelayDispatcher
 from app.spool.mta_spool import FilesystemSpoolStore
@@ -52,7 +59,7 @@ class CommandProcessor:
                 command_id=str(command.command_id),
                 message_id=mid,
             )
-            return CommandProcessingStatus.DUPLICATE
+            return self._complete(command, CommandProcessingStatus.DUPLICATE)
 
         if command.org_id != record.org_id:
             raise CommandRejectedError("Command tenant does not own message")
@@ -82,7 +89,7 @@ class CommandProcessor:
                 self.spool.record_command_processed(
                     mid, str(command.command_id)
                 )
-                return CommandProcessingStatus.NOOP
+                return self._complete(command, CommandProcessingStatus.NOOP)
             raise CommandRejectedError("Stopped message is terminal")
 
         relay_states = {
@@ -115,7 +122,7 @@ class CommandProcessor:
                         "Failed delivery requires manual_override retry"
                     )
             self.relay.relay_message(mid, str(command.command_id))
-            return CommandProcessingStatus.APPLIED
+            return self._complete(command, CommandProcessingStatus.APPLIED)
 
         if command.command_type == CommandType.STOP:
             self.spool.update_state(
@@ -125,8 +132,36 @@ class CommandProcessor:
             )
             self.spool.record_command_processed(mid, str(command.command_id))
             log.info("command.stopped", message_id=mid)
-            return CommandProcessingStatus.APPLIED
+            return self._complete(command, CommandProcessingStatus.APPLIED)
 
         raise CommandRejectedError(
             f"Unsupported command: {command.command_type.value}"
         )
+
+    def _complete(
+        self,
+        command: GatewayCommand,
+        status: CommandProcessingStatus,
+    ) -> CommandProcessingStatus:
+        self._enqueue_command_ack(command, status)
+        return status
+
+    def _enqueue_command_ack(
+        self,
+        command: GatewayCommand,
+        status: CommandProcessingStatus,
+    ) -> None:
+        record = self.spool.get(str(command.message_id))
+        if record is None:
+            return
+        event = CommandAckEvent(
+            event_id=command_ack_event_id(command.command_id),
+            command_id=command.command_id,
+            message_id=command.message_id,
+            org_id=command.org_id,
+            command_type=command.command_type,
+            status=CommandAckStatus(status.value),
+            resulting_state=record.state,
+            reason=command.reason,
+        )
+        self.spool.record_command_ack(event)

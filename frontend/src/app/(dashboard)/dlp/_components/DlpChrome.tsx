@@ -6,12 +6,6 @@ import {
   ShieldAlert,
 } from 'lucide-react'
 
-export const ACTION_COLORS = {
-  allow: '#10b981',
-  hold: '#f97316',
-  stop: '#ef4444',
-} as const
-
 export const STATE_GROUP_COLORS = {
   delivered: '#10b981',
   processing: '#3b6ef6',
@@ -36,10 +30,41 @@ const STATE_PILL: Record<string, string> = {
   failed: 'bg-red-500/10 border-red-500/20 text-red-400',
   delivery_retry_exhausted: 'bg-red-500/10 border-red-500/20 text-red-400',
   stop_requested: 'bg-red-500/10 border-red-500/20 text-red-400',
+  stopped: 'bg-red-500/10 border-red-500/20 text-red-400',
 }
 
 export function formatState(value: string) {
   return value.replaceAll('_', ' ')
+}
+
+export function formatRecipientList(recipients: string[], limit = 2) {
+  if (recipients.length === 0) return '—'
+  if (recipients.length <= limit) return recipients.join(', ')
+  return `${recipients.slice(0, limit).join(', ')} +${recipients.length - limit}`
+}
+
+export function snippetText(text: string | null | undefined, max = 140) {
+  if (!text) return null
+  const cleaned = text.replace(/\s+/g, ' ').trim()
+  if (!cleaned) return null
+  if (cleaned.length <= max) return cleaned
+  return `${cleaned.slice(0, max - 1)}…`
+}
+
+export function formatAge(iso: string, now = Date.now()) {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return 'unknown age'
+  const minutes = Math.max(0, Math.floor((now - then) / 60_000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) {
+    const rest = minutes % 60
+    return rest > 0 ? `${hours}h ${rest}m` : `${hours}h`
+  }
+  const days = Math.floor(hours / 24)
+  const restHours = hours % 24
+  return restHours > 0 ? `${days}d ${restHours}h` : `${days}d`
 }
 
 export function ActionChip({ action }: { action: string | null }) {
@@ -58,7 +83,7 @@ export function ActionChip({ action }: { action: string | null }) {
 export function StateChip({ state }: { state: string }) {
   return (
     <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold capitalize ${STATE_PILL[state] ?? 'bg-white/[0.04] border-white/[0.08] text-[#a1a1aa]'}`}>
-      {(state === 'failed' || state === 'delivery_retry_exhausted' || state === 'stop_requested') && (
+      {(state === 'failed' || state === 'delivery_retry_exhausted' || state === 'stop_requested' || state === 'stopped') && (
         <AlertTriangle size={10} />
       )}
       {formatState(state)}
@@ -88,6 +113,7 @@ export function MetricCard({
   iconClass = 'bg-[#3b6ef6]/10 border-[#3b6ef6]/20 text-[#3b6ef6]',
   badge,
   footer,
+  onClick,
 }: {
   label: string
   value: string | number
@@ -95,9 +121,15 @@ export function MetricCard({
   iconClass?: string
   badge?: ReactNode
   footer?: ReactNode
+  onClick?: () => void
 }) {
-  return (
-    <div className="rounded-xl border border-white/[0.06] bg-gradient-to-br from-[#13131a] to-[#1a1a24] p-5">
+  const className = `rounded-xl border border-white/[0.06] bg-gradient-to-br from-[#13131a] to-[#1a1a24] p-5 ${
+    onClick
+      ? 'w-full text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.03]'
+      : ''
+  }`
+  const body = (
+    <>
       <div className="mb-3 flex items-start justify-between">
         <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${iconClass}`}>
           <Icon size={18} />
@@ -109,8 +141,21 @@ export function MetricCard({
       {footer && (
         <div className="mt-3 border-t border-white/[0.06] pt-3">{footer}</div>
       )}
-    </div>
+    </>
   )
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={label}
+        className={className}
+      >
+        {body}
+      </button>
+    )
+  }
+  return <div className={className}>{body}</div>
 }
 
 export function RingChart({
@@ -176,37 +221,6 @@ export function RingChart({
           <span className="text-[11px] text-[#71717a]">{centerLabel}</span>
         )}
       </div>
-    </div>
-  )
-}
-
-export function BarChart({
-  data,
-  height = 140,
-  barWidth = 40,
-}: {
-  data: { label: string; value: number; color?: string }[]
-  height?: number
-  barWidth?: number
-}) {
-  const maxValue = Math.max(...data.map((item) => item.value), 1)
-
-  return (
-    <div className="flex items-end justify-between gap-2" style={{ height }}>
-      {data.map((item) => (
-        <div key={item.label} className="flex flex-col items-center gap-1">
-          <span className="text-[10px] font-medium text-[#71717a]">{item.value}</span>
-          <div
-            className="rounded-t transition-all duration-500"
-            style={{
-              width: barWidth,
-              height: `${Math.max((item.value / maxValue) * (height - 40), 4)}px`,
-              backgroundColor: item.color || '#3b6ef6',
-            }}
-          />
-          <span className="max-w-[48px] truncate text-[10px] text-[#71717a]">{item.label}</span>
-        </div>
-      ))}
     </div>
   )
 }

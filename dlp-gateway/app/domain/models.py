@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from pydantic import BaseModel, Field
 
@@ -96,6 +96,36 @@ class GatewayCommand(BaseModel):
     reason: str | None = None
     issued_at: datetime = Field(default_factory=utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class CommandAckStatus(str, Enum):
+    APPLIED = "applied"
+    DUPLICATE = "duplicate"
+    NOOP = "noop"
+
+
+class CommandAckEvent(BaseModel):
+    """Gateway-to-control-plane result for one consumed command."""
+
+    schema_version: int = 1
+    event_type: str = "dlp.message.command.v1"
+    event_id: UUID
+    command_id: UUID
+    message_id: UUID
+    org_id: str
+    command_type: CommandType
+    status: CommandAckStatus
+    resulting_state: MessageState
+    reason: str | None = None
+    occurred_at: datetime = Field(default_factory=utcnow)
+
+    @property
+    def deduplication_key(self) -> str:
+        return f"{self.event_type}:{self.command_id}"
+
+
+def command_ack_event_id(command_id: UUID) -> UUID:
+    return uuid5(NAMESPACE_URL, f"dlp.message.command.v1:{command_id}")
 
 
 class DeliveryOutcome(str, Enum):

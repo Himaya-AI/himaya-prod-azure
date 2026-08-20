@@ -149,6 +149,11 @@ def _patch_detail_dependencies(monkeypatch, message) -> None:
         "_safe_preview",
         AsyncMock(return_value=(None, None, False)),
     )
+    monkeypatch.setattr(
+        messages_module.CommandOutboxRepository,
+        "list_for_message",
+        AsyncMock(return_value=[]),
+    )
 
 
 @pytest.mark.asyncio
@@ -187,6 +192,7 @@ async def test_message_detail_returns_deliveries_in_order(
             _Result(),  # parts
             _Result(),  # review history
             _Result(events),  # delivery events
+            _Result(),  # command ack events
         ]
     )
     _patch_detail_dependencies(monkeypatch, message)
@@ -215,7 +221,7 @@ async def test_message_detail_with_no_deliveries_returns_empty_list(
     org_id = uuid4()
     message_id = uuid4()
     message = _message(org_id, message_id)
-    session = _FakeSession([_Result(), _Result(), _Result()])
+    session = _FakeSession([_Result(), _Result(), _Result(), _Result()])
     _patch_detail_dependencies(monkeypatch, message)
 
     detail = await get_message(

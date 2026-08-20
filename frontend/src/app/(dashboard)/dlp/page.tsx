@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   BarChart3,
   FileText,
@@ -16,6 +16,7 @@ import DlpMessagesTab from './_components/DlpMessagesTab'
 import DlpOverviewTab from './_components/DlpOverviewTab'
 import DlpPolicyTab from './_components/DlpPolicyTab'
 import DlpSettingsTab from './_components/DlpSettingsTab'
+import { toast } from '@/components/ui/Toast'
 import {
   getActiveDlpPolicy,
   getDlpErrorMessage,
@@ -26,6 +27,7 @@ import {
 } from '@/lib/dlp/api'
 import type {
   DlpMessageSummary,
+  DlpNavigateTarget,
   DlpStatus,
   DlpTenantSettings,
   PolicyVersion,
@@ -90,11 +92,19 @@ export default function DlpPage() {
   const isEnterprise = ['enterprise', 'enterprise trial'].includes(
     (user?.tier ?? '').toLowerCase(),
   )
-  const canManage = ['admin', 'superadmin', 'super_admin'].includes(
+  const canManage = ['admin', 'superadmin', 'super_admin', 'owner'].includes(
     String(user?.role ?? '').toLowerCase(),
   )
 
   const [tab, setTab] = useState<Tab>('overview')
+  const [visited, setVisited] = useState<Record<Tab, boolean>>({
+    overview: true,
+    policy: false,
+    queue: false,
+    messages: false,
+    settings: false,
+  })
+  const [messagesFilter, setMessagesFilter] = useState('')
   const [status, setStatus] = useState<DlpStatus | null>(null)
   const [settings, setSettings] = useState<DlpTenantSettings | null>(null)
   const [activePolicy, setActivePolicy] = useState<PolicyVersion | null>(null)
@@ -103,36 +113,83 @@ export default function DlpPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [listRefreshEpoch, setListRefreshEpoch] = useState(0)
+  const loadGeneration = useRef(0)
+  const hydratedRef = useRef(false)
 
   const loadPage = useCallback(async (background = false) => {
+    const generation = ++loadGeneration.current
     if (background) setRefreshing(true)
     else setLoading(true)
-    setError(null)
     try {
       const [
-        nextStatus,
-        nextSettings,
-        nextActivePolicy,
-        nextDraftPolicy,
-        nextMessages,
-      ] = await Promise.all([
+        statusResult,
+        settingsResult,
+        policyResult,
+        draftResult,
+        messagesResult,
+      ] = await Promise.allSettled([
         getDlpStatus(),
         getDlpSettings(),
         getActiveDlpPolicy(),
         getDlpPolicyDraft(),
         listDlpMessages({ limit: 10 }),
       ])
-      setStatus(nextStatus)
-      setSettings(nextSettings)
-      setActivePolicy(nextActivePolicy)
-      setDraftPolicy(nextDraftPolicy)
-      setRecentMessages(nextMessages.items)
-    } catch (requestError) {
-      setError(getDlpErrorMessage(requestError, 'Could not load DLP.'))
+      if (generation !== loadGeneration.current) return
+
+      if (
+        statusResult.status !== 'fulfilled'
+        || settingsResult.status !== 'fulfilled'
+        || policyResult.status !== 'fulfilled'
+      ) {
+        const failed = [statusResult, settingsResult, policyResult].find(
+          (result): result is PromiseRejectedResult => result.status === 'rejected',
+        )
+        const message = getDlpErrorMessage(
+          failed?.reason,
+          'Could not load DLP.',
+        )
+        if (hydratedRef.current) toast.error(message)
+        else setError(message)
+        return
+      }
+
+      setStatus(statusResult.value)
+      setSettings(settingsResult.value)
+      setActivePolicy(policyResult.value)
+      setError(null)
+      hydratedRef.current = true
+
+      if (draftResult.status === 'fulfilled') {
+        setDraftPolicy(draftResult.value)
+      } else {
+        toast.error(getDlpErrorMessage(
+          draftResult.reason,
+          'Could not load the policy draft.',
+        ))
+      }
+
+      if (messagesResult.status === 'fulfilled') {
+        setRecentMessages(messagesResult.value.items)
+      } else {
+        toast.error(getDlpErrorMessage(
+          messagesResult.reason,
+          'Could not load recent DLP messages.',
+        ))
+      }
     } finally {
-      setLoading(false)
-      setRefreshing(false)
+      if (generation === loadGeneration.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
+  }, [])
+
+  const navigate = useCallback((target: DlpNavigateTarget) => {
+    if (target.tab === 'messages') {
+      setMessagesFilter(target.filter ?? '')
+    }
+    setTab(target.tab)
   }, [])
 
   const reloadPolicies = useCallback(async () => {
@@ -146,9 +203,23 @@ export default function DlpPage() {
       setDraftPolicy(nextDraft)
       setSettings(nextSettings)
     } catch (requestError) {
-      setError(getDlpErrorMessage(requestError, 'Could not refresh DLP policy.'))
+      toast.error(getDlpErrorMessage(requestError, 'Could not refresh DLP policy.'))
     }
   }, [])
+
+  const refreshStatus = useCallback(async () => {
+    try {
+      setStatus(await getDlpStatus())
+    } catch (requestError) {
+      toast.error(getDlpErrorMessage(requestError, 'Could not refresh DLP status.'))
+    }
+  }, [])
+
+  useEffect(() => {
+    setVisited((current) => (
+      current[tab] ? current : { ...current, [tab]: true }
+    ))
+  }, [tab])
 
   useEffect(() => {
     if (isEnterprise) void loadPage()
@@ -159,7 +230,7 @@ export default function DlpPage() {
 
   if (loading) return <LoadingPage />
 
-  if (error || !status || !settings || !activePolicy) {
+  if (!status || !settings || !activePolicy) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10">
@@ -193,7 +264,10 @@ export default function DlpPage() {
           title="Refresh"
           aria-label="Refresh"
           disabled={refreshing}
-          onClick={() => void loadPage(true)}
+          onClick={() => {
+            setListRefreshEpoch((value) => value + 1)
+            void loadPage(true)
+          }}
           className="rounded-lg border border-white/[0.08] p-2 text-[#71717a] transition-colors hover:bg-white/[0.04] hover:text-white disabled:opacity-50"
         >
           <RefreshCw size={14} className={refreshing ? 'animate-spin' : undefined} />
@@ -211,7 +285,10 @@ export default function DlpPage() {
             type="button"
             role="tab"
             aria-selected={tab === key}
-            onClick={() => setTab(key)}
+            onClick={() => {
+              if (key === 'messages') setMessagesFilter('')
+              setTab(key)
+            }}
             className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-2 text-[13px] font-medium transition-all ${
               tab === key
                 ? 'bg-[#3b6ef6]/15 text-[var(--foreground)]'
@@ -232,46 +309,82 @@ export default function DlpPage() {
         ))}
       </div>
 
-      <div role="tabpanel">
-        {tab === 'overview' && (
-          <DlpOverviewTab
-            status={status}
-            settings={settings}
-            activePolicy={activePolicy}
-            recentMessages={recentMessages}
-          />
+      <div>
+        {visited.overview && (
+          <div
+            role="tabpanel"
+            hidden={tab !== 'overview'}
+            aria-hidden={tab !== 'overview'}
+          >
+            <DlpOverviewTab
+              status={status}
+              settings={settings}
+              activePolicy={activePolicy}
+              recentMessages={recentMessages}
+              onNavigate={navigate}
+            />
+          </div>
         )}
-        {tab === 'policy' && (
-          <DlpPolicyTab
-            activePolicy={activePolicy}
-            draftPolicy={draftPolicy}
-            canManage={canManage}
-            onChanged={reloadPolicies}
-          />
+        {visited.policy && (
+          <div
+            role="tabpanel"
+            hidden={tab !== 'policy'}
+            aria-hidden={tab !== 'policy'}
+          >
+            <DlpPolicyTab
+              activePolicy={activePolicy}
+              draftPolicy={draftPolicy}
+              canManage={canManage}
+              onChanged={reloadPolicies}
+            />
+          </div>
         )}
-        {tab === 'queue' && (
-          <DlpMessagesTab
-            key="queue"
-            canManage={canManage}
-            defaultFilter="reviewable"
-            variant="queue"
-          />
+        {visited.queue && (
+          <div
+            role="tabpanel"
+            hidden={tab !== 'queue'}
+            aria-hidden={tab !== 'queue'}
+          >
+            <DlpMessagesTab
+              canManage={canManage}
+              defaultFilter="reviewable"
+              variant="queue"
+              refreshEpoch={listRefreshEpoch}
+              onReviewed={() => { void refreshStatus() }}
+            />
+          </div>
         )}
-        {tab === 'messages' && (
-          <DlpMessagesTab
-            key="messages"
-            canManage={canManage}
-            defaultFilter=""
-            variant="messages"
-          />
+        {visited.messages && (
+          <div
+            role="tabpanel"
+            hidden={tab !== 'messages'}
+            aria-hidden={tab !== 'messages'}
+          >
+            <DlpMessagesTab
+              canManage={canManage}
+              defaultFilter={messagesFilter}
+              variant="messages"
+              refreshEpoch={listRefreshEpoch}
+              onReviewed={() => { void refreshStatus() }}
+            />
+          </div>
         )}
-        {tab === 'settings' && (
-          <DlpSettingsTab
-            settings={settings}
-            status={status}
-            canManage={canManage}
-            onUpdated={setSettings}
-          />
+        {visited.settings && (
+          <div
+            role="tabpanel"
+            hidden={tab !== 'settings'}
+            aria-hidden={tab !== 'settings'}
+          >
+            <DlpSettingsTab
+              settings={settings}
+              status={status}
+              canManage={canManage}
+              onUpdated={(next) => {
+                setSettings(next)
+                void refreshStatus()
+              }}
+            />
+          </div>
         )}
       </div>
     </div>

@@ -4,6 +4,7 @@ from typing import Protocol, runtime_checkable
 
 from app.domain.models import (
     CaptureEvent,
+    CommandAckEvent,
     DeliveryEvent,
     GatewayCommand,
     RelayRequest,
@@ -40,6 +41,15 @@ class SpoolStore(Protocol):
     ) -> SpoolRecord:
         ...
 
+    def record_command_ack(self, event: CommandAckEvent) -> CommandAckEvent:
+        ...
+
+    def list_pending_command_acks(self) -> list[CommandAckEvent]:
+        ...
+
+    def mark_command_ack_published(self, event_id: str) -> None:
+        ...
+
     def recover_stale_submissions(self) -> int:
         ...
 
@@ -62,6 +72,9 @@ class EventBus(Protocol):
         ...
 
     def publish_delivery(self, event: DeliveryEvent) -> None:
+        ...
+
+    def publish_command_ack(self, event: CommandAckEvent) -> None:
         ...
 
     def consume_commands(self, max_items: int = 10) -> list[GatewayCommand]:

@@ -38,6 +38,7 @@ class DlpSettings(BaseSettings):
     capture_queue_name: str = "dlp-capture"
     command_queue_name: str = "dlp-commands"
     delivery_queue_name: str = "dlp-delivery"
+    command_ack_queue_name: str = "dlp-command-acks"
     local_queue_dir: Path = Path("/var/dlp/queues")
     local_queue_reclaim_seconds: int = 300
     delivery_max_attempts: int = Field(default=4, ge=1)

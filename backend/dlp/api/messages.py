@@ -9,23 +9,29 @@ from typing import Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import and_, select
+from sqlalchemy import and_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
 from backend.dlp.api.deps import require_dlp_admin, require_dlp_enterprise
 from backend.dlp.api.message_views import (
+    COMMAND_ACK_EVENT_TYPE,
     DELIVERY_EVENT_TYPE,
     PREVIEW_MAX_MIME_BYTES,
     PREVIEW_MAX_TEXT_CHARS,
-    REVIEWABLE_STATES,
+    failed_command_exists,
+    inflight_command_exists,
     is_reviewable,
+    project_command_status,
+    reviewable_clause,
     sanitize_delivery_attempts,
     sanitize_findings,
     sanitize_limitations,
     sanitize_preview_text,
 )
 from backend.dlp.api.schemas import (
+    DlpCommandStatus,
     DlpDeliveryAttempt,
     DlpExtractionLimitation,
     DlpFindingSummary,
@@ -49,6 +55,7 @@ from backend.dlp.extraction import (
 )
 from backend.dlp.persistence.models import (
     DlpClassificationResult,
+    DlpCommandOutbox,
     DlpDecision,
     DlpMessage,
     DlpMessageEvent,
@@ -73,6 +80,7 @@ async def list_messages(
     state: str | None = None,
     reviewable: bool | None = Query(default=None),
     before: datetime | None = None,
+    before_id: UUID | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     current_user: User = Depends(require_dlp_enterprise),
     session: AsyncSession = Depends(get_db),
@@ -82,48 +90,79 @@ async def list_messages(
             status_code=422,
             detail="Cannot combine reviewable=true with state",
         )
+    if before_id is not None and before is None:
+        raise HTTPException(
+            status_code=422,
+            detail="before_id requires before",
+        )
 
     decision_join = and_(
         DlpDecision.message_id == DlpMessage.id,
         DlpDecision.evaluation_version == 1,
     )
+    has_failed = failed_command_exists().label("has_failed_command")
+    has_inflight = inflight_command_exists().label("has_inflight_command")
     if reviewable is True:
         statement = (
-            select(DlpMessage, DlpDecision)
+            select(DlpMessage, DlpDecision, has_failed, has_inflight)
             .join(DlpDecision, decision_join)
             .where(
                 DlpMessage.org_id == current_user.org_id,
-                DlpMessage.state.in_(tuple(REVIEWABLE_STATES)),
-                DlpDecision.effective_action == "hold",
+                reviewable_clause(),
             )
-            .order_by(DlpMessage.received_at.desc())
+            .order_by(
+                DlpMessage.received_at.desc(),
+                DlpMessage.id.desc(),
+            )
             .limit(limit + 1)
         )
     else:
         statement = (
-            select(DlpMessage, DlpDecision)
+            select(DlpMessage, DlpDecision, has_failed, has_inflight)
             .outerjoin(DlpDecision, decision_join)
             .where(DlpMessage.org_id == current_user.org_id)
-            .order_by(DlpMessage.received_at.desc())
+            .order_by(
+                DlpMessage.received_at.desc(),
+                DlpMessage.id.desc(),
+            )
             .limit(limit + 1)
         )
         if state:
             statement = statement.where(DlpMessage.state == state)
 
-    if before:
-        statement = statement.where(DlpMessage.received_at < before)
+    if before is not None:
+        if before_id is not None:
+            statement = statement.where(
+                or_(
+                    DlpMessage.received_at < before,
+                    and_(
+                        DlpMessage.received_at == before,
+                        DlpMessage.id < before_id,
+                    ),
+                )
+            )
+        else:
+            statement = statement.where(DlpMessage.received_at < before)
 
     rows = (await session.execute(statement)).all()
     has_more = len(rows) > limit
     rows = rows[:limit]
     items = [
-        _message_summary(message, decision)
-        for message, decision in rows
+        _message_summary(
+            message,
+            decision,
+            has_failed_command=bool(has_failed_command),
+            has_inflight_command=bool(has_inflight_command),
+        )
+        for message, decision, has_failed_command, has_inflight_command in rows
     ]
     return MessageListResponse(
         items=items,
         next_cursor=(
             items[-1].received_at if has_more and items else None
+        ),
+        next_id=(
+            items[-1].message_id if has_more and items else None
         ),
     )
 
@@ -167,6 +206,21 @@ async def get_message(
         )
     )
     delivery_events = list(delivery_result.scalars().all())
+    command_ack_result = await session.execute(
+        select(DlpMessageEvent)
+        .where(
+            DlpMessageEvent.message_id == message.id,
+            DlpMessageEvent.event_type == COMMAND_ACK_EVENT_TYPE,
+        )
+        .order_by(
+            DlpMessageEvent.occurred_at.asc(),
+            DlpMessageEvent.created_at.asc(),
+        )
+    )
+    command_ack_events = list(command_ack_result.scalars().all())
+    outbox_rows = await CommandOutboxRepository(session).list_for_message(
+        message.id
+    )
 
     findings = sanitize_findings(
         list(decision.finding_references)
@@ -195,7 +249,16 @@ async def get_message(
             )
 
     subject, preview, preview_available = await _safe_preview(message)
-    summary = _message_summary(message, decision)
+    summary = _message_summary(
+        message,
+        decision,
+        has_failed_command=any(
+            row.status == "failed" for row in outbox_rows
+        ),
+        has_inflight_command=any(
+            row.status in {"pending", "published"} for row in outbox_rows
+        ),
+    )
     return DlpMessageDetail(
         **summary.model_dump(),
         policy_version=(
@@ -240,6 +303,12 @@ async def get_message(
         deliveries=[
             DlpDeliveryAttempt.model_validate(item)
             for item in sanitize_delivery_attempts(delivery_events)
+        ],
+        commands=[
+            DlpCommandStatus.model_validate(item)
+            for item in project_command_status(
+                outbox_rows, command_ack_events
+            )
         ],
     )
 
@@ -290,34 +359,61 @@ async def _review_action(
     payload: ReviewActionRequest,
     action: Literal["release", "stop"],
 ) -> ReviewActionResponse:
-    existing_result = await session.execute(
-        select(DlpReviewAction).where(
-            DlpReviewAction.org_id == current_user.org_id,
-            DlpReviewAction.idempotency_key
-            == payload.idempotency_key,
-        )
+    existing = await _existing_review_action(
+        session,
+        org_id=current_user.org_id,
+        idempotency_key=payload.idempotency_key,
     )
-    existing = existing_result.scalar_one_or_none()
     if existing is not None:
-        if (
-            existing.message_id != message_id
-            or existing.action != action
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Idempotency key was used for another action",
-            )
-        return ReviewActionResponse(
-            message_id=message_id,
-            action=action,
-            command_id=existing.command_id,
-            status="already_queued",
+        return _idempotent_review_response(
+            existing, message_id=message_id, action=action
         )
 
-    message, decision = await _tenant_message(
-        session, current_user.org_id, message_id
+    message_result = await session.execute(
+        select(DlpMessage)
+        .where(
+            DlpMessage.id == message_id,
+            DlpMessage.org_id == current_user.org_id,
+        )
+        .with_for_update()
     )
-    if not is_reviewable(message, decision):
+    message = message_result.scalar_one_or_none()
+    if message is None:
+        raise HTTPException(
+            status_code=404, detail="DLP message not found"
+        )
+    decision = await session.scalar(
+        select(DlpDecision).where(
+            DlpDecision.message_id == message.id,
+            DlpDecision.evaluation_version == 1,
+        )
+    )
+    has_failed_command = bool(
+        await session.scalar(
+            select(DlpCommandOutbox.id)
+            .where(
+                DlpCommandOutbox.message_id == message.id,
+                DlpCommandOutbox.status == "failed",
+            )
+            .limit(1)
+        )
+    )
+    has_inflight_command = bool(
+        await session.scalar(
+            select(DlpCommandOutbox.id)
+            .where(
+                DlpCommandOutbox.message_id == message.id,
+                DlpCommandOutbox.status.in_(("pending", "published")),
+            )
+            .limit(1)
+        )
+    )
+    if not is_reviewable(
+        message,
+        decision,
+        has_failed_command=has_failed_command,
+        has_inflight_command=has_inflight_command,
+    ):
         raise HTTPException(
             status_code=409,
             detail="Only a held DLP message can be reviewed",
@@ -360,7 +456,20 @@ async def _review_action(
     )
     await CommandOutboxRepository(session).enqueue(command)
     message.state = f"{action}_requested"
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError:
+        await session.rollback()
+        existing = await _existing_review_action(
+            session,
+            org_id=current_user.org_id,
+            idempotency_key=payload.idempotency_key,
+        )
+        if existing is None:
+            raise
+        return _idempotent_review_response(
+            existing, message_id=message_id, action=action
+        )
     return ReviewActionResponse(
         message_id=message_id,
         action=action,
@@ -406,8 +515,46 @@ async def _latest_classification(
     return result.scalar_one_or_none()
 
 
+async def _existing_review_action(
+    session: AsyncSession,
+    *,
+    org_id: UUID,
+    idempotency_key: str,
+) -> DlpReviewAction | None:
+    result = await session.execute(
+        select(DlpReviewAction).where(
+            DlpReviewAction.org_id == org_id,
+            DlpReviewAction.idempotency_key == idempotency_key,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+def _idempotent_review_response(
+    existing: DlpReviewAction,
+    *,
+    message_id: UUID,
+    action: Literal["release", "stop"],
+) -> ReviewActionResponse:
+    if existing.message_id != message_id or existing.action != action:
+        raise HTTPException(
+            status_code=409,
+            detail="Idempotency key was used for another action",
+        )
+    return ReviewActionResponse(
+        message_id=message_id,
+        action=action,
+        command_id=existing.command_id,
+        status="already_queued",
+    )
+
+
 def _message_summary(
-    message: DlpMessage, decision: DlpDecision | None
+    message: DlpMessage,
+    decision: DlpDecision | None,
+    *,
+    has_failed_command: bool = False,
+    has_inflight_command: bool = False,
 ) -> DlpMessageSummary:
     return DlpMessageSummary(
         message_id=message.id,
@@ -422,7 +569,12 @@ def _message_summary(
             decision.effective_action if decision else None
         ),
         explanation=decision.explanation if decision else None,
-        reviewable=is_reviewable(message, decision),
+        reviewable=is_reviewable(
+            message,
+            decision,
+            has_failed_command=has_failed_command,
+            has_inflight_command=has_inflight_command,
+        ),
     )
 
 

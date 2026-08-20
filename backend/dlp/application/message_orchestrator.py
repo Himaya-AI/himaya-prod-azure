@@ -372,8 +372,13 @@ class MessageOrchestrator:
                 )
                 if message is None:
                     raise RuntimeError("DLP message disappeared")
+                next_state = (
+                    "stop_requested"
+                    if decision.effective_action == PolicyAction.STOP
+                    else "decided"
+                )
                 await MessageRepository(session).set_state(
-                    message, "decided"
+                    message, next_state
                 )
                 return MessageProcessingResult(
                     message_id=event.message_id,

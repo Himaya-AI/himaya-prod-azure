@@ -45,6 +45,7 @@ def build_app():
             capture_queue_name=settings.capture_queue_name,
             command_queue_name=settings.command_queue_name,
             delivery_queue_name=settings.delivery_queue_name,
+            command_ack_queue_name=settings.command_ack_queue_name,
             connection_string=settings.service_bus_connection_string,
             fully_qualified_namespace=(
                 settings.service_bus_fully_qualified_namespace

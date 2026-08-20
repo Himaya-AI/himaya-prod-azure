@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from app.domain.models import CaptureEvent, DeliveryEvent, GatewayCommand
+from app.domain.models import (
+    CaptureEvent,
+    CommandAckEvent,
+    DeliveryEvent,
+    GatewayCommand,
+)
 from app.domain.ports import EventBus
 
 
@@ -16,3 +21,6 @@ class EventPublisher:
 
     def publish_delivery(self, event: DeliveryEvent) -> None:
         self.bus.publish_delivery(event)
+
+    def publish_command_ack(self, event: CommandAckEvent) -> None:
+        self.bus.publish_command_ack(event)

@@ -11,6 +11,18 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.dlp.policy import PolicyDocument
 
 
+class FailedOutboxCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: UUID
+    message_id: UUID
+    command_type: str
+    last_error: str | None = None
+    attempts: int = 0
+    updated_at: datetime
+    envelope_from: str | None = None
+
+
 class DlpStatusResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -21,7 +33,12 @@ class DlpStatusResponse(BaseModel):
     legacy_independent: bool = True
     message_counts: dict[str, int] = Field(default_factory=dict)
     reviewable_count: int = 0
+    oldest_reviewable_at: datetime | None = None
+    oldest_reviewable_from: str | None = None
     failed_outbox_commands: int = 0
+    failed_outbox_items: list[FailedOutboxCommand] = Field(
+        default_factory=list
+    )
 
 
 class TenantSettingsResponse(BaseModel):
@@ -60,6 +77,16 @@ class PolicyDraftRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     document: PolicyDocument
+    expected_id: UUID | None = None
+    expected_version: int | None = None
+
+
+class PolicyPublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    draft_id: UUID
+    expected_version: int
+    document: PolicyDocument
 
 
 class DlpMessageSummary(BaseModel):
@@ -81,6 +108,7 @@ class MessageListResponse(BaseModel):
 
     items: list[DlpMessageSummary]
     next_cursor: datetime | None = None
+    next_id: UUID | None = None
 
 
 class DlpFindingSummary(BaseModel):
@@ -136,6 +164,19 @@ class DlpDeliveryAttempt(BaseModel):
     occurred_at: datetime
 
 
+class DlpCommandStatus(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    command_id: UUID
+    command_type: str
+    status: Literal["queued", "sent", "failed"]
+    attempts: int = 0
+    last_error: str | None = None
+    created_at: datetime
+    published_at: datetime | None = None
+    gateway_status: str | None = None
+
+
 class DlpMessageDetail(DlpMessageSummary):
     model_config = ConfigDict(extra="forbid")
 
@@ -153,6 +194,7 @@ class DlpMessageDetail(DlpMessageSummary):
         default_factory=list
     )
     deliveries: list[DlpDeliveryAttempt] = Field(default_factory=list)
+    commands: list[DlpCommandStatus] = Field(default_factory=list)
 
 
 class ReviewActionRequest(BaseModel):

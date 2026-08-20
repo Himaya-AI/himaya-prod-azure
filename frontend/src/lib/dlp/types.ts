@@ -10,7 +10,20 @@ export interface DlpStatus {
   legacy_independent: boolean
   message_counts: Record<string, number>
   reviewable_count?: number
+  oldest_reviewable_at?: string | null
+  oldest_reviewable_from?: string | null
   failed_outbox_commands: number
+  failed_outbox_items?: DlpFailedOutboxCommand[]
+}
+
+export interface DlpFailedOutboxCommand {
+  command_id: string
+  message_id: string
+  command_type: string
+  last_error: string | null
+  attempts: number
+  updated_at: string
+  envelope_from: string | null
 }
 
 export interface DlpTenantSettings {
@@ -77,12 +90,14 @@ export interface DlpMessageSummary {
 export interface DlpMessageList {
   items: DlpMessageSummary[]
   next_cursor: string | null
+  next_id?: string | null
 }
 
 export interface DlpMessageListParams {
   state?: string
   reviewable?: boolean
   before?: string
+  before_id?: string
   limit?: number
 }
 
@@ -129,6 +144,17 @@ export interface DlpDeliveryAttempt {
   occurred_at: string
 }
 
+export interface DlpCommandStatus {
+  command_id: string
+  command_type: string
+  status: 'queued' | 'sent' | 'failed' | string
+  attempts: number
+  last_error: string | null
+  created_at: string
+  published_at: string | null
+  gateway_status: string | null
+}
+
 export interface DlpMessageDetail extends DlpMessageSummary {
   policy_version: string | null
   matched_rule_ids: string[]
@@ -140,6 +166,7 @@ export interface DlpMessageDetail extends DlpMessageSummary {
   preview_available: boolean
   review_history: DlpReviewHistoryItem[]
   deliveries: DlpDeliveryAttempt[]
+  commands: DlpCommandStatus[]
 }
 
 export interface DlpReviewActionRequest {
@@ -155,3 +182,8 @@ export interface DlpReviewActionResponse {
 }
 
 export type DlpReviewAction = 'release' | 'stop'
+
+export type DlpNavigateTarget =
+  | { tab: 'queue' }
+  | { tab: 'policy' }
+  | { tab: 'messages'; filter?: string }

@@ -7,6 +7,7 @@ from typing import Any, Protocol
 
 from backend.dlp.contracts import (
     CaptureEvent,
+    CommandAckEvent,
     DeliveryEvent,
     GatewayCommand,
 )
@@ -21,6 +22,12 @@ class ReceivedCapture:
 @dataclass(frozen=True)
 class ReceivedDelivery:
     event: DeliveryEvent
+    receipt: Any
+
+
+@dataclass(frozen=True)
+class ReceivedCommandAck:
+    event: CommandAckEvent
     receipt: Any
 
 
@@ -46,6 +53,18 @@ class DlpMessageBus(Protocol):
     async def abandon_delivery(self, receipt: Any) -> None: ...
 
     async def dead_letter_delivery(
+        self, receipt: Any, reason: str
+    ) -> None: ...
+
+    async def receive_command_acks(
+        self, max_messages: int = 10, wait_seconds: int = 5
+    ) -> list[ReceivedCommandAck]: ...
+
+    async def complete_command_ack(self, receipt: Any) -> None: ...
+
+    async def abandon_command_ack(self, receipt: Any) -> None: ...
+
+    async def dead_letter_command_ack(
         self, receipt: Any, reason: str
     ) -> None: ...
 

@@ -11,10 +11,15 @@ from pathlib import Path
 
 from backend.dlp.contracts import (
     CaptureEvent,
+    CommandAckEvent,
     DeliveryEvent,
     GatewayCommand,
 )
-from backend.dlp.messaging.ports import ReceivedCapture, ReceivedDelivery
+from backend.dlp.messaging.ports import (
+    ReceivedCapture,
+    ReceivedCommandAck,
+    ReceivedDelivery,
+)
 
 
 class FilesystemDlpMessageBus:
@@ -36,6 +41,10 @@ class FilesystemDlpMessageBus:
             "deliveries/processing",
             "deliveries/done",
             "deliveries/dead",
+            "command-acks/ready",
+            "command-acks/processing",
+            "command-acks/done",
+            "command-acks/dead",
         ):
             (root / name).mkdir(parents=True, exist_ok=True)
 
@@ -95,6 +104,35 @@ class FilesystemDlpMessageBus:
     ) -> None:
         await asyncio.to_thread(
             self._dead_letter, "deliveries", receipt, reason
+        )
+
+    async def receive_command_acks(
+        self, max_messages: int = 10, wait_seconds: int = 5
+    ) -> list[ReceivedCommandAck]:
+        deadline = time.monotonic() + max(wait_seconds, 0)
+        while True:
+            received = await asyncio.to_thread(
+                self._dequeue_command_acks, max_messages
+            )
+            if received or time.monotonic() >= deadline:
+                return received
+            await asyncio.sleep(0.1)
+
+    async def complete_command_ack(self, receipt: str) -> None:
+        await asyncio.to_thread(
+            self._move_receipt, "command-acks", receipt, "done"
+        )
+
+    async def abandon_command_ack(self, receipt: str) -> None:
+        await asyncio.to_thread(
+            self._move_receipt, "command-acks", receipt, "ready"
+        )
+
+    async def dead_letter_command_ack(
+        self, receipt: str, reason: str
+    ) -> None:
+        await asyncio.to_thread(
+            self._dead_letter, "command-acks", receipt, reason
         )
 
     async def publish_command(self, command: GatewayCommand) -> None:
@@ -169,6 +207,37 @@ class FilesystemDlpMessageBus:
             )
         return received
 
+    def _dequeue_command_acks(
+        self, max_messages: int
+    ) -> list[ReceivedCommandAck]:
+        ready = self.root / "command-acks" / "ready"
+        processing = self.root / "command-acks" / "processing"
+        received: list[ReceivedCommandAck] = []
+        for path in sorted(ready.glob("*.json"))[:max_messages]:
+            destination = processing / path.name
+            try:
+                os.replace(path, destination)
+            except FileNotFoundError:
+                continue
+            try:
+                event = CommandAckEvent.model_validate_json(
+                    destination.read_text(encoding="utf-8")
+                )
+            except Exception as exc:
+                self._dead_letter(
+                    "command-acks",
+                    destination.name,
+                    f"invalid command ack event: {exc}",
+                )
+                continue
+            received.append(
+                ReceivedCommandAck(
+                    event=event,
+                    receipt=destination.name,
+                )
+            )
+        return received
+
     def _enqueue(self, kind: str, payload: dict) -> None:
         name = f"{int(time.time() * 1000)}_{uuid.uuid4().hex}.json"
         ready = self.root / kind / "ready"
@@ -212,7 +281,7 @@ class FilesystemDlpMessageBus:
     def _recover_stale(self) -> int:
         now = time.time()
         recovered = 0
-        for kind in ("captures", "deliveries"):
+        for kind in ("captures", "deliveries", "command-acks"):
             processing = self.root / kind / "processing"
             ready = self.root / kind / "ready"
             kind_recovered = 0

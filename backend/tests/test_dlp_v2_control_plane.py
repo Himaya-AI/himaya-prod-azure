@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -15,6 +16,7 @@ from backend.dlp.api.message_views import (
     sanitize_preview_text,
 )
 from backend.dlp.api.router import router
+from backend.dlp.api.schemas import DlpStatusResponse, PolicyPublishRequest
 from backend.dlp.api.settings import _normalize_domain
 from backend.dlp.policy import (
     PolicyAction,
@@ -24,6 +26,25 @@ from backend.dlp.policy import (
     policy_from_document,
     policy_to_document,
 )
+
+
+def test_status_response_includes_oldest_reviewable_sla() -> None:
+    received_at = datetime(2026, 8, 19, 12, 0, tzinfo=timezone.utc)
+    payload = DlpStatusResponse(
+        status="ready",
+        pipeline_enabled=True,
+        mode="enforce",
+        classifier_url_configured=True,
+        reviewable_count=2,
+        oldest_reviewable_at=received_at,
+        oldest_reviewable_from="alice@example.test",
+    )
+
+    assert payload.oldest_reviewable_at == received_at
+    assert payload.oldest_reviewable_from == "alice@example.test"
+    dumped = payload.model_dump()
+    assert dumped["oldest_reviewable_at"] == received_at
+    assert dumped["reviewable_count"] == 2
 
 
 def test_control_plane_routes_are_versioned() -> None:
@@ -121,6 +142,15 @@ async def test_require_dlp_admin_requires_admin_role() -> None:
     assert "administrator" in exc.value.detail.lower()
 
 
+@pytest.mark.asyncio
+async def test_require_dlp_admin_allows_owner_role() -> None:
+    user = SimpleNamespace(org_id=uuid4(), role="owner")
+
+    result = await require_dlp_admin(current_user=user)
+
+    assert result is user
+
+
 def test_is_reviewable_requires_hold_decision_and_state() -> None:
     message = SimpleNamespace(state="decided")
     decision = SimpleNamespace(effective_action="hold")
@@ -137,6 +167,51 @@ def test_is_reviewable_requires_hold_decision_and_state() -> None:
         is_reviewable(
             message,
             SimpleNamespace(effective_action="stop"),
+        )
+        is False
+    )
+
+
+def test_is_reviewable_allows_failed_command_retry() -> None:
+    decision = SimpleNamespace(effective_action="hold")
+    assert (
+        is_reviewable(
+            SimpleNamespace(state="release_requested"),
+            decision,
+            has_failed_command=True,
+        )
+        is True
+    )
+    assert (
+        is_reviewable(
+            SimpleNamespace(state="stop_requested"),
+            decision,
+            has_failed_command=True,
+        )
+        is True
+    )
+    assert (
+        is_reviewable(
+            SimpleNamespace(state="release_requested"),
+            decision,
+            has_failed_command=False,
+        )
+        is False
+    )
+    assert (
+        is_reviewable(
+            SimpleNamespace(state="provider_accepted"),
+            decision,
+            has_failed_command=True,
+        )
+        is False
+    )
+    assert (
+        is_reviewable(
+            SimpleNamespace(state="stop_requested"),
+            decision,
+            has_failed_command=True,
+            has_inflight_command=True,
         )
         is False
     )
@@ -170,3 +245,109 @@ def test_sanitize_preview_text_bounds_output() -> None:
     preview = sanitize_preview_text("a" * 5000, max_chars=32)
     assert len(preview) == 32
     assert preview.endswith("…")
+
+
+def test_policy_publish_request_requires_draft_identity() -> None:
+    with pytest.raises(ValidationError):
+        PolicyPublishRequest()  # type: ignore[call-arg]
+
+
+@pytest.mark.asyncio
+async def test_first_publish_uses_runtime_tenant_defaults(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import publish_policy
+    from backend.dlp.persistence.models import DlpTenantConfig
+
+    org_id = uuid4()
+    draft_id = uuid4()
+    document = PolicyDocument(default_action=PolicyAction.ALLOW, rules=[])
+    draft = SimpleNamespace(
+        id=draft_id,
+        version=1,
+        status="draft",
+        policy_document=document.model_dump(mode="json"),
+        created_at=None,
+        published_at=None,
+        org_id=org_id,
+    )
+    added: list[object] = []
+
+    class _ConfigResult:
+        def scalar_one_or_none(self):
+            return None
+
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+    monkeypatch.setattr(
+        policies_module,
+        "get_dlp_settings",
+        lambda: SimpleNamespace(
+            gateway_pipeline_enabled=True,
+            tenant_mode="enforce",
+        ),
+    )
+    session = SimpleNamespace(
+        execute=AsyncMock(return_value=_ConfigResult()),
+        add=added.append,
+        flush=AsyncMock(),
+    )
+    payload = PolicyPublishRequest(
+        draft_id=draft_id,
+        expected_version=1,
+        document=document,
+    )
+
+    result = await publish_policy(
+        payload=payload,
+        current_user=SimpleNamespace(id=uuid4(), org_id=org_id),
+        session=session,
+    )
+
+    assert result.status == "published"
+    assert draft.status == "published"
+    assert len(added) == 1
+    config = added[0]
+    assert isinstance(config, DlpTenantConfig)
+    assert config.enabled is True
+    assert config.mode == "enforce"
+    assert config.active_policy_version_id == draft_id
+
+
+@pytest.mark.asyncio
+async def test_publish_rejects_document_mismatch(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import publish_policy
+
+    draft_id = uuid4()
+    stored = PolicyDocument(default_action=PolicyAction.ALLOW, rules=[])
+    submitted = PolicyDocument(default_action=PolicyAction.STOP, rules=[])
+    draft = SimpleNamespace(
+        id=draft_id,
+        version=1,
+        status="draft",
+        policy_document=stored.model_dump(mode="json"),
+        created_at=None,
+        published_at=None,
+    )
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await publish_policy(
+            payload=PolicyPublishRequest(
+                draft_id=draft_id,
+                expected_version=1,
+                document=submitted,
+            ),
+            current_user=SimpleNamespace(id=uuid4(), org_id=uuid4()),
+            session=SimpleNamespace(),
+        )
+
+    assert exc.value.status_code == 409
+    assert draft.status == "draft"

@@ -6,6 +6,9 @@ import asyncio
 import logging
 
 from backend.database import AsyncSessionLocal
+from backend.dlp.application.command_ack_processor import (
+    CommandAckProcessor,
+)
 from backend.dlp.application.message_orchestrator import (
     MessageOrchestrator,
 )
@@ -31,6 +34,7 @@ from backend.dlp.messaging.service_bus import (
 from backend.dlp.policy import PolicyEvaluator
 from backend.dlp.storage.azure_mime_store import AzureBlobMimeStore
 from backend.dlp.workers.capture_consumer import CaptureConsumer
+from backend.dlp.workers.command_ack_consumer import CommandAckConsumer
 from backend.dlp.workers.delivery_consumer import DeliveryConsumer
 from backend.dlp.workers.outbox_publisher import OutboxPublisher
 
@@ -49,6 +53,7 @@ async def _build_bus(settings: DlpSettings) -> DlpMessageBus:
         capture_queue_name=settings.capture_queue_name,
         command_queue_name=settings.command_queue_name,
         delivery_queue_name=settings.delivery_queue_name,
+        command_ack_queue_name=settings.command_ack_queue_name,
         connection_string=settings.service_bus_connection_string,
         fully_qualified_namespace=(
             settings.service_bus_fully_qualified_namespace
@@ -109,6 +114,10 @@ async def run() -> None:
             retry_max_seconds=settings.delivery_retry_max_seconds,
         ),
     )
+    command_ack_consumer = CommandAckConsumer(
+        bus,
+        CommandAckProcessor(AsyncSessionLocal),
+    )
     outbox_publisher = OutboxPublisher(
         session_factory=AsyncSessionLocal, bus=bus
     )
@@ -125,6 +134,10 @@ async def run() -> None:
             tasks.create_task(
                 delivery_consumer.run_forever(),
                 name="dlp-delivery-consumer",
+            )
+            tasks.create_task(
+                command_ack_consumer.run_forever(),
+                name="dlp-command-ack-consumer",
             )
     finally:
         await classifier.close()

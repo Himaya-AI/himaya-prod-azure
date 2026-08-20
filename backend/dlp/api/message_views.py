@@ -5,27 +5,81 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import and_, exists, or_, select
+
 from backend.dlp.persistence.models import (
+    DlpCommandOutbox,
     DlpDecision,
     DlpMessage,
     DlpMessageEvent,
 )
 
 REVIEWABLE_STATES = frozenset({"decided", "held"})
+REVIEWABLE_RETRY_STATES = frozenset({"release_requested", "stop_requested"})
 PREVIEW_MAX_MIME_BYTES = 2 * 1024 * 1024
 PREVIEW_MAX_TEXT_CHARS = 4000
 DELIVERY_EVENT_TYPE = "dlp.message.delivery.v1"
+COMMAND_ACK_EVENT_TYPE = "dlp.message.command.v1"
 DELIVERY_MAX_TEXT_CHARS = 500
 DELIVERY_MAX_RECIPIENTS = 50
+OUTBOX_PUBLIC_STATUS = {
+    "pending": "queued",
+    "published": "sent",
+    "failed": "failed",
+}
+INFLIGHT_OUTBOX_STATUSES = frozenset({"pending", "published"})
+
+
+def failed_command_exists():
+    """Correlated EXISTS for a terminal failed outbox command."""
+    return exists(
+        select(DlpCommandOutbox.id).where(
+            DlpCommandOutbox.message_id == DlpMessage.id,
+            DlpCommandOutbox.status == "failed",
+        )
+    )
+
+
+def inflight_command_exists():
+    """Correlated EXISTS for a command that is still queued or published."""
+    return exists(
+        select(DlpCommandOutbox.id).where(
+            DlpCommandOutbox.message_id == DlpMessage.id,
+            DlpCommandOutbox.status.in_(tuple(INFLIGHT_OUTBOX_STATUSES)),
+        )
+    )
+
+
+def reviewable_clause():
+    """SQL predicate matching ``is_reviewable`` including failed-command retry."""
+    return and_(
+        DlpDecision.effective_action == "hold",
+        or_(
+            DlpMessage.state.in_(tuple(REVIEWABLE_STATES)),
+            and_(
+                DlpMessage.state.in_(tuple(REVIEWABLE_RETRY_STATES)),
+                failed_command_exists(),
+                ~inflight_command_exists(),
+            ),
+        ),
+    )
 
 
 def is_reviewable(
-    message: DlpMessage, decision: DlpDecision | None
+    message: DlpMessage,
+    decision: DlpDecision | None,
+    *,
+    has_failed_command: bool = False,
+    has_inflight_command: bool = False,
 ) -> bool:
+    if decision is None or decision.effective_action != "hold":
+        return False
+    if message.state in REVIEWABLE_STATES:
+        return True
     return (
-        decision is not None
-        and decision.effective_action == "hold"
-        and message.state in REVIEWABLE_STATES
+        has_failed_command
+        and not has_inflight_command
+        and message.state in REVIEWABLE_RETRY_STATES
     )
 
 
@@ -175,3 +229,39 @@ def sanitize_delivery_attempts(
             }
         )
     return attempts
+
+
+def project_command_status(
+    outbox_rows: list[Any],
+    ack_events: list[DlpMessageEvent],
+) -> list[dict[str, Any]]:
+    """Map outbox rows to operator-facing queued/sent/failed status."""
+    acks: dict[str, str] = {}
+    for event in ack_events:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        command_id = str(payload.get("command_id") or "").strip()
+        status = _bounded_text(payload.get("status"), 32)
+        if command_id and status:
+            acks[command_id] = status
+    commands: list[dict[str, Any]] = []
+    for row in outbox_rows:
+        public = OUTBOX_PUBLIC_STATUS.get(str(getattr(row, "status", "")))
+        if public is None:
+            continue
+        command_id = getattr(row, "id")
+        commands.append(
+            {
+                "command_id": command_id,
+                "command_type": str(getattr(row, "command_type", "")),
+                "status": public,
+                "attempts": int(getattr(row, "attempts", 0) or 0),
+                "last_error": _bounded_text(
+                    getattr(row, "last_error", None),
+                    DELIVERY_MAX_TEXT_CHARS,
+                ),
+                "created_at": getattr(row, "created_at"),
+                "published_at": getattr(row, "published_at", None),
+                "gateway_status": acks.get(str(command_id)),
+            }
+        )
+    return commands

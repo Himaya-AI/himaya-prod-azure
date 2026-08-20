@@ -184,3 +184,56 @@ def test_disabled_tenant_never_enforces() -> None:
 
     assert decision.intended_action == PolicyAction.STOP
     assert decision.effective_action == PolicyAction.ALLOW
+
+
+def test_enabled_blank_external_only_rule_matches_without_findings() -> None:
+    policy = PolicySet(
+        version="test-blank",
+        rules=(
+            PolicyRule(
+                rule_id="blank.external",
+                name="Blank external hold",
+                action=PolicyAction.HOLD,
+                priority=100,
+                conditions=RuleConditions(external_recipients_only=True),
+            ),
+        ),
+    )
+
+    decision = PolicyEvaluator().evaluate(
+        policy=policy,
+        classification=_classification(),
+        limitations=(),
+        context=_context("bob@external.test"),
+        mode=TenantMode.ENFORCE,
+    )
+
+    assert decision.effective_action == PolicyAction.HOLD
+    assert decision.matched_rule_ids == ("blank.external",)
+
+
+def test_disabled_blank_external_only_rule_does_not_match() -> None:
+    policy = PolicySet(
+        version="test-blank-disabled",
+        rules=(
+            PolicyRule(
+                rule_id="blank.external",
+                name="Blank external hold",
+                action=PolicyAction.HOLD,
+                priority=100,
+                enabled=False,
+                conditions=RuleConditions(external_recipients_only=True),
+            ),
+        ),
+    )
+
+    decision = PolicyEvaluator().evaluate(
+        policy=policy,
+        classification=_classification(),
+        limitations=(),
+        context=_context("bob@external.test"),
+        mode=TenantMode.ENFORCE,
+    )
+
+    assert decision.matched_rule_ids == ()
+    assert decision.effective_action == PolicyAction.ALLOW

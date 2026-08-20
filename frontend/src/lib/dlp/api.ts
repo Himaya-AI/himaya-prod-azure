@@ -40,12 +40,23 @@ export async function getDlpPolicyDraft(): Promise<PolicyVersion | null> {
 
 export async function saveDlpPolicyDraft(
   document: PolicyDocument,
+  expected?: { id: string | null; version: number } | null,
 ): Promise<PolicyVersion> {
-  return (await api.put<PolicyVersion>(`${BASE}/policy/draft`, { document })).data
+  return (
+    await api.put<PolicyVersion>(`${BASE}/policy/draft`, {
+      document,
+      expected_id: expected?.id ?? undefined,
+      expected_version: expected?.version,
+    })
+  ).data
 }
 
-export async function publishDlpPolicy(): Promise<PolicyVersion> {
-  return (await api.post<PolicyVersion>(`${BASE}/policy/publish`)).data
+export async function publishDlpPolicy(payload: {
+  draft_id: string
+  expected_version: number
+  document: PolicyDocument
+}): Promise<PolicyVersion> {
+  return (await api.post<PolicyVersion>(`${BASE}/policy/publish`, payload)).data
 }
 
 export async function listDlpMessages(
@@ -55,6 +66,7 @@ export async function listDlpMessages(
   if (params.state) query.state = params.state
   if (params.reviewable === true) query.reviewable = true
   if (params.before) query.before = params.before
+  if (params.before_id) query.before_id = params.before_id
   if (params.limit != null) query.limit = params.limit
   return (await api.get<DlpMessageList>(`${BASE}/messages`, { params: query })).data
 }
