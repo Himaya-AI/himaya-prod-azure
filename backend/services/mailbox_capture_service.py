@@ -20,6 +20,7 @@ Toggle with QUARANTINE_HARD_CAPTURE (default "true").
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import gzip
 import logging
@@ -212,9 +213,28 @@ async def capture_gmail(
     stored copy (if any) is rolled back so the caller can fall back cleanly."""
     if not org_id:
         return False
+    # Gmail occasionally drops the connection mid-request ("Server disconnected
+    # without sending a response"). Without a retry a single transient blip makes
+    # us permanently fall back to the hidden-label move (which a user CAN un-hide),
+    # defeating hard-capture. Retry the fetch and the delete independently — the
+    # fetch is idempotent, and retrying the delete (not the store) avoids creating
+    # duplicate capture rows since store_capture is not idempotent.
+    _RETRIES = 3
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            raw, imid = await _fetch_gmail_raw(client, headers, user_email, msg_id)
+            raw = imid = None
+            for _attempt in range(1, _RETRIES + 1):
+                try:
+                    raw, imid = await _fetch_gmail_raw(client, headers, user_email, msg_id)
+                    break
+                except httpx.TransportError as _fe:
+                    logger.warning(
+                        f"capture_gmail fetch transient error {user_email}/{msg_id} "
+                        f"(attempt {_attempt}/{_RETRIES}): {_fe}"
+                    )
+                    if _attempt >= _RETRIES:
+                        return False
+                    await asyncio.sleep(1.5 * _attempt)
             if not raw:
                 return False
             cap_id = await store_capture(
@@ -225,14 +245,28 @@ async def capture_gmail(
             if not cap_id:
                 return False
             # Permanently delete from the mailbox (needs full mail scope).
-            del_resp = await client.delete(
-                f"{GMAIL_API_BASE}/users/{user_email}/messages/{msg_id}",
-                headers=headers,
-            )
-            if del_resp.status_code not in (200, 204):
+            del_resp = None
+            for _attempt in range(1, _RETRIES + 1):
+                try:
+                    del_resp = await client.delete(
+                        f"{GMAIL_API_BASE}/users/{user_email}/messages/{msg_id}",
+                        headers=headers,
+                    )
+                    break
+                except httpx.TransportError as _de:
+                    logger.warning(
+                        f"capture_gmail delete transient error {user_email}/{msg_id} "
+                        f"(attempt {_attempt}/{_RETRIES}): {_de}"
+                    )
+                    if _attempt >= _RETRIES:
+                        await delete_capture(cap_id)  # roll back — original still in mailbox
+                        return False
+                    await asyncio.sleep(1.5 * _attempt)
+            if del_resp is None or del_resp.status_code not in (200, 204):
                 logger.warning(
-                    f"gmail hard-delete {msg_id} failed: {del_resp.status_code} "
-                    f"{del_resp.text[:150]} — rolling back capture"
+                    f"gmail hard-delete {msg_id} failed: "
+                    f"{getattr(del_resp, 'status_code', 'n/a')} "
+                    f"{getattr(del_resp, 'text', '')[:150]} — rolling back capture"
                 )
                 await delete_capture(cap_id)
                 return False

@@ -22,7 +22,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 TARGET = os.getenv("DETON_TEST_TARGET", "adnanahmed@sana085.onmicrosoft.com")
-SENDER = "helios-test-attacker@himaya.ai"
+# Sender is overridable so M365/EOP tests can use an alternate SES-verified domain
+# (e.g. attacker-sim.himaya.ai) when the usual himaya.ai sender is being junked.
+SENDER = os.getenv("DETON_TEST_SENDER", "helios-test-attacker@himaya.ai")
 SES_REGION = "us-east-1"
 
 # Credential-harvesting login form (real page with a password field) — Himaya's
