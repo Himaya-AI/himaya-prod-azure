@@ -109,6 +109,7 @@ export default function DlpPage() {
   const [settings, setSettings] = useState<DlpTenantSettings | null>(null)
   const [activePolicy, setActivePolicy] = useState<PolicyVersion | null>(null)
   const [draftPolicy, setDraftPolicy] = useState<PolicyVersion | null>(null)
+  const [draftLoadError, setDraftLoadError] = useState(false)
   const [recentMessages, setRecentMessages] = useState<DlpMessageSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -116,6 +117,7 @@ export default function DlpPage() {
   const [listRefreshEpoch, setListRefreshEpoch] = useState(0)
   const loadGeneration = useRef(0)
   const hydratedRef = useRef(false)
+  const draftEverLoaded = useRef(false)
 
   const loadPage = useCallback(async (background = false) => {
     const generation = ++loadGeneration.current
@@ -162,11 +164,14 @@ export default function DlpPage() {
 
       if (draftResult.status === 'fulfilled') {
         setDraftPolicy(draftResult.value)
+        setDraftLoadError(false)
+        draftEverLoaded.current = true
       } else {
         toast.error(getDlpErrorMessage(
           draftResult.reason,
           'Could not load the policy draft.',
         ))
+        if (!draftEverLoaded.current) setDraftLoadError(true)
       }
 
       if (messagesResult.status === 'fulfilled') {
@@ -202,8 +207,11 @@ export default function DlpPage() {
       setActivePolicy(nextActive)
       setDraftPolicy(nextDraft)
       setSettings(nextSettings)
+      setDraftLoadError(false)
+      draftEverLoaded.current = true
     } catch (requestError) {
       toast.error(getDlpErrorMessage(requestError, 'Could not refresh DLP policy.'))
+      throw requestError
     }
   }, [])
 
@@ -334,6 +342,7 @@ export default function DlpPage() {
             <DlpPolicyTab
               activePolicy={activePolicy}
               draftPolicy={draftPolicy}
+              draftLoadError={draftLoadError}
               canManage={canManage}
               onChanged={reloadPolicies}
             />

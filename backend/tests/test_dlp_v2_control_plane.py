@@ -16,7 +16,11 @@ from backend.dlp.api.message_views import (
     sanitize_preview_text,
 )
 from backend.dlp.api.router import router
-from backend.dlp.api.schemas import DlpStatusResponse, PolicyPublishRequest
+from backend.dlp.api.schemas import (
+    DlpStatusResponse,
+    PolicyDraftRequest,
+    PolicyPublishRequest,
+)
 from backend.dlp.api.settings import _normalize_domain
 from backend.dlp.policy import (
     PolicyAction,
@@ -264,10 +268,14 @@ async def test_first_publish_uses_runtime_tenant_defaults(monkeypatch) -> None:
     draft = SimpleNamespace(
         id=draft_id,
         version=1,
+        draft_revision=1,
         status="draft",
         policy_document=document.model_dump(mode="json"),
         created_at=None,
+        updated_at=None,
         published_at=None,
+        updated_by=None,
+        published_by=None,
         org_id=org_id,
     )
     added: list[object] = []
@@ -297,17 +305,20 @@ async def test_first_publish_uses_runtime_tenant_defaults(monkeypatch) -> None:
     payload = PolicyPublishRequest(
         draft_id=draft_id,
         expected_version=1,
+        expected_revision=1,
         document=document,
     )
+    user_id = uuid4()
 
     result = await publish_policy(
         payload=payload,
-        current_user=SimpleNamespace(id=uuid4(), org_id=org_id),
+        current_user=SimpleNamespace(id=user_id, org_id=org_id),
         session=session,
     )
 
     assert result.status == "published"
     assert draft.status == "published"
+    assert draft.published_by == user_id
     assert len(added) == 1
     config = added[0]
     assert isinstance(config, DlpTenantConfig)
@@ -327,10 +338,14 @@ async def test_publish_rejects_document_mismatch(monkeypatch) -> None:
     draft = SimpleNamespace(
         id=draft_id,
         version=1,
+        draft_revision=1,
         status="draft",
         policy_document=stored.model_dump(mode="json"),
         created_at=None,
+        updated_at=None,
         published_at=None,
+        updated_by=None,
+        published_by=None,
     )
     monkeypatch.setattr(
         policies_module,
@@ -343,7 +358,221 @@ async def test_publish_rejects_document_mismatch(monkeypatch) -> None:
             payload=PolicyPublishRequest(
                 draft_id=draft_id,
                 expected_version=1,
+                expected_revision=1,
                 document=submitted,
+            ),
+            current_user=SimpleNamespace(id=uuid4(), org_id=uuid4()),
+            session=SimpleNamespace(),
+        )
+
+    assert exc.value.status_code == 409
+    assert draft.status == "draft"
+
+
+def _empty_document() -> PolicyDocument:
+    return PolicyDocument(default_action=PolicyAction.ALLOW, rules=[])
+
+
+def _draft_namespace(*, org_id, draft_id, revision=1, document=None):
+    payload = (document or _empty_document()).model_dump(mode="json")
+    return SimpleNamespace(
+        id=draft_id,
+        version=1,
+        draft_revision=revision,
+        status="draft",
+        policy_document=payload,
+        created_at=None,
+        updated_at=None,
+        published_at=None,
+        updated_by=None,
+        published_by=None,
+        org_id=org_id,
+        created_by=uuid4(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_save_draft_without_token_does_not_overwrite(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import save_policy_draft
+
+    org_id = uuid4()
+    original = {"default_action": "allow", "rules": []}
+    draft = _draft_namespace(org_id=org_id, draft_id=uuid4())
+    draft.policy_document = original
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await save_policy_draft(
+            payload=PolicyDraftRequest(document=_empty_document()),
+            current_user=SimpleNamespace(id=uuid4(), org_id=org_id),
+            session=SimpleNamespace(),
+        )
+
+    assert exc.value.status_code == 409
+    assert draft.policy_document is original
+    assert draft.draft_revision == 1
+
+
+@pytest.mark.asyncio
+async def test_save_draft_increments_revision(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import save_policy_draft
+
+    org_id = uuid4()
+    user_id = uuid4()
+    draft_id = uuid4()
+    draft = _draft_namespace(
+        org_id=org_id, draft_id=draft_id, revision=3
+    )
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+    session = SimpleNamespace(flush=AsyncMock())
+    next_document = PolicyDocument(
+        default_action=PolicyAction.STOP, rules=[]
+    )
+
+    result = await save_policy_draft(
+        payload=PolicyDraftRequest(
+            document=next_document,
+            expected_id=draft_id,
+            expected_version=1,
+            expected_revision=3,
+        ),
+        current_user=SimpleNamespace(id=user_id, org_id=org_id),
+        session=session,
+    )
+
+    assert draft.draft_revision == 4
+    assert draft.updated_by == user_id
+    assert draft.policy_document["default_action"] == "stop"
+    assert result.draft_revision == 4
+
+
+@pytest.mark.asyncio
+async def test_save_draft_stale_revision_conflicts(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import save_policy_draft
+
+    org_id = uuid4()
+    draft_id = uuid4()
+    draft = _draft_namespace(
+        org_id=org_id, draft_id=draft_id, revision=5
+    )
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await save_policy_draft(
+            payload=PolicyDraftRequest(
+                document=_empty_document(),
+                expected_id=draft_id,
+                expected_version=1,
+                expected_revision=4,
+            ),
+            current_user=SimpleNamespace(id=uuid4(), org_id=org_id),
+            session=SimpleNamespace(),
+        )
+
+    assert exc.value.status_code == 409
+    assert draft.draft_revision == 5
+
+
+@pytest.mark.asyncio
+async def test_first_save_creates_revision_one(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import save_policy_draft
+    from backend.dlp.persistence.models import DlpPolicyVersion
+
+    org_id = uuid4()
+    user_id = uuid4()
+    added: list[object] = []
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=None),
+    )
+    session = SimpleNamespace(
+        scalar=AsyncMock(return_value=2),
+        add=added.append,
+        flush=AsyncMock(),
+    )
+
+    result = await save_policy_draft(
+        payload=PolicyDraftRequest(document=_empty_document()),
+        current_user=SimpleNamespace(id=user_id, org_id=org_id),
+        session=session,
+    )
+
+    assert len(added) == 1
+    created = added[0]
+    assert isinstance(created, DlpPolicyVersion)
+    assert created.version == 3
+    assert created.draft_revision == 1
+    assert created.status == "draft"
+    assert created.created_by == user_id
+    assert created.updated_by == user_id
+    assert result.draft_revision == 1
+
+
+@pytest.mark.asyncio
+async def test_first_save_with_stale_token_conflicts(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import save_policy_draft
+
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=None),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await save_policy_draft(
+            payload=PolicyDraftRequest(
+                document=_empty_document(),
+                expected_id=uuid4(),
+                expected_revision=1,
+            ),
+            current_user=SimpleNamespace(id=uuid4(), org_id=uuid4()),
+            session=SimpleNamespace(),
+        )
+
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_publish_rejects_stale_revision(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import publish_policy
+
+    draft_id = uuid4()
+    document = _empty_document()
+    draft = _draft_namespace(
+        org_id=uuid4(), draft_id=draft_id, revision=4, document=document
+    )
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await publish_policy(
+            payload=PolicyPublishRequest(
+                draft_id=draft_id,
+                expected_version=1,
+                expected_revision=3,
+                document=document,
             ),
             current_user=SimpleNamespace(id=uuid4(), org_id=uuid4()),
             session=SimpleNamespace(),

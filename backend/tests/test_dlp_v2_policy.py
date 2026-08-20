@@ -120,6 +120,26 @@ def test_fatal_extraction_limitation_holds() -> None:
     )
 
 
+def test_high_risk_uninspected_attachment_holds() -> None:
+    decision = PolicyEvaluator().evaluate(
+        policy=build_default_policy(),
+        classification=_classification(),
+        limitations=(
+            ExtractionLimitation(
+                code="unsupported_content_type",
+                detail="No extractor for application/x-custom",
+                filename="sample.custom",
+                fatal=True,
+            ),
+        ),
+        context=_context("bob@external.test"),
+        mode=TenantMode.ENFORCE,
+    )
+
+    assert decision.effective_action == PolicyAction.HOLD
+    assert "system.extraction_incomplete" in decision.matched_rule_ids
+
+
 def test_detector_error_is_not_treated_as_clean() -> None:
     decision = PolicyEvaluator().evaluate(
         policy=build_default_policy(),

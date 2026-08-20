@@ -67,10 +67,14 @@ class PolicyVersionResponse(BaseModel):
 
     id: UUID | None = None
     version: int
+    draft_revision: int | None = None
     status: Literal["builtin", "draft", "published", "archived"]
     document: PolicyDocument
     created_at: datetime | None = None
+    updated_at: datetime | None = None
     published_at: datetime | None = None
+    updated_by: UUID | None = None
+    published_by: UUID | None = None
 
 
 class PolicyDraftRequest(BaseModel):
@@ -79,6 +83,7 @@ class PolicyDraftRequest(BaseModel):
     document: PolicyDocument
     expected_id: UUID | None = None
     expected_version: int | None = None
+    expected_revision: int | None = None
 
 
 class PolicyPublishRequest(BaseModel):
@@ -86,6 +91,7 @@ class PolicyPublishRequest(BaseModel):
 
     draft_id: UUID
     expected_version: int
+    expected_revision: int
     document: PolicyDocument
 
 

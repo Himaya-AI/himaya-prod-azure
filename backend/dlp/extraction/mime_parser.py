@@ -248,6 +248,9 @@ class SafeMimeExtractor:
                 detail=f"No extractor for {content_type}",
                 part_index=part_index,
                 filename=filename,
+                fatal=not _is_benign_uninspected(
+                    content_type, disposition, filename
+                ),
             )
             return ExtractedPart(
                 part_index,
@@ -335,6 +338,50 @@ def _is_encrypted_part(content_type: str, payload: bytes) -> bool:
             and b"/Encrypt" in payload[:1_000_000]
         )
     )
+
+
+_BENIGN_UNINSPECTED_TYPES = frozenset(
+    {
+        "application/pkcs7-signature",
+        "application/x-pkcs7-signature",
+        "application/pgp-signature",
+        "multipart/appledouble",
+        "text/calendar",
+        "application/ics",
+    }
+)
+_BENIGN_INLINE_EXTENSIONS = frozenset(
+    {
+        "jpg",
+        "jpeg",
+        "png",
+        "gif",
+        "webp",
+        "bmp",
+        "ico",
+        "svg",
+    }
+)
+
+
+def _is_benign_uninspected(
+    content_type: str,
+    disposition: str | None,
+    filename: str | None,
+) -> bool:
+    """True when an unextractable part is not a high-risk inspection gap.
+
+    Inline images, signatures, and calendar parts should not hold mail.
+    Unknown attachments and other application payloads must fail closed.
+    """
+    if content_type.startswith(("image/", "audio/", "video/")):
+        return True
+    if content_type in _BENIGN_UNINSPECTED_TYPES:
+        return True
+    if (disposition or "").lower() == "attachment":
+        return False
+    extension = Path(filename or "").suffix.lower().lstrip(".")
+    return extension in _BENIGN_INLINE_EXTENSIONS
 
 
 def _attachment_extractor_type(

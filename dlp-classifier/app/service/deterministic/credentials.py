@@ -15,9 +15,17 @@ from config.settings import get_settings
 CREDENTIAL_SCORE: float = 0.95
 
 
+class CredentialScanError(Exception):
+    """BetterLeaks did not complete a trustworthy scan."""
+
+
 async def _run_betterleaks(text: str) -> list[dict]:
-    """Runs BetterLeaks over stdin and parses its JSON report. Never raises —
-    a timeout, a crash, or malformed output all just yield no findings."""
+    """Runs BetterLeaks over stdin and parses its JSON report.
+
+    An empty report after a successful run means no findings. Timeout, crash,
+    spawn failure, or malformed output raise CredentialScanError so callers
+    can fail closed instead of treating the message as clean.
+    """
     settings = get_settings()
 
     try:
@@ -36,22 +44,55 @@ async def _run_betterleaks(text: str) -> list[dict]:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+    except Exception as exc:  # noqa: BLE001
+        raise CredentialScanError(
+            f"BetterLeaks could not be started: {exc}"
+        ) from exc
 
-        try:
-            stdout, _stderr = await asyncio.wait_for(
-                proc.communicate(input=text.encode()),
-                timeout=settings.BETTERLEAKS_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            proc.kill()
-            return []
+    try:
+        stdout, _stderr = await asyncio.wait_for(
+            proc.communicate(input=text.encode()),
+            timeout=settings.BETTERLEAKS_TIMEOUT,
+        )
+    except asyncio.TimeoutError as exc:
+        proc.kill()
+        await proc.wait()
+        raise CredentialScanError("BetterLeaks timed out") from exc
+    except Exception as exc:  # noqa: BLE001
+        proc.kill()
+        await proc.wait()
+        raise CredentialScanError(
+            f"BetterLeaks scan failed: {exc}"
+        ) from exc
 
-        if not stdout or not stdout.strip():
-            return []
+    if proc.returncode not in (0, None):
+        raise CredentialScanError(
+            f"BetterLeaks exited with code {proc.returncode}"
+        )
 
-        return json.loads(stdout)
-    except Exception:  # noqa: BLE001
+    if not stdout or not stdout.strip():
         return []
+
+    try:
+        parsed = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise CredentialScanError(
+            "BetterLeaks returned malformed JSON"
+        ) from exc
+
+    if not isinstance(parsed, list):
+        raise CredentialScanError(
+            "BetterLeaks report was not a JSON array"
+        )
+
+    findings: list[dict] = []
+    for item in parsed:
+        if not isinstance(item, dict) or "RuleID" not in item:
+            raise CredentialScanError(
+                "BetterLeaks finding was missing RuleID"
+            )
+        findings.append(item)
+    return findings
 
 
 def _to_entity_type(rule_id: str) -> str:
@@ -96,11 +137,20 @@ class CredentialDetector(BaseDetector):
         try:
             findings = await _run_betterleaks(text)
             if not findings:
-                return DetectionResult(detector=self.name, matches=[], escalate=False)
+                return DetectionResult(
+                    detector=self.name, matches=[], escalate=False
+                )
 
-            matches = [_to_detection_match(finding, self.name) for finding in findings]
-            return DetectionResult(detector=self.name, matches=matches, escalate=False)
+            matches = [
+                _to_detection_match(finding, self.name) for finding in findings
+            ]
+            return DetectionResult(
+                detector=self.name, matches=matches, escalate=False
+            )
         except Exception as exc:  # noqa: BLE001
             return DetectionResult(
-                detector=self.name, matches=[], escalate=False, error=str(exc)
+                detector=self.name,
+                matches=[],
+                escalate=True,
+                error=str(exc),
             )

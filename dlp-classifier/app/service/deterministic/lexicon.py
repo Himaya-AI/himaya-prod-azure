@@ -17,6 +17,10 @@ ENTITY_BUSINESS_TERM = "BUSINESS_TERM"
 _automaton_cache: dict[str, tuple[str, ahocorasick.Automaton]] = {}
 
 
+class LexiconUnavailableError(Exception):
+    """Tenant lexicon could not be loaded from Redis."""
+
+
 def _make_redis_key(tenant_id: str) -> str:
     return f"dlp:lexicon:{tenant_id}"
 
@@ -29,28 +33,48 @@ def _infer_entity_type(term: str) -> str:
     return ENTITY_BUSINESS_TERM
 
 
+def clear_automaton_cache() -> None:
+    _automaton_cache.clear()
+
+
 async def _get_automaton(
     redis_client: redis.Redis, tenant_id: str, lexicon_version: str
 ) -> ahocorasick.Automaton | None:
     """Returns the tenant's automaton, from the in-process cache if the
     version matches, otherwise rebuilt from the tenant's Redis-stored terms.
-    Never raises — any failure (Redis miss, bad JSON, connection error)
-    results in None so the caller can treat it as "no lexicon"."""
+
+    A missing Redis key means no lexicon is configured. Redis, JSON, or
+    automaton failures raise LexiconUnavailableError so callers can fail
+    closed instead of treating the miss as "no terms".
+    """
+    cached = _automaton_cache.get(tenant_id)
+    if cached is not None and cached[0] == lexicon_version:
+        return cached[1]
+
     try:
-        cached = _automaton_cache.get(tenant_id)
-        if cached is not None and cached[0] == lexicon_version:
-            return cached[1]
-
         raw_terms = await redis_client.get(_make_redis_key(tenant_id))
-        if raw_terms is None:
-            return None
+    except Exception as exc:  # noqa: BLE001
+        raise LexiconUnavailableError(
+            f"Lexicon store unavailable: {exc}"
+        ) from exc
 
-        terms = json.loads(raw_terms)
-        automaton = build_automaton(terms)
-        _automaton_cache[tenant_id] = (lexicon_version, automaton)
-        return automaton
-    except Exception:  # noqa: BLE001
+    if raw_terms is None:
         return None
+
+    try:
+        terms = json.loads(raw_terms)
+        if not isinstance(terms, list):
+            raise LexiconUnavailableError("Lexicon payload is not a list")
+        automaton = build_automaton(terms)
+    except LexiconUnavailableError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise LexiconUnavailableError(
+            f"Lexicon payload is invalid: {exc}"
+        ) from exc
+
+    _automaton_cache[tenant_id] = (lexicon_version, automaton)
+    return automaton
 
 
 class LexiconDetector(BaseDetector):
@@ -66,9 +90,13 @@ class LexiconDetector(BaseDetector):
             tenant_id = metadata.get("tenant_id", "default")
             lexicon_version = metadata.get("lexicon_version", "v1")
 
-            automaton = await _get_automaton(self._redis, tenant_id, lexicon_version)
+            automaton = await _get_automaton(
+                self._redis, tenant_id, lexicon_version
+            )
             if automaton is None or len(automaton) == 0:
-                return DetectionResult(detector=self.name, matches=[], escalate=False)
+                return DetectionResult(
+                    detector=self.name, matches=[], escalate=False
+                )
 
             matches = []
             for end_idx, (_term_idx, term) in automaton.iter(text):
@@ -85,8 +113,13 @@ class LexiconDetector(BaseDetector):
                     )
                 )
 
-            return DetectionResult(detector=self.name, matches=matches, escalate=False)
+            return DetectionResult(
+                detector=self.name, matches=matches, escalate=False
+            )
         except Exception as exc:  # noqa: BLE001
             return DetectionResult(
-                detector=self.name, matches=[], escalate=False, error=str(exc)
+                detector=self.name,
+                matches=[],
+                escalate=True,
+                error=str(exc),
             )

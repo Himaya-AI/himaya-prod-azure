@@ -69,10 +69,14 @@ export interface PolicyDocument {
 export interface PolicyVersion {
   id: string | null
   version: number
+  draft_revision: number | null
   status: PolicyStatus
   document: PolicyDocument
   created_at: string | null
+  updated_at: string | null
   published_at: string | null
+  updated_by?: string | null
+  published_by?: string | null
 }
 
 export interface DlpMessageSummary {

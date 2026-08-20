@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ChevronDown,
@@ -21,6 +21,7 @@ import DlpPolicyDiff from './DlpPolicyDiff'
 import {
   getDlpErrorMessage,
   getDlpPolicyDraft,
+  isDlpConflict,
   publishDlpPolicy,
   saveDlpPolicyDraft,
 } from '@/lib/dlp/api'
@@ -48,6 +49,7 @@ import type {
 interface Props {
   activePolicy: PolicyVersion
   draftPolicy: PolicyVersion | null
+  draftLoadError?: boolean
   canManage: boolean
   onChanged: () => Promise<void>
 }
@@ -71,12 +73,16 @@ function PolicyField({
   onChange,
   placeholder,
   disabled,
+  onEditingChange,
+  onPendingChange,
 }: {
   label: string
   value: string[]
   onChange: (value: string[]) => void
   placeholder: string
   disabled: boolean
+  onEditingChange?: (editing: boolean) => void
+  onPendingChange?: (raw: string | null) => void
 }) {
   const [draft, setDraft] = useState<string | null>(null)
 
@@ -87,11 +93,21 @@ function PolicyField({
       </span>
       <input
         value={draft ?? value.join(', ')}
-        onFocus={() => setDraft((current) => current ?? value.join(', '))}
-        onChange={(event) => setDraft(event.target.value)}
+        onFocus={() => {
+          const next = draft ?? value.join(', ')
+          setDraft(next)
+          onPendingChange?.(next)
+          onEditingChange?.(true)
+        }}
+        onChange={(event) => {
+          setDraft(event.target.value)
+          onPendingChange?.(event.target.value)
+        }}
         onBlur={() => {
           onChange(splitValues(draft ?? value.join(', ')))
           setDraft(null)
+          onPendingChange?.(null)
+          onEditingChange?.(false)
         }}
         placeholder={placeholder}
         disabled={disabled}
@@ -185,6 +201,8 @@ function RuleEditor({
   onDuplicate,
   onDelete,
   duplicateDisabled = false,
+  onEditingChange,
+  onPendingChange,
 }: {
   rule: PolicyRule
   disabled: boolean
@@ -194,6 +212,8 @@ function RuleEditor({
   onDuplicate: () => void
   onDelete: () => void
   duplicateDisabled?: boolean
+  onEditingChange?: (editing: boolean) => void
+  onPendingChange?: (field: 'llm_categories' | 'recipient_domains', raw: string | null) => void
 }) {
   function patch(values: Partial<PolicyRule>) {
     onChange({ ...rule, ...values })
@@ -392,6 +412,8 @@ function RuleEditor({
               onChange={(llm_categories) => patchConditions({ llm_categories })}
               placeholder="financial, legal"
               disabled={disabled}
+              onEditingChange={onEditingChange}
+              onPendingChange={(raw) => onPendingChange?.('llm_categories', raw)}
             />
             <PolicyField
               label="Recipient domains"
@@ -399,6 +421,8 @@ function RuleEditor({
               onChange={(recipient_domains) => patchConditions({ recipient_domains })}
               placeholder="partner.example"
               disabled={disabled}
+              onEditingChange={onEditingChange}
+              onPendingChange={(raw) => onPendingChange?.('recipient_domains', raw)}
             />
             <label className="flex items-center gap-2 self-end rounded-lg border border-white/[0.07] px-3 py-2">
               <input
@@ -432,7 +456,6 @@ function RuleEditor({
 }
 
 function policyIdentity(activePolicy: PolicyVersion, draftPolicy: PolicyVersion | null) {
-  const source = draftPolicy ?? activePolicy
   return [
     activePolicy.id ?? 'active',
     activePolicy.version,
@@ -440,9 +463,34 @@ function policyIdentity(activePolicy: PolicyVersion, draftPolicy: PolicyVersion 
     activePolicy.published_at ?? '',
     draftPolicy?.id ?? 'no-draft',
     draftPolicy?.version ?? '',
+    draftPolicy?.draft_revision ?? '',
     draftPolicy?.status ?? '',
-    JSON.stringify(source.document),
   ].join(':')
+}
+
+type DraftAck = {
+  kind: 'draft'
+  id: string
+  version: number
+  draft_revision: number
+} | {
+  kind: 'published'
+  id: string
+  version: number
+}
+
+function propsAreStale(
+  activePolicy: PolicyVersion,
+  draftPolicy: PolicyVersion | null,
+  ack: DraftAck | null,
+): boolean {
+  if (ack == null) return false
+  if (ack.kind === 'draft') {
+    if (draftPolicy == null || draftPolicy.id !== ack.id) return true
+    return (draftPolicy.draft_revision ?? 0) < ack.draft_revision
+  }
+  if (draftPolicy?.id === ack.id) return true
+  return activePolicy.id !== ack.id
 }
 
 function isWholeNumber(value: number) {
@@ -452,29 +500,45 @@ function isWholeNumber(value: number) {
 export default function DlpPolicyTab({
   activePolicy,
   draftPolicy,
+  draftLoadError = false,
   canManage,
   onChanged,
 }: Props) {
   const source = draftPolicy?.document ?? activePolicy.document
   const [document, setDocument] = useState<PolicyDocument>(() => cloneDocument(source))
   const [savedSnapshot, setSavedSnapshot] = useState(() => JSON.stringify(source))
+  const [serverDraft, setServerDraft] = useState<PolicyVersion | null>(draftPolicy)
   const [expandedRule, setExpandedRule] = useState<string | null>(source.rules[0]?.rule_id ?? null)
   const [saving, setSaving] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [openFieldEdits, setOpenFieldEdits] = useState(0)
   const [syncedIdentity, setSyncedIdentity] = useState(
     () => policyIdentity(activePolicy, draftPolicy),
   )
+  const [ack, setAck] = useState<DraftAck | null>(() => (
+    draftPolicy?.id
+      ? {
+          kind: 'draft',
+          id: draftPolicy.id,
+          version: draftPolicy.version,
+          draft_revision: draftPolicy.draft_revision ?? 1,
+        }
+      : null
+  ))
+  const pendingFields = useRef<Map<string, string>>(new Map())
 
-  const dirty = JSON.stringify(document) !== savedSnapshot
+  const dirty = JSON.stringify(document) !== savedSnapshot || openFieldEdits > 0
   const publishedDiff = useMemo(
     () => diffPolicies(activePolicy.document, document),
     [activePolicy.document, document],
   )
 
   useEffect(() => {
+    if (saving || publishing) return
+    if (propsAreStale(activePolicy, draftPolicy, ack)) return
     const nextIdentity = policyIdentity(activePolicy, draftPolicy)
-    if (dirty && nextIdentity === syncedIdentity) return
-    if (dirty && nextIdentity !== syncedIdentity) {
+    if (nextIdentity === syncedIdentity) return
+    if (dirty) {
       toast.error('The saved draft changed on the server. Your unsaved edits were kept.')
       setSyncedIdentity(nextIdentity)
       return
@@ -483,14 +547,28 @@ export default function DlpPolicyTab({
     const next = draftPolicy?.document ?? activePolicy.document
     setDocument(cloneDocument(next))
     setSavedSnapshot(JSON.stringify(next))
+    setServerDraft(draftPolicy)
     setSyncedIdentity(nextIdentity)
+    setAck(
+      draftPolicy?.id
+        ? {
+            kind: 'draft',
+            id: draftPolicy.id,
+            version: draftPolicy.version,
+            draft_revision: draftPolicy.draft_revision ?? 1,
+          }
+        : null,
+    )
+    pendingFields.current.clear()
+    setOpenFieldEdits(0)
     setExpandedRule((current) => {
       if (current && next.rules.some((rule) => rule.rule_id === current)) {
         return current
       }
       return next.rules[0]?.rule_id ?? null
     })
-  }, [activePolicy, draftPolicy, dirty, syncedIdentity])
+  }, [activePolicy, draftPolicy, dirty, syncedIdentity, saving, publishing, ack])
+
   const duplicateIds = useMemo(() => {
     const seen = new Set<string>()
     return document.rules
@@ -516,7 +594,30 @@ export default function DlpPolicyTab({
       isWholeNumber(rule.conditions.min_match_count) &&
       rule.conditions.min_match_count >= 1,
     )
-  const editingLocked = !canManage || saving || publishing
+  const editingLocked = !canManage || saving || publishing || draftLoadError
+
+  function applyPendingFields(base: PolicyDocument): PolicyDocument {
+    if (pendingFields.current.size === 0) return base
+    const next = {
+      ...base,
+      rules: base.rules.map((rule) => {
+        const categories = pendingFields.current.get(`${rule.rule_id}:llm_categories`)
+        const domains = pendingFields.current.get(`${rule.rule_id}:recipient_domains`)
+        if (categories == null && domains == null) return rule
+        return {
+          ...rule,
+          conditions: {
+            ...rule.conditions,
+            ...(categories != null ? { llm_categories: splitValues(categories) } : {}),
+            ...(domains != null ? { recipient_domains: splitValues(domains) } : {}),
+          },
+        }
+      }),
+    }
+    pendingFields.current.clear()
+    setOpenFieldEdits(0)
+    return next
+  }
 
   function replaceRule(index: number, rule: PolicyRule) {
     setDocument((current) => ({
@@ -550,75 +651,112 @@ export default function DlpPolicyTab({
   }
 
   async function saveDraft() {
-    if (!canManage || !valid || saving || publishing) return
-    const submitted = JSON.stringify(document)
+    if (!canManage || !valid || saving || publishing || draftLoadError) return
+    const submittedDocument = applyPendingFields(document)
+    const submitted = JSON.stringify(submittedDocument)
+    if (submittedDocument !== document) setDocument(submittedDocument)
     setSaving(true)
     try {
       const saved = await saveDlpPolicyDraft(
-        document,
-        draftPolicy
-          ? { id: draftPolicy.id, version: draftPolicy.version }
+        submittedDocument,
+        serverDraft?.id
+          ? {
+              id: serverDraft.id,
+              version: serverDraft.version,
+              draft_revision: serverDraft.draft_revision ?? 1,
+            }
           : null,
       )
+      const savedAck: DraftAck = {
+        kind: 'draft',
+        id: saved.id as string,
+        version: saved.version,
+        draft_revision: saved.draft_revision ?? 1,
+      }
+      setServerDraft(saved)
+      setAck(savedAck)
+      setSavedSnapshot(JSON.stringify(saved.document))
       setDocument((current) => (
         JSON.stringify(current) === submitted
           ? cloneDocument(saved.document)
           : current
       ))
-      setSavedSnapshot(JSON.stringify(saved.document))
       setSyncedIdentity(policyIdentity(activePolicy, saved))
       toast.success(`Policy draft v${saved.version} saved.`)
-      await onChanged()
+      try {
+        await onChanged()
+      } catch {
+        toast.error('Draft saved, but the page could not refresh. Your saved draft is kept.')
+      }
     } catch (error) {
       toast.error(getDlpErrorMessage(error, 'Could not save policy draft.'))
+      if (isDlpConflict(error)) {
+        try {
+          await onChanged()
+        } catch {
+          /* parent already toasted */
+        }
+      }
     } finally {
       setSaving(false)
     }
   }
 
   async function publish() {
-    if (!canManage || !draftPolicy || dirty || saving || publishing) return
-    let latest = draftPolicy
+    if (!canManage || !serverDraft || dirty || saving || publishing || draftLoadError) return
+    setPublishing(true)
     try {
       const remote = await getDlpPolicyDraft()
       if (
         !remote
-        || remote.id !== draftPolicy.id
-        || remote.version !== draftPolicy.version
+        || remote.id !== serverDraft.id
+        || remote.version !== serverDraft.version
+        || (remote.draft_revision ?? 1) !== (serverDraft.draft_revision ?? 1)
         || JSON.stringify(remote.document) !== savedSnapshot
       ) {
         toast.error('The draft changed on the server. Reloading.')
         await onChanged()
         return
       }
-      latest = remote
-    } catch (error) {
-      toast.error(getDlpErrorMessage(error, 'Could not verify the policy draft.'))
-      return
-    }
-    if (!latest.id) {
-      toast.error('The draft is missing an id. Reload and save again.')
-      return
-    }
-    if (!window.confirm(
-      `Publish policy draft v${latest.version} with ${latest.document.rules.length} rules?\n\n`
-      + `Vs active v${activePolicy.version}: ${summarizePolicyDiff(diffPolicies(activePolicy.document, latest.document))}.\n`
-      + 'Published versions are immutable.',
-    )) return
-    setPublishing(true)
-    try {
+      if (!remote.id) {
+        toast.error('The draft is missing an id. Reload and save again.')
+        return
+      }
+      if (!window.confirm(
+        `Publish policy draft v${remote.version} with ${remote.document.rules.length} rules?\n\n`
+        + `Vs active v${activePolicy.version}: ${summarizePolicyDiff(diffPolicies(activePolicy.document, remote.document))}.\n`
+        + 'Published versions are immutable.',
+      )) return
       const published = await publishDlpPolicy({
-        draft_id: latest.id as string,
-        expected_version: latest.version,
-        document: latest.document,
+        draft_id: remote.id,
+        expected_version: remote.version,
+        expected_revision: remote.draft_revision ?? 1,
+        document: remote.document,
+      })
+      setServerDraft(null)
+      setAck({
+        kind: 'published',
+        id: published.id as string,
+        version: published.version,
       })
       setDocument(cloneDocument(published.document))
       setSavedSnapshot(JSON.stringify(published.document))
       setSyncedIdentity(policyIdentity(published, null))
       toast.success(`Policy v${published.version} published.`)
-      await onChanged()
+      try {
+        await onChanged()
+      } catch {
+        toast.error('Policy published, but the page could not refresh. The published version is kept.')
+      }
     } catch (error) {
       toast.error(getDlpErrorMessage(error, 'Could not publish policy.'))
+      if (isDlpConflict(error)) {
+        try {
+          await onChanged()
+        } catch {
+          /* parent already toasted */
+        }
+      }
     } finally {
       setPublishing(false)
     }
@@ -631,11 +769,11 @@ export default function DlpPolicyTab({
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-[14px] font-semibold text-white">Policy rules</h2>
             <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-              draftPolicy
+              serverDraft
                 ? 'border-amber-500/20 bg-amber-500/10 text-amber-400'
                 : 'border-[#3b6ef6]/20 bg-[#3b6ef6]/10 text-[#93b4fd]'
             }`}>
-              {draftPolicy ? `DRAFT v${draftPolicy.version}` : `${activePolicy.status.toUpperCase()} v${activePolicy.version}`}
+              {serverDraft ? `DRAFT v${serverDraft.version}` : `${activePolicy.status.toUpperCase()} v${activePolicy.version}`}
             </span>
             {dirty && (
               <span className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[11px] font-semibold text-[#a1a1aa]">
@@ -653,19 +791,33 @@ export default function DlpPolicyTab({
             variant="secondary"
             onClick={saveDraft}
             loading={saving}
-            disabled={!canManage || !dirty || !valid}
+            disabled={!canManage || !dirty || !valid || draftLoadError}
           >
             <Save size={14} /> Save draft
           </Button>
           <Button
             onClick={publish}
             loading={publishing}
-            disabled={!canManage || !draftPolicy || dirty}
+            disabled={!canManage || !serverDraft || dirty || draftLoadError}
           >
             <Send size={14} /> Publish
           </Button>
         </div>
       </div>
+
+      {draftLoadError && (
+        <div className="flex items-start justify-between gap-3 rounded-xl border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-[12px] text-red-300">
+          <div className="flex items-start gap-2">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span>
+              The policy draft could not be loaded. Editing is locked so a save cannot overwrite an unseen draft.
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => { void onChanged() }}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {canManage && (
         <div className="flex items-start gap-2 rounded-xl border border-[#3b6ef6]/20 bg-[#3b6ef6]/[0.06] px-4 py-3 text-[12px] text-[#93b4fd]">
@@ -695,7 +847,7 @@ export default function DlpPolicyTab({
       <DlpPolicyDiff
         publishedVersion={activePolicy.version}
         changes={publishedDiff}
-        hasDraft={Boolean(draftPolicy)}
+        hasDraft={Boolean(serverDraft)}
         includesUnsaved={dirty}
       />
 
@@ -778,8 +930,18 @@ export default function DlpPolicyTab({
             onChange={(updated) => replaceRule(index, updated)}
             onDuplicate={() => duplicateRule(index)}
             duplicateDisabled={document.rules.length >= 500}
+            onEditingChange={(editing) => {
+              setOpenFieldEdits((count) => Math.max(0, count + (editing ? 1 : -1)))
+            }}
+            onPendingChange={(field, raw) => {
+              const key = `${rule.rule_id}:${field}`
+              if (raw == null) pendingFields.current.delete(key)
+              else pendingFields.current.set(key, raw)
+            }}
             onDelete={() => {
               if (!window.confirm(`Delete rule "${rule.name}" from this draft?`)) return
+              pendingFields.current.delete(`${rule.rule_id}:llm_categories`)
+              pendingFields.current.delete(`${rule.rule_id}:recipient_domains`)
               setDocument((current) => ({
                 ...current,
                 rules: current.rules.filter((_, itemIndex) => itemIndex !== index),

@@ -40,13 +40,14 @@ export async function getDlpPolicyDraft(): Promise<PolicyVersion | null> {
 
 export async function saveDlpPolicyDraft(
   document: PolicyDocument,
-  expected?: { id: string | null; version: number } | null,
+  expected?: { id: string | null; version: number; draft_revision: number } | null,
 ): Promise<PolicyVersion> {
   return (
     await api.put<PolicyVersion>(`${BASE}/policy/draft`, {
       document,
       expected_id: expected?.id ?? undefined,
       expected_version: expected?.version,
+      expected_revision: expected?.draft_revision,
     })
   ).data
 }
@@ -54,6 +55,7 @@ export async function saveDlpPolicyDraft(
 export async function publishDlpPolicy(payload: {
   draft_id: string
   expected_version: number
+  expected_revision: number
   document: PolicyDocument
 }): Promise<PolicyVersion> {
   return (await api.post<PolicyVersion>(`${BASE}/policy/publish`, payload)).data
@@ -117,4 +119,8 @@ export function getDlpErrorMessage(
     if (details.length) return details.join(', ')
   }
   return error.message || fallback
+}
+
+export function isDlpConflict(error: unknown): boolean {
+  return error instanceof AxiosError && error.response?.status === 409
 }

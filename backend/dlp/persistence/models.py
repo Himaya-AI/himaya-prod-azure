@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -272,6 +273,12 @@ class DlpPolicyVersion(Base):
             "org_id",
             "status",
         ),
+        Index(
+            "uq_dlp_policy_versions_one_draft_per_org",
+            "org_id",
+            unique=True,
+            postgresql_where=text("status = 'draft'"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -283,6 +290,9 @@ class DlpPolicyVersion(Base):
         nullable=False,
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False)
+    draft_revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     policy_document: Mapped[dict] = mapped_column(JSONB, nullable=False)
     created_by: Mapped[uuid.UUID] = mapped_column(
@@ -290,8 +300,24 @@ class DlpPolicyVersion(Base):
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    published_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
     )
     published_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database import get_db
@@ -29,6 +30,13 @@ from backend.dlp.policy import (
 from backend.models.db_models import User
 
 router = APIRouter()
+
+
+def _draft_conflict() -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail="Policy draft has changed. Reload and try again.",
+    )
 
 
 @router.get("/policy", response_model=PolicyVersionResponse)
@@ -76,20 +84,13 @@ async def save_policy_draft(
     draft = await _latest_draft(
         session, current_user.org_id, for_update=True
     )
-    if payload.expected_id is not None:
-        if (
-            draft is None
-            or draft.id != payload.expected_id
-            or (
-                payload.expected_version is not None
-                and draft.version != payload.expected_version
-            )
-        ):
-            raise HTTPException(
-                status_code=409,
-                detail="Policy draft has changed. Reload and try again.",
-            )
+    now = datetime.now(timezone.utc)
     if draft is None:
+        if (
+            payload.expected_id is not None
+            or payload.expected_revision is not None
+        ):
+            raise _draft_conflict()
         latest_version = await session.scalar(
             select(
                 func.coalesce(func.max(DlpPolicyVersion.version), 0)
@@ -100,19 +101,38 @@ async def save_policy_draft(
         draft = DlpPolicyVersion(
             org_id=current_user.org_id,
             version=int(latest_version or 0) + 1,
+            draft_revision=1,
             status="draft",
             policy_document=payload.document.model_dump(
                 mode="json"
             ),
             created_by=current_user.id,
+            updated_by=current_user.id,
+            updated_at=now,
         )
         session.add(draft)
     else:
+        if (
+            payload.expected_id is None
+            or payload.expected_revision is None
+            or draft.id != payload.expected_id
+            or draft.draft_revision != payload.expected_revision
+            or (
+                payload.expected_version is not None
+                and draft.version != payload.expected_version
+            )
+        ):
+            raise _draft_conflict()
         draft.policy_document = payload.document.model_dump(
             mode="json"
         )
-        draft.created_by = current_user.id
-    await session.flush()
+        draft.draft_revision = draft.draft_revision + 1
+        draft.updated_by = current_user.id
+        draft.updated_at = now
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        raise _draft_conflict() from exc
     return _policy_response(draft)
 
 
@@ -134,19 +154,15 @@ async def publish_policy(
     if (
         draft.id != payload.draft_id
         or draft.version != payload.expected_version
+        or draft.draft_revision != payload.expected_revision
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="Policy draft has changed. Reload and try again.",
-        )
+        raise _draft_conflict()
     stored = PolicyDocument.model_validate(draft.policy_document)
     if stored.model_dump(mode="json") != payload.document.model_dump(
         mode="json"
     ):
-        raise HTTPException(
-            status_code=409,
-            detail="Policy draft has changed. Reload and try again.",
-        )
+        raise _draft_conflict()
+    now = datetime.now(timezone.utc)
     await session.execute(
         update(DlpPolicyVersion)
         .where(
@@ -156,7 +172,10 @@ async def publish_policy(
         .values(status="archived")
     )
     draft.status = "published"
-    draft.published_at = datetime.now(timezone.utc)
+    draft.published_at = now
+    draft.published_by = current_user.id
+    draft.updated_by = current_user.id
+    draft.updated_at = now
     config_result = await session.execute(
         select(DlpTenantConfig)
         .where(DlpTenantConfig.org_id == current_user.org_id)
@@ -177,7 +196,7 @@ async def publish_policy(
     else:
         config.active_policy_version_id = draft.id
         config.updated_by = current_user.id
-        config.updated_at = datetime.now(timezone.utc)
+        config.updated_at = now
     await session.flush()
     return _policy_response(draft)
 
@@ -209,8 +228,12 @@ def _policy_response(
     return PolicyVersionResponse(
         id=version.id,
         version=version.version,
+        draft_revision=version.draft_revision,
         status=version.status,
         document=version.policy_document,
         created_at=version.created_at,
+        updated_at=version.updated_at,
         published_at=version.published_at,
+        updated_by=version.updated_by,
+        published_by=version.published_by,
     )

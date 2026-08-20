@@ -70,7 +70,48 @@ async def test_unsupported_attachment_is_explicit_limitation() -> None:
     result = await SafeMimeExtractor().extract(message.as_bytes())
 
     assert any(
-        item.code == "unsupported_content_type"
+        item.code == "unsupported_content_type" and item.fatal
+        for item in result.limitations
+    )
+
+
+@pytest.mark.asyncio
+async def test_inline_image_is_not_a_fatal_limitation() -> None:
+    message = EmailMessage()
+    message.set_content("See logo")
+    message.add_related(
+        b"\x89PNG\r\n\x1a\n",
+        maintype="image",
+        subtype="png",
+        cid="<logo@example.test>",
+    )
+
+    result = await SafeMimeExtractor().extract(message.as_bytes())
+
+    image_limitations = [
+        item
+        for item in result.limitations
+        if item.code == "unsupported_content_type"
+    ]
+    assert image_limitations
+    assert all(item.fatal is False for item in image_limitations)
+
+
+@pytest.mark.asyncio
+async def test_unsupported_inline_binary_attachment_is_fatal() -> None:
+    message = EmailMessage()
+    message.set_content("See attachment")
+    message.add_attachment(
+        b"MZ\x00\x00",
+        maintype="application",
+        subtype="octet-stream",
+        filename="payload.exe",
+    )
+
+    result = await SafeMimeExtractor().extract(message.as_bytes())
+
+    assert any(
+        item.code == "unsupported_content_type" and item.fatal
         for item in result.limitations
     )
 
