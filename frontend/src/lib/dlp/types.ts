@@ -105,6 +105,29 @@ export interface PolicyVersion {
   published_by?: string | null
 }
 
+export interface PolicyIssue {
+  rule_id: string | null
+  message: string
+}
+
+export interface PolicyValidateResult {
+  valid: boolean
+  errors: PolicyIssue[]
+  warnings: PolicyIssue[]
+  evaluation_order: string[]
+}
+
+export interface PolicyVersionListItem {
+  id: string
+  version: number
+  status: 'published' | 'archived'
+  created_at: string | null
+  updated_at: string | null
+  published_at: string | null
+  published_by?: string | null
+  rule_count: number
+}
+
 export interface DlpMessageSummary {
   message_id: string
   envelope_from: string

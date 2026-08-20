@@ -96,6 +96,71 @@ class PolicyPublishRequest(BaseModel):
     document: PolicyDocument
 
 
+class PolicyValidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    document: PolicyDocument
+
+
+class PolicyIssueResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rule_id: str | None = None
+    message: str
+
+
+class PolicyValidateResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valid: bool
+    errors: list[PolicyIssueResponse] = Field(default_factory=list)
+    warnings: list[PolicyIssueResponse] = Field(default_factory=list)
+    evaluation_order: list[str] = Field(default_factory=list)
+
+
+class PolicyDiscardRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    expected_id: UUID
+    expected_version: int | None = None
+    expected_revision: int
+
+
+class PolicyDiscardResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    discarded: bool = True
+    id: UUID
+
+
+class PolicyRollbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: UUID
+    expected_draft_id: UUID | None = None
+    expected_draft_revision: int | None = None
+    expected_draft_version: int | None = None
+
+
+class PolicyVersionListItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    version: int
+    status: Literal["published", "archived"]
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    published_at: datetime | None = None
+    published_by: UUID | None = None
+    rule_count: int = 0
+
+
+class PolicyVersionListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[PolicyVersionListItem] = Field(default_factory=list)
+
+
 class DlpMessageSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -44,7 +44,8 @@ async def _wait_for_decision(sender: str) -> asyncpg.Record:
         try:
             row = await connection.fetchrow(
                 """
-                SELECT d.intended_action, d.effective_action, m.state
+                SELECT d.intended_action, d.effective_action, m.state,
+                       d.policy_version
                 FROM dlp_decisions d
                 JOIN dlp_messages m ON m.id = d.message_id
                 WHERE m.envelope_from = $1
@@ -95,6 +96,9 @@ async def test_local_allow_and_stop_flow() -> None:
         assert clean_decision["intended_action"] == "allow"
         assert clean_decision["effective_action"] == "allow"
         assert clean_decision["state"] == "decided"
+        assert clean_decision["policy_version"] in {"builtin-v1"} or str(
+            clean_decision["policy_version"]
+        ).startswith("tenant-v")
         await _wait_for_mailhog_total(mailhog, 1)
 
         blocked_sender = f"blocked-{uuid4().hex}@example.test"

@@ -222,13 +222,7 @@ class PolicyEvaluator:
                     )
                 )
 
-        matches.sort(
-            key=lambda match: (
-                -_ACTION_SEVERITY[match.action],
-                match.priority,
-                match.rule_id,
-            )
-        )
+        matches.sort(key=evaluation_sort_key)
         if matches:
             winner = matches[0]
             intended_action = winner.action
@@ -346,6 +340,24 @@ class PolicyEvaluator:
         ):
             return None
         return matched_findings
+
+
+def evaluation_sort_key(rule) -> tuple:
+    """STOP, then HOLD, then ALLOW; lower priority wins remaining ties."""
+    action = (
+        rule.action
+        if isinstance(rule.action, PolicyAction)
+        else PolicyAction(rule.action)
+    )
+    return (
+        -_ACTION_SEVERITY[action],
+        int(rule.priority),
+        str(rule.rule_id),
+    )
+
+
+def ordered_rules(rules):
+    return tuple(sorted(rules, key=evaluation_sort_key))
 
 
 def _email_domain(address: str) -> str:

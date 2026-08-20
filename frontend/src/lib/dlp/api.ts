@@ -10,9 +10,11 @@ import type {
   DlpStatus,
   DlpTenantSettings,
   DlpTenantSettingsUpdate,
-  PolicyDocument,
-  PolicyVersion,
   PolicyCapabilities,
+  PolicyDocument,
+  PolicyValidateResult,
+  PolicyVersion,
+  PolicyVersionListItem,
 } from '@/lib/dlp/types'
 
 const BASE = '/api/dlp/v2'
@@ -64,6 +66,46 @@ export async function publishDlpPolicy(payload: {
   document: PolicyDocument
 }): Promise<PolicyVersion> {
   return (await api.post<PolicyVersion>(`${BASE}/policy/publish`, payload)).data
+}
+
+export async function validateDlpPolicy(
+  document: PolicyDocument,
+): Promise<PolicyValidateResult> {
+  return (
+    await api.post<PolicyValidateResult>(`${BASE}/policy/validate`, { document })
+  ).data
+}
+
+export async function listDlpPolicyVersions(): Promise<PolicyVersionListItem[]> {
+  return (
+    await api.get<{ items: PolicyVersionListItem[] }>(`${BASE}/policy/versions`)
+  ).data.items
+}
+
+export async function discardDlpPolicyDraft(expected: {
+  id: string
+  version: number
+  draft_revision: number
+}): Promise<void> {
+  await api.post(`${BASE}/policy/draft/discard`, {
+    expected_id: expected.id,
+    expected_version: expected.version,
+    expected_revision: expected.draft_revision,
+  })
+}
+
+export async function rollbackDlpPolicy(
+  sourceId: string,
+  expectedDraft?: { id: string; version: number; draft_revision: number } | null,
+): Promise<PolicyVersion> {
+  return (
+    await api.post<PolicyVersion>(`${BASE}/policy/rollback`, {
+      source_id: sourceId,
+      expected_draft_id: expectedDraft?.id ?? undefined,
+      expected_draft_version: expectedDraft?.version,
+      expected_draft_revision: expectedDraft?.draft_revision,
+    })
+  ).data
 }
 
 export async function listDlpMessages(

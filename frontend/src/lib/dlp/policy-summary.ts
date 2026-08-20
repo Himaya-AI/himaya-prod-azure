@@ -56,3 +56,18 @@ export function hasContentFilters(rule: PolicyRule): boolean {
     || conditions.llm_categories.length > 0
   )
 }
+
+const ACTION_RANK: Record<PolicyRule['action'], number> = {
+  stop: 0,
+  hold: 1,
+  allow: 2,
+}
+
+export function sortRulesForEvaluation(rules: PolicyRule[]): PolicyRule[] {
+  return [...rules].sort((left, right) => {
+    const action = ACTION_RANK[left.action] - ACTION_RANK[right.action]
+    if (action !== 0) return action
+    if (left.priority !== right.priority) return left.priority - right.priority
+    return left.rule_id.localeCompare(right.rule_id)
+  })
+}

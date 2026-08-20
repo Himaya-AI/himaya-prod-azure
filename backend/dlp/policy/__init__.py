@@ -14,6 +14,8 @@ from backend.dlp.policy.evaluator import (
     PolicyRule,
     PolicySet,
     RuleConditions,
+    evaluation_sort_key,
+    ordered_rules,
 )
 from backend.dlp.policy.serialization import (
     PolicyDocument,
@@ -23,7 +25,10 @@ from backend.dlp.policy.serialization import (
     policy_to_document,
 )
 from backend.dlp.policy.validation import (
+    PolicyIssue,
     PolicyWriteError,
+    collect_policy_issues,
+    evaluation_order,
     validate_policy_write,
 )
 
@@ -35,6 +40,7 @@ __all__ = [
     "PolicyDecision",
     "PolicyDocument",
     "PolicyEvaluator",
+    "PolicyIssue",
     "PolicyRule",
     "PolicyRuleDocument",
     "PolicySet",
@@ -43,6 +49,10 @@ __all__ = [
     "RuleConditionsDocument",
     "build_default_policy",
     "build_policy_capabilities",
+    "collect_policy_issues",
+    "evaluation_order",
+    "evaluation_sort_key",
+    "ordered_rules",
     "policy_from_document",
     "policy_to_document",
     "validate_policy_write",

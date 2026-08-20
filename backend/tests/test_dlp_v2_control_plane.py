@@ -62,6 +62,10 @@ def test_control_plane_routes_are_versioned() -> None:
     assert "/api/dlp/v2/policy/draft" in route_paths
     assert "/api/dlp/v2/policy/publish" in route_paths
     assert "/api/dlp/v2/policy/capabilities" in route_paths
+    assert "/api/dlp/v2/policy/validate" in route_paths
+    assert "/api/dlp/v2/policy/versions" in route_paths
+    assert "/api/dlp/v2/policy/rollback" in route_paths
+    assert "/api/dlp/v2/policy/draft/discard" in route_paths
     assert "/api/dlp/v2/messages/{message_id}/release" in route_paths
     assert "/api/dlp/v2/messages/{message_id}/stop" in route_paths
 
@@ -762,3 +766,314 @@ def test_policy_document_accepts_legacy_payloads_without_new_fields() -> None:
     assert document.rules[0].conditions.match_all is False
     assert document.rules[0].conditions.min_llm_confidence == 0
     assert document.rules[0].conditions.entity_types == ["CREDIT_CARD"]
+
+
+@pytest.mark.asyncio
+async def test_validate_policy_returns_errors_warnings_and_order() -> None:
+    from backend.dlp.api.policies import validate_policy
+    from backend.dlp.api.schemas import PolicyValidateRequest
+
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="allow.remaining",
+                name="Allow remaining",
+                action=PolicyAction.ALLOW,
+                priority=50,
+                conditions=RuleConditionsDocument(),
+            ),
+            PolicyRuleDocument(
+                rule_id="stop.pii",
+                name="Stop PII",
+                action=PolicyAction.STOP,
+                priority=20,
+                conditions=RuleConditionsDocument(detectors=["pii"]),
+            ),
+            PolicyRuleDocument(
+                rule_id="bad.detector",
+                name="Unknown",
+                action=PolicyAction.HOLD,
+                conditions=RuleConditionsDocument(detectors=["presidio"]),
+            ),
+        ]
+    )
+
+    result = await validate_policy(
+        payload=PolicyValidateRequest(document=document),
+        _current_user=SimpleNamespace(id=uuid4(), org_id=uuid4()),
+    )
+
+    assert result.valid is False
+    assert any("Unknown detector" in item.message for item in result.errors)
+    assert any(
+        item.rule_id == "allow.remaining" for item in result.warnings
+    )
+    assert result.evaluation_order[0] == "stop.pii"
+
+
+@pytest.mark.asyncio
+async def test_discard_draft_deletes_matching_revision(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import discard_policy_draft
+    from backend.dlp.api.schemas import PolicyDiscardRequest
+
+    draft_id = uuid4()
+    draft = _draft_namespace(org_id=uuid4(), draft_id=draft_id, revision=2)
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+    session = SimpleNamespace(delete=AsyncMock(), flush=AsyncMock())
+
+    result = await discard_policy_draft(
+        payload=PolicyDiscardRequest(
+            expected_id=draft_id,
+            expected_version=1,
+            expected_revision=2,
+        ),
+        current_user=SimpleNamespace(id=uuid4(), org_id=draft.org_id),
+        session=session,
+    )
+
+    assert result.discarded is True
+    assert result.id == draft_id
+    session.delete.assert_awaited_once_with(draft)
+
+
+@pytest.mark.asyncio
+async def test_discard_draft_stale_revision_conflicts(monkeypatch) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import discard_policy_draft
+    from backend.dlp.api.schemas import PolicyDiscardRequest
+
+    draft = _draft_namespace(org_id=uuid4(), draft_id=uuid4(), revision=4)
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=draft),
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await discard_policy_draft(
+            payload=PolicyDiscardRequest(
+                expected_id=draft.id,
+                expected_revision=3,
+            ),
+            current_user=SimpleNamespace(id=uuid4(), org_id=draft.org_id),
+            session=SimpleNamespace(),
+        )
+
+    assert exc.value.status_code == 409
+    assert draft.status == "draft"
+
+
+@pytest.mark.asyncio
+async def test_rollback_clones_archived_document_into_new_draft(
+    monkeypatch,
+) -> None:
+    from backend.dlp.api import policies as policies_module
+    from backend.dlp.api.policies import rollback_policy
+    from backend.dlp.api.schemas import PolicyRollbackRequest
+    from backend.dlp.persistence.models import DlpPolicyVersion
+
+    org_id = uuid4()
+    user_id = uuid4()
+    source_id = uuid4()
+    document = PolicyDocument(
+        rules=[
+            PolicyRuleDocument(
+                rule_id="archived.pii",
+                name="Archived PII",
+                action=PolicyAction.HOLD,
+                conditions=RuleConditionsDocument(detectors=["pii"]),
+            )
+        ]
+    )
+    source = SimpleNamespace(
+        id=source_id,
+        org_id=org_id,
+        version=2,
+        status="archived",
+        policy_document=document.model_dump(mode="json"),
+    )
+    added: list[object] = []
+    monkeypatch.setattr(
+        policies_module,
+        "_latest_draft",
+        AsyncMock(return_value=None),
+    )
+    session = SimpleNamespace(
+        get=AsyncMock(return_value=source),
+        scalar=AsyncMock(return_value=4),
+        add=added.append,
+        flush=AsyncMock(),
+    )
+
+    result = await rollback_policy(
+        payload=PolicyRollbackRequest(source_id=source_id),
+        current_user=SimpleNamespace(id=user_id, org_id=org_id),
+        session=session,
+    )
+
+    assert result.status == "draft"
+    assert result.version == 5
+    assert result.document.rules[0].rule_id == "archived.pii"
+    assert source.status == "archived"
+    assert len(added) == 1
+    created = added[0]
+    assert isinstance(created, DlpPolicyVersion)
+    assert created.status == "draft"
+    assert created.created_by == user_id
+
+
+@pytest.mark.asyncio
+async def test_list_policy_versions_omits_drafts() -> None:
+    from backend.dlp.api.policies import list_policy_versions
+
+    published_id = uuid4()
+    archived_id = uuid4()
+    published = SimpleNamespace(
+        id=published_id,
+        version=3,
+        status="published",
+        created_at=None,
+        updated_at=None,
+        published_at=None,
+        published_by=None,
+        policy_document={"rules": [{}, {}]},
+    )
+    archived = SimpleNamespace(
+        id=archived_id,
+        version=2,
+        status="archived",
+        created_at=None,
+        updated_at=None,
+        published_at=None,
+        published_by=None,
+        policy_document={"rules": [{}]},
+    )
+
+    class _Scalars:
+        def all(self):
+            return [published, archived]
+
+    session = SimpleNamespace(
+        execute=AsyncMock(
+            return_value=SimpleNamespace(scalars=lambda: _Scalars())
+        )
+    )
+
+    result = await list_policy_versions(
+        current_user=SimpleNamespace(id=uuid4(), org_id=uuid4()),
+        session=session,
+    )
+
+    assert [item.version for item in result.items] == [3, 2]
+    assert result.items[0].rule_count == 2
+    assert result.items[1].status == "archived"
+
+
+def test_hold_is_reviewable_and_does_not_emit_gateway_command() -> None:
+    from backend.dlp.application.message_orchestrator import _gateway_command
+    from backend.dlp.contracts import CaptureEvent
+    from backend.dlp.policy import PolicyDecision
+
+    now = datetime.now(timezone.utc)
+    event = CaptureEvent(
+        message_id=uuid4(),
+        org_id=str(uuid4()),
+        provider="local",
+        provider_deployment_id=str(uuid4()),
+        envelope_from="alice@example.test",
+        envelope_to=["bob@external.test"],
+        mime_sha256="a" * 64,
+        mime_size=10,
+        blob_uri="http://azurite/dlp-mime/mail.eml",
+        received_at=now,
+        occurred_at=now,
+    )
+    decision = PolicyDecision(
+        policy_version="tenant-v2",
+        intended_action=PolicyAction.HOLD,
+        effective_action=PolicyAction.HOLD,
+        matched_rule_ids=("hold.lexicon",),
+        finding_references=(),
+        explanation="held",
+        evaluation_latency_ms=1,
+    )
+
+    assert _gateway_command(event, decision) is None
+    assert is_reviewable(
+        SimpleNamespace(state="decided"),
+        SimpleNamespace(effective_action="hold"),
+    ) is True
+
+
+def test_advertised_capabilities_are_writable_and_matchable() -> None:
+    from backend.dlp.domain import ClassificationOutcome, Finding, TenantMode
+    from backend.dlp.policy import (
+        MessageContext,
+        PolicyEvaluator,
+        policy_from_document,
+    )
+
+    capabilities = build_policy_capabilities()
+    evaluator = PolicyEvaluator()
+    context = MessageContext(
+        sender="alice@example.test",
+        recipients=("bob@external.test",),
+        tenant_domains=frozenset({"example.test"}),
+    )
+    for detector in capabilities.detectors:
+        document = PolicyDocument(
+            rules=[
+                PolicyRuleDocument(
+                    rule_id=f"cap.{detector.value}",
+                    name=detector.label,
+                    action=PolicyAction.HOLD,
+                    conditions=RuleConditionsDocument(
+                        detectors=[detector.value]
+                    ),
+                )
+            ]
+        )
+        validate_policy_write(document)
+        policy = policy_from_document(document, version="tenant-v3")
+        finding = Finding(
+            detector=detector.value,
+            entity_type="CUSTOM",
+            confidence=0.99,
+            start=0,
+            end=4,
+        )
+        decision = evaluator.evaluate(
+            policy=policy,
+            classification=ClassificationOutcome(
+                findings=(finding,),
+                llm_classification="NOT_SENSITIVE",
+                llm_confidence=0.1,
+                llm_categories=(),
+                llm_reasoning="test",
+            ),
+            limitations=(),
+            context=context,
+            mode=TenantMode.ENFORCE,
+        )
+        assert decision.intended_action == PolicyAction.HOLD
+        assert decision.matched_rule_ids == (f"cap.{detector.value}",)
+
+    for entity in capabilities.entity_types:
+        document = PolicyDocument(
+            rules=[
+                PolicyRuleDocument(
+                    rule_id=f"ent.{entity.value}",
+                    name=entity.label,
+                    action=PolicyAction.HOLD,
+                    conditions=RuleConditionsDocument(
+                        entity_types=[entity.value]
+                    ),
+                )
+            ]
+        )
+        validate_policy_write(document)

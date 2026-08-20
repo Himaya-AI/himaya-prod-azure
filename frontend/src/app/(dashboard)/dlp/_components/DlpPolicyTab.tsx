@@ -6,9 +6,11 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  History,
   Info,
   Lock,
   Plus,
+  RotateCcw,
   Save,
   Send,
   Trash2,
@@ -19,11 +21,15 @@ import { toast } from '@/components/ui/Toast'
 import { ActionChip } from './DlpChrome'
 import DlpPolicyDiff from './DlpPolicyDiff'
 import {
+  discardDlpPolicyDraft,
   getDlpErrorMessage,
   getDlpPolicyDraft,
   isDlpConflict,
+  listDlpPolicyVersions,
   publishDlpPolicy,
+  rollbackDlpPolicy,
   saveDlpPolicyDraft,
+  validateDlpPolicy,
 } from '@/lib/dlp/api'
 import { diffPolicies, summarizePolicyDiff } from '@/lib/dlp/policy-diff'
 import {
@@ -33,14 +39,16 @@ import {
   uniqueSuffix,
   type PolicyRuleTemplate,
 } from '@/lib/dlp/policy-templates'
-import { describeRule, hasContentFilters } from '@/lib/dlp/policy-summary'
+import { describeRule, hasContentFilters, sortRulesForEvaluation } from '@/lib/dlp/policy-summary'
 import type {
   DlpTenantSettings,
   PolicyAction,
   PolicyCapabilities,
   PolicyDocument,
   PolicyRule,
+  PolicyValidateResult,
   PolicyVersion,
+  PolicyVersionListItem,
   RuleConditions,
 } from '@/lib/dlp/types'
 
@@ -186,6 +194,8 @@ function RuleEditor({
   disabled,
   expanded,
   capabilities,
+  evaluationRank,
+  ruleIdLocked,
   onToggleExpanded,
   onChange,
   onDuplicate,
@@ -198,6 +208,8 @@ function RuleEditor({
   disabled: boolean
   expanded: boolean
   capabilities: PolicyCapabilities
+  evaluationRank: number
+  ruleIdLocked: boolean
   onToggleExpanded: () => void
   onChange: (rule: PolicyRule) => void
   onDuplicate: () => void
@@ -260,6 +272,9 @@ function RuleEditor({
           className="min-w-0 flex-1 text-left"
         >
           <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded border border-white/[0.08] px-1.5 py-0.5 font-mono text-[10px] text-[#71717a]">
+              #{evaluationRank}
+            </span>
             <span className="truncate text-sm font-medium text-white">{rule.name}</span>
             <ActionChip action={rule.action} />
           </div>
@@ -295,10 +310,16 @@ function RuleEditor({
               <input
                 value={rule.rule_id}
                 maxLength={128}
-                disabled={disabled}
+                disabled={disabled || ruleIdLocked}
+                title={ruleIdLocked ? 'Rule ID is locked after the first save so message traces stay stable.' : undefined}
                 onChange={(event) => patch({ rule_id: event.target.value })}
                 className="w-full rounded-lg border border-white/[0.08] bg-[#0d0d12] px-3 py-2 font-mono text-xs text-white outline-none focus:border-[#3b6ef6]/60 disabled:opacity-60"
               />
+              {ruleIdLocked && (
+                <span className="mt-1 block text-[10px] text-[#52525b]">
+                  Locked after first save so message traces stay stable.
+                </span>
+              )}
             </label>
           </div>
 
@@ -561,6 +582,11 @@ export default function DlpPolicyTab({
         }
       : null
   ))
+  const [discarding, setDiscarding] = useState(false)
+  const [restoringId, setRestoringId] = useState<string | null>(null)
+  const [history, setHistory] = useState<PolicyVersionListItem[]>([])
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [validation, setValidation] = useState<PolicyValidateResult | null>(null)
   const pendingFields = useRef<Map<string, string>>(new Map())
 
   const dirty = JSON.stringify(document) !== savedSnapshot || openFieldEdits > 0
@@ -615,6 +641,44 @@ export default function DlpPolicyTab({
         return false
       })
   }, [document.rules])
+  const persistedRuleIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const rule of activePolicy.document.rules) ids.add(rule.rule_id)
+    for (const rule of serverDraft?.document.rules ?? []) ids.add(rule.rule_id)
+    return ids
+  }, [activePolicy.document.rules, serverDraft?.document.rules])
+  const orderedRules = useMemo(
+    () => sortRulesForEvaluation(document.rules),
+    [document.rules],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+    void listDlpPolicyVersions()
+      .then((items) => {
+        if (!cancelled) {
+          setHistory(items)
+          setHistoryError(null)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setHistoryError(getDlpErrorMessage(error, 'Could not load policy history.'))
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [activePolicy.id, activePolicy.version, serverDraft?.id, serverDraft?.draft_revision])
+
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      void validateDlpPolicy(document)
+        .then(setValidation)
+        .catch(() => setValidation(null))
+    }, 400)
+    return () => window.clearTimeout(handle)
+  }, [document])
   const valid =
     duplicateIds.length === 0 &&
     document.rules.length <= 500 &&
@@ -644,7 +708,7 @@ export default function DlpPolicyTab({
         !catchAllBlocked
       )
     })
-  const editingLocked = !canManage || saving || publishing || draftLoadError
+  const editingLocked = !canManage || saving || publishing || discarding || restoringId != null || draftLoadError
 
   function applyPendingFields(base: PolicyDocument): PolicyDocument {
     if (pendingFields.current.size === 0) return base
@@ -669,10 +733,10 @@ export default function DlpPolicyTab({
     return next
   }
 
-  function replaceRule(index: number, rule: PolicyRule) {
+  function replaceRuleById(ruleId: string, rule: PolicyRule) {
     setDocument((current) => ({
       ...current,
-      rules: current.rules.map((item, itemIndex) => itemIndex === index ? rule : item),
+      rules: current.rules.map((item) => item.rule_id === ruleId ? rule : item),
     }))
   }
 
@@ -815,6 +879,108 @@ export default function DlpPolicyTab({
     }
   }
 
+  async function discardDraft() {
+    if (!canManage || discarding || saving || publishing || draftLoadError) return
+    if (serverDraft?.id) {
+      if (!window.confirm(
+        'Discard this draft? Saved draft changes are removed. The published policy is unchanged.',
+      )) return
+      setDiscarding(true)
+      try {
+        await discardDlpPolicyDraft({
+          id: serverDraft.id,
+          version: serverDraft.version,
+          draft_revision: serverDraft.draft_revision ?? 1,
+        })
+        const published = cloneDocument(activePolicy.document)
+        setDocument(published)
+        setSavedSnapshot(JSON.stringify(published))
+        setServerDraft(null)
+        setAck(null)
+        setSyncedIdentity(policyIdentity(activePolicy, null))
+        pendingFields.current.clear()
+        setOpenFieldEdits(0)
+        toast.success('Draft discarded.')
+        try {
+          await onChanged()
+        } catch {
+          toast.error('Draft discarded, but the page could not refresh.')
+        }
+      } catch (error) {
+        toast.error(getDlpErrorMessage(error, 'Could not discard the draft.'))
+        if (isDlpConflict(error)) {
+          try {
+            await onChanged()
+          } catch {
+            /* parent already toasted */
+          }
+        }
+      } finally {
+        setDiscarding(false)
+      }
+      return
+    }
+    if (!dirty) return
+    if (!window.confirm('Discard unsaved edits and return to the published policy?')) return
+    const published = cloneDocument(activePolicy.document)
+    setDocument(published)
+    setSavedSnapshot(JSON.stringify(published))
+    pendingFields.current.clear()
+    setOpenFieldEdits(0)
+  }
+
+  async function restoreVersion(item: PolicyVersionListItem) {
+    if (!canManage || discarding || saving || publishing || draftLoadError) return
+    if (dirty && !window.confirm(
+      `Replace the current editor with archived/published v${item.version} as a new draft? Unsaved edits will be lost.`,
+    )) return
+    if (!dirty && !window.confirm(
+      `Create a new draft from v${item.version}? This does not publish or un-archive that version.`,
+    )) return
+    setRestoringId(item.id)
+    try {
+      const restored = await rollbackDlpPolicy(
+        item.id,
+        serverDraft?.id
+          ? {
+              id: serverDraft.id,
+              version: serverDraft.version,
+              draft_revision: serverDraft.draft_revision ?? 1,
+            }
+          : null,
+      )
+      setServerDraft(restored)
+      setAck({
+        kind: 'draft',
+        id: restored.id as string,
+        version: restored.version,
+        draft_revision: restored.draft_revision ?? 1,
+      })
+      setDocument(cloneDocument(restored.document))
+      setSavedSnapshot(JSON.stringify(restored.document))
+      setSyncedIdentity(policyIdentity(activePolicy, restored))
+      pendingFields.current.clear()
+      setOpenFieldEdits(0)
+      toast.success(`Draft created from v${item.version}.`)
+      try {
+        await onChanged()
+      } catch {
+        toast.error('Draft restored, but the page could not refresh. Your restored draft is kept.')
+      }
+    } catch (error) {
+      toast.error(getDlpErrorMessage(error, 'Could not restore that policy version.'))
+      if (isDlpConflict(error)) {
+        try {
+          await onChanged()
+        } catch {
+          /* parent already toasted */
+        }
+      }
+    } finally {
+      setRestoringId(null)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-gradient-to-br from-[#13131a] to-[#1a1a24] p-5">
@@ -835,7 +1001,7 @@ export default function DlpPolicyTab({
             )}
           </div>
           <p className="mt-1 text-[12px] text-[#71717a]">
-            Active version {activePolicy.version}. Stop outranks Hold, then Allow; lower priority numbers win remaining ties.
+            Active version {activePolicy.version}. Rules are listed in evaluation order: Stop, then Hold, then Allow; lower priority numbers win remaining ties.
             {' '}On/Off and other edits stay in this browser until you Save draft. Switching tabs keeps unsaved work; a full page reload discards it.
           </p>
           <p className="mt-2 text-[12px] text-[#a1a1aa]">
@@ -847,6 +1013,14 @@ export default function DlpPolicyTab({
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="ghost"
+            onClick={() => { void discardDraft() }}
+            loading={discarding}
+            disabled={!canManage || draftLoadError || (!serverDraft && !dirty)}
+          >
+            <Trash2 size={14} /> Discard
+          </Button>
           <Button
             variant="secondary"
             onClick={saveDraft}
@@ -902,6 +1076,27 @@ export default function DlpPolicyTab({
         <p className="rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-300">
           Rule IDs must be unique: {duplicateIds.join(', ')}
         </p>
+      )}
+
+      {validation && (validation.errors.length > 0 || validation.warnings.length > 0) && (
+        <div className="space-y-2">
+          {validation.errors.map((issue) => (
+            <p
+              key={`error-${issue.rule_id}-${issue.message}`}
+              className="rounded-lg border border-red-500/20 bg-red-500/[0.06] px-3 py-2 text-xs text-red-300"
+            >
+              {issue.message}
+            </p>
+          ))}
+          {validation.warnings.map((issue) => (
+            <p
+              key={`warning-${issue.rule_id}-${issue.message}`}
+              className="rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-200/80"
+            >
+              {issue.message}
+            </p>
+          ))}
+        </div>
       )}
 
       <DlpPolicyDiff
@@ -978,18 +1173,22 @@ export default function DlpPolicyTab({
               </Button>
             )}
           </div>
-        ) : document.rules.map((rule, index) => (
+        ) : orderedRules.map((rule, index) => (
           <RuleEditor
-            key={`${index}-${rule.rule_id}`}
+            key={rule.rule_id}
             rule={rule}
             disabled={editingLocked}
             capabilities={capabilities}
+            evaluationRank={index + 1}
+            ruleIdLocked={persistedRuleIds.has(rule.rule_id)}
             expanded={expandedRule === rule.rule_id}
             onToggleExpanded={() => setExpandedRule(
               expandedRule === rule.rule_id ? null : rule.rule_id,
             )}
-            onChange={(updated) => replaceRule(index, updated)}
-            onDuplicate={() => duplicateRule(index)}
+            onChange={(updated) => replaceRuleById(rule.rule_id, updated)}
+            onDuplicate={() => duplicateRule(
+              document.rules.findIndex((item) => item.rule_id === rule.rule_id),
+            )}
             duplicateDisabled={document.rules.length >= 500}
             onEditingChange={(editing) => {
               setOpenFieldEdits((count) => Math.max(0, count + (editing ? 1 : -1)))
@@ -1005,12 +1204,60 @@ export default function DlpPolicyTab({
               pendingFields.current.delete(`${rule.rule_id}:recipient_domains`)
               setDocument((current) => ({
                 ...current,
-                rules: current.rules.filter((_, itemIndex) => itemIndex !== index),
+                rules: current.rules.filter((item) => item.rule_id !== rule.rule_id),
               }))
             }}
           />
         ))}
       </div>
+
+      <section className="rounded-xl border border-white/[0.07] bg-[#13131a] p-4">
+        <div className="flex items-center gap-2">
+          <History size={14} className="text-[#71717a]" />
+          <h3 className="text-[13px] font-semibold text-white">Published history</h3>
+        </div>
+        <p className="mt-1 text-[11px] text-[#71717a]">
+          Restore clones an archived or published document into a new draft. It does not un-archive in place.
+        </p>
+        {historyError && (
+          <p className="mt-3 text-xs text-red-300">{historyError}</p>
+        )}
+        {history.length === 0 && !historyError ? (
+          <p className="mt-3 text-xs text-[#52525b]">No published versions yet.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {history.map((item) => (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[0.07] px-3 py-2"
+              >
+                <div>
+                  <p className="text-[12px] text-white">
+                    v{item.version}
+                    <span className="ml-2 uppercase text-[10px] text-[#71717a]">{item.status}</span>
+                    {activePolicy.id === item.id && (
+                      <span className="ml-2 text-[10px] text-[#93b4fd]">active</span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-[#71717a]">
+                    {item.rule_count} rule{item.rule_count === 1 ? '' : 's'}
+                    {item.published_at ? ` · published ${new Date(item.published_at).toLocaleString()}` : ''}
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={restoringId === item.id}
+                  disabled={!canManage || draftLoadError || restoringId != null}
+                  onClick={() => { void restoreVersion(item) }}
+                >
+                  <RotateCcw size={12} /> Restore as draft
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

@@ -14,6 +14,7 @@ from backend.dlp.policy import (
     PolicySet,
     RuleConditions,
     build_default_policy,
+    ordered_rules,
 )
 
 
@@ -190,6 +191,38 @@ def test_highest_severity_wins_before_priority() -> None:
 
     assert decision.intended_action == PolicyAction.STOP
     assert decision.matched_rule_ids == ("stop-later", "hold-first")
+
+
+def test_evaluation_order_lists_stop_before_hold_before_allow() -> None:
+    rules = (
+        PolicyRule(
+            rule_id="allow.late",
+            name="Allow",
+            action=PolicyAction.ALLOW,
+            priority=1,
+            conditions=RuleConditions(match_all=True),
+        ),
+        PolicyRule(
+            rule_id="hold.late",
+            name="Hold",
+            action=PolicyAction.HOLD,
+            priority=50,
+            conditions=RuleConditions(match_all=True),
+        ),
+        PolicyRule(
+            rule_id="stop.early",
+            name="Stop",
+            action=PolicyAction.STOP,
+            priority=80,
+            conditions=RuleConditions(match_all=True),
+        ),
+    )
+
+    assert [rule.rule_id for rule in ordered_rules(rules)] == [
+        "stop.early",
+        "hold.late",
+        "allow.late",
+    ]
 
 
 def test_disabled_tenant_never_enforces() -> None:
