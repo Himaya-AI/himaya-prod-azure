@@ -12,6 +12,7 @@ import { toast } from '@/components/ui/Toast'
 
 interface QuarantineItem {
   id: string
+  subject: string | null
   sender: string
   sender_domain: string
   recipient_email: string
@@ -170,6 +171,7 @@ function DetailPanel({
             <h3 className="text-xs font-medium text-[#a1a1aa] uppercase tracking-wider">Email Metadata</h3>
             <div className="bg-[#0a0f1e] rounded-lg p-3 space-y-2 text-xs">
               {[
+                ['Subject', item.subject || '(no subject)'],
                 ['Sender', item.sender],
                 ['Domain', item.sender_domain],
                 ['Recipient', item.recipient_email],
@@ -488,7 +490,7 @@ export default function QuarantinePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#1a2744] text-[#71717a] text-xs font-medium">
-                  {['Date/Time', 'Sender', 'Recipient', 'Threat Type', 'Risk Score', 'Action Taken', 'Status', 'Actions'].map(h => (
+                  {['Date/Time', 'Subject', 'Sender', 'Recipient', 'Threat Type', 'Risk Score', 'Action Taken', 'Status', 'Actions'].map(h => (
                     <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -503,6 +505,7 @@ export default function QuarantinePage() {
                     }`}
                   >
                     <td className="px-4 py-3 text-[#a1a1aa] whitespace-nowrap text-xs">{fmt(item.detected_at)}</td>
+                    <td className="px-4 py-3 text-[#e4e4e7] max-w-[220px] truncate" title={item.subject ?? ''}>{item.subject || '(no subject)'}</td>
                     <td className="px-4 py-3 text-[#e4e4e7] max-w-[160px] truncate" title={item.sender}>{item.sender}</td>
                     <td className="px-4 py-3 text-[#a1a1aa] max-w-[160px] truncate" title={item.recipient_email}>{item.recipient_email}</td>
                     <td className="px-4 py-3">{threatBadge(item.threat_type)}</td>

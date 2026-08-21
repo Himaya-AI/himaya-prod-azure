@@ -35,8 +35,8 @@ function ThreatTypeBreakdown({ data, loading }: { data: Record<string, number>; 
           <AlertTriangle size={14} className="text-[#e94560]" /> Email Classification Type
         </h3>
         {!loading && Object.keys(data).length > 0 && (
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 border border-red-500/20 text-red-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse" />
             Live
           </span>
         )}
@@ -129,8 +129,8 @@ function RuleUsagePanel() {
         </h3>
         <div className="flex items-center gap-2">
           {lastUpdated && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 border border-red-500/20 text-red-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse" />
               Live
             </div>
           )}
@@ -246,10 +246,10 @@ function RiskScoreTile() {
     : '#22c55e'
 
   return (
-    <div className="bg-[#141417] border border-white/[0.07] rounded-xl p-5 relative">
+    <div className="bg-[#101014] p-4 relative h-full hover:bg-white/[0.02] transition-colors">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[11px] text-slate-500 flex items-center gap-1.5">
-          <Brain size={11} className="text-[#3b6ef6]" />
+        <span className="text-[10.5px] font-medium uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+          <Brain size={13} />
           Risk Score
         </span>
         <button
@@ -265,10 +265,10 @@ function RiskScoreTile() {
         <div className="h-12 animate-pulse bg-white/[0.04] rounded" />
       ) : (
         <div>
-          <div className="flex items-end gap-2">
-            <span className="text-3xl font-bold" style={{ color }}>{score}</span>
-            <span className="text-[11px] text-slate-500 mb-1">/100</span>
-            <span className="ml-auto text-[10px] font-semibold uppercase px-2 py-1 rounded-full" style={{ background: color + '20', color }}>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[26px] leading-8 font-semibold text-white tabular-nums">{score}</span>
+            <span className="text-[11px] text-slate-500">/100</span>
+            <span className="ml-auto text-[9.5px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded" style={{ background: color + '1a', color }}>
               {level}
             </span>
           </div>
@@ -399,8 +399,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Metric cards — row 1 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPI strip — single bordered container, hairline dividers */}
+      <div className="rounded-xl border border-white/[0.07] bg-white/[0.05] overflow-hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-px">
         <MetricCard
           label="Potential Threats This Week"
           value={loading ? '—' : (summary?.threats_this_week ?? summary?.total_threats_week ?? 0)}
@@ -431,10 +431,6 @@ export default function DashboardPage() {
           icon={<CheckSquare size={18} />}
           loading={loading}
         />
-      </div>
-
-      {/* Metric cards — row 2 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard
           label="Potential Threats This Month"
           value={loading ? '—' : (summary?.total_threats_month ?? 0)}
@@ -460,9 +456,7 @@ export default function DashboardPage() {
           loading={loading}
         />
         {/* Risk Score tile */}
-        <div className="lg:col-span-1">
-          <RiskScoreTile />
-        </div>
+        <RiskScoreTile />
       </div>
 
       {/* Global Threat Intelligence — full width */}

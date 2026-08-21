@@ -21,6 +21,7 @@ def threat_to_dict(t: Threat) -> dict:
     return {
         "id": str(t.id),
         "org_id": str(t.org_id),
+        "subject": getattr(t, "subject", None),
         "email_message_id": t.email_message_id,
         "sender": t.sender,
         "sender_domain": t.sender_domain,

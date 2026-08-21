@@ -1,5 +1,4 @@
 import { ReactNode } from 'react'
-import { Card } from '@/components/ui/Card'
 
 interface MetricCardProps {
   label: string
@@ -10,37 +9,40 @@ interface MetricCardProps {
   loading?: boolean
 }
 
-const accents = {
-  red: 'text-[#e94560]',
-  amber: 'text-amber-400',
-  green: 'text-emerald-400',
-  blue: 'text-blue-400',
+const dotColors = {
+  red: 'bg-rose-500',
+  amber: 'bg-amber-400',
+  green: 'bg-emerald-400',
+  blue: 'bg-blue-400',
 }
 
+/**
+ * Flat KPI cell (Strata Cloud Manager-style): muted inline icon + uppercase
+ * label, large neutral value with a small severity dot. Designed to sit inside
+ * a shared bordered strip (gap-px grid) rather than as a standalone card.
+ */
 export default function MetricCard({ label, value, sublabel, icon, accent = 'blue', loading }: MetricCardProps) {
   if (loading) {
     return (
-      <Card>
+      <div className="bg-[#101014] p-4 h-full">
         <div className="animate-pulse space-y-3">
-          <div className="h-4 bg-[#0f3460]/40 rounded w-2/3" />
-          <div className="h-8 bg-[#0f3460]/40 rounded w-1/2" />
+          <div className="h-3 bg-white/[0.05] rounded w-2/3" />
+          <div className="h-7 bg-white/[0.05] rounded w-1/2" />
         </div>
-      </Card>
+      </div>
     )
   }
   return (
-    <Card className="flex items-start justify-between gap-2">
-      <div className="min-w-0 flex-1">
-        <div className="text-xs text-slate-400 mb-1 font-medium uppercase tracking-wide leading-tight">{label}</div>
-        <div className={`font-bold truncate ${typeof value === 'string' && value.length > 10 ? 'text-lg sm:text-xl' : 'text-2xl sm:text-3xl'} ${accents[accent]}`}>{value}</div>
-        {sublabel && <div className="text-xs text-slate-500 mt-1 truncate">{sublabel}</div>}
+    <div className="bg-[#101014] p-4 h-full hover:bg-white/[0.02] transition-colors">
+      <div className="flex items-center gap-1.5 text-slate-500">
+        {icon && <span className="shrink-0 [&>svg]:w-[13px] [&>svg]:h-[13px]">{icon}</span>}
+        <span className="text-[10.5px] font-medium uppercase tracking-wider leading-tight truncate">{label}</span>
       </div>
-      {icon && (
-        <div className={`p-2 sm:p-2.5 rounded-lg shrink-0 ${accents[accent]}`}
-          style={{ background: 'color-mix(in srgb, currentColor 12%, transparent)' }}>
-          {icon}
-        </div>
-      )}
-    </Card>
+      <div className="mt-2 flex items-baseline gap-2 min-w-0">
+        <span className={`font-semibold text-white truncate ${typeof value === 'string' && value.length > 10 ? 'text-lg' : 'text-[26px] leading-8'} tabular-nums`}>{value}</span>
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColors[accent]}`} />
+      </div>
+      {sublabel && <div className="text-[11px] text-slate-500 mt-1 truncate">{sublabel}</div>}
+    </div>
   )
 }

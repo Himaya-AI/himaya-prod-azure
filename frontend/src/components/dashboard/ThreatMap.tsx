@@ -46,8 +46,8 @@ export default function ThreatMap() {
           <h3 className="text-[13px] font-semibold text-white">
             Potential Threat Ingress Locations
           </h3>
-          <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">
-            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse" />
             Live
           </span>
         </div>
