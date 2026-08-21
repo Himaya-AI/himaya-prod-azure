@@ -33,14 +33,29 @@ def _fetch_system_prompt() -> str:
         raise
 
 
+def _parse_few_shots(content: str, source: str) -> list[dict[str, str]]:
+    logger.info("Loaded %s from %s: %s chars, parsing JSON...", _FEW_SHOTS_KEY, source, len(content))
+    data = json.loads(content)
+    logger.info("Parsed %s: %s examples", _FEW_SHOTS_KEY, len(data))
+    return data
+
+
 def _fetch_few_shot_examples() -> list[dict[str, str]]:
-    logger.info("Loading local few-shots from %s", _FEW_SHOTS_PATH)
+    logger.info("Fetching %s from s3://%s", _FEW_SHOTS_KEY, PROMPT_BUCKET)
     try:
-        content = _FEW_SHOTS_PATH.read_text(encoding="utf-8")
-        logger.info(f"Loaded {_FEW_SHOTS_KEY}: {len(content)} chars, parsing JSON...")
-        data = json.loads(content)
-        logger.info(f"Parsed {_FEW_SHOTS_KEY}: {len(data)} examples")
-        return data
+        response = s3_client.get_object(Bucket=PROMPT_BUCKET, Key=_FEW_SHOTS_KEY)
+        return _parse_few_shots(response["Body"].read().decode("utf-8-sig"), f"s3://{PROMPT_BUCKET}")
+    except Exception as e:
+        logger.warning(
+            "S3 %s unavailable (%s: %s); trying local %s",
+            _FEW_SHOTS_KEY,
+            type(e).__name__,
+            e,
+            _FEW_SHOTS_PATH,
+        )
+
+    try:
+        return _parse_few_shots(_FEW_SHOTS_PATH.read_text(encoding="utf-8"), str(_FEW_SHOTS_PATH))
     except Exception as e:
         logger.error("Failed to load local %s: %s: %s", _FEW_SHOTS_KEY, type(e).__name__, e, exc_info=True)
         raise
@@ -133,8 +148,7 @@ def get_messages_for_classification(
 
 
 def reload_prompts() -> None:
-    """Clear the cache and reload local prompt artifacts used during testing."""
     _cache.clear()
     get_system_prompt()
     get_few_shot_examples()
-    logger.info("Prompt cache reloaded (system prompt and few-shots from local test files).")
+    logger.info("Prompt cache reloaded.")
