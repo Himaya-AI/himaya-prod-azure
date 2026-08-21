@@ -549,6 +549,20 @@ async def mark_as_spam(
         threat.resolved_at = datetime.now(timezone.utc)
         await db.flush()
         return {"message": f"Marked as spam — moved to {provider_label}", "threat_id": threat_id, "gmail_moved": True}
+
+    # Idempotency: Himaya may have ALREADY moved this message to spam (e.g.
+    # auto-triage). A provider move rewrites the message id in the destination
+    # folder, so the id we stored no longer resolves and the retry 404s — even
+    # though the mail is sitting in the spam folder exactly as intended. Report
+    # the true end state instead of a misleading failure.
+    if threat.action_taken == "MARKED_SPAM":
+        return {
+            "message": f"Already marked as spam — the message is in {provider_label}",
+            "threat_id": threat_id,
+            "gmail_moved": True,
+            "already_applied": True,
+        }
+
     raise HTTPException(
         status_code=502,
         detail=f"Could not move the email to {provider_label} (provider API error). The message was NOT marked as spam.",

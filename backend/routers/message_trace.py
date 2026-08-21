@@ -431,6 +431,20 @@ async def perform_action(
         # actually moved out of the mailbox. Otherwise the analyst would see
         # "Quarantined" while the email is still sitting in the user's inbox.
         if not success:
+            # Idempotency: if Himaya already pulled this message out of the
+            # mailbox (auto-triage quarantine / mark-as-spam), the stored
+            # provider id no longer resolves — a move rewrites the id in the
+            # destination folder and hard-capture deletes the original. The mail
+            # is already contained, so report the true end state rather than a
+            # misleading "NOT quarantined" error.
+            if t.action_taken in ("QUARANTINED", "QUARANTINE", "MARKED_SPAM", "BLOCK_DELETE"):
+                return {
+                    "status": "ok",
+                    "action": "quarantined",
+                    "moved": True,
+                    "already_applied": True,
+                    "detail": f"Already contained — previous action: {t.action_taken}",
+                }
             import logging as _logging
             _logging.getLogger(__name__).warning(
                 f"message_trace quarantine did NOT move {t.email_message_id} for {t.recipient_email} "

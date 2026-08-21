@@ -68,25 +68,37 @@ function ThreatWorldMap({ data }: { data: CountryThreat[] }) {
           tooltip.text(hit ? `${hit.country} — ${hit.count.toLocaleString()} potential threats` : String(name))
         },
       })
+
+      // jsvectormap computes its scale ONCE at construction. Because init is
+      // async (dynamic imports), the container may not have its final width
+      // yet, leaving the map rendered tiny. Force a re-fit after layout
+      // settles — a few retries covers the transition frames.
+      refit()
+      requestAnimationFrame(refit)
+      fitTimers.push(setTimeout(refit, 120), setTimeout(refit, 400), setTimeout(refit, 900))
     }
 
+    const refit = () => {
+      const inst = mapInstanceRef.current as { updateSize?: () => void } | null
+      try { inst?.updateSize?.() } catch { /* noop */ }
+    }
+
+    const fitTimers: ReturnType<typeof setTimeout>[] = []
     initMap()
 
-    // jsvectormap computes its scale once at init — if the container was
-    // still settling (flex/grid layout, sidebar animation), the map stays
-    // tiny. Re-fit on every container resize.
+    // Also re-fit on genuine container/window resizes.
     let resizeObserver: ResizeObserver | null = null
     if (mapRef.current && typeof ResizeObserver !== 'undefined') {
-      resizeObserver = new ResizeObserver(() => {
-        const inst = mapInstanceRef.current as { updateSize?: () => void } | null
-        try { inst?.updateSize?.() } catch { /* noop */ }
-      })
+      resizeObserver = new ResizeObserver(refit)
       resizeObserver.observe(mapRef.current)
     }
+    window.addEventListener('resize', refit)
 
     return () => {
       cancelled = true
+      fitTimers.forEach(clearTimeout)
       resizeObserver?.disconnect()
+      window.removeEventListener('resize', refit)
       if (mapInstanceRef.current) {
         try { (mapInstanceRef.current as { destroy: () => void }).destroy() } catch { /* noop */ }
         mapInstanceRef.current = null

@@ -345,27 +345,54 @@ async def _delta_sync_integration_snap(db, redis, integration):
                     except Exception:
                         pass
 
-                    resp = await client.get(
-                        f"{GMAIL_API_BASE}/users/{user_email}/messages",
-                        headers=user_headers,
-                        params={"maxResults": 50, "q": f"after:{_user_since}"},
-                    )
-                    if resp.status_code == 401:
-                        new_token = await _refresh_google_token(refresh_token)
-                        if new_token:
-                            access_token = new_token
-                            oauth_headers = {"Authorization": f"Bearer {access_token}"}
-                            user_headers = oauth_headers
-                            resp = await client.get(
-                                f"{GMAIL_API_BASE}/users/{user_email}/messages",
-                                headers=user_headers,
-                                params={"maxResults": 50, "q": f"after:{_user_since}"},
-                            )
-                    if resp.status_code != 200:
-                        logger.warning(
-                            f"Delta sync: Gmail list failed for {user_email}: {resp.status_code} — "
-                            f"will catch up from epoch {_user_since} on next successful cycle"
+                    # Drain ALL pages in the window via nextPageToken. Gmail
+                    # returns only maxResults per page; the old code fetched a
+                    # single page of 50, so when a mailbox received >50 messages
+                    # inside the lookback window (bursty inbound / test batches),
+                    # everything past the first page was silently dropped — and
+                    # once the cursor advanced + seen-set filled, those messages
+                    # were never re-fetched. Following pageToken fixes the gap.
+                    _msg_list: list = []
+                    _page_token = None
+                    _list_ok = True
+                    _drained = False
+                    _MAX_PAGES = int(os.getenv("GMAIL_DELTA_MAX_PAGES", "10"))
+                    for _pg in range(_MAX_PAGES):
+                        _params = {"maxResults": 100, "q": f"after:{_user_since}"}
+                        if _page_token:
+                            _params["pageToken"] = _page_token
+                        resp = await client.get(
+                            f"{GMAIL_API_BASE}/users/{user_email}/messages",
+                            headers=user_headers,
+                            params=_params,
                         )
+                        if resp.status_code == 401 and _pg == 0:
+                            new_token = await _refresh_google_token(refresh_token)
+                            if new_token:
+                                access_token = new_token
+                                oauth_headers = {"Authorization": f"Bearer {access_token}"}
+                                user_headers = oauth_headers
+                                resp = await client.get(
+                                    f"{GMAIL_API_BASE}/users/{user_email}/messages",
+                                    headers=user_headers,
+                                    params=_params,
+                                )
+                        if resp.status_code != 200:
+                            logger.warning(
+                                f"Delta sync: Gmail list failed for {user_email} (page {_pg}): "
+                                f"{resp.status_code} — will catch up from epoch {_user_since} "
+                                f"on next successful cycle"
+                            )
+                            _list_ok = False
+                            break
+                        _body = resp.json()
+                        _msg_list.extend(_body.get("messages", []))
+                        _page_token = _body.get("nextPageToken")
+                        if not _page_token:
+                            _drained = True
+                            break
+
+                    if not _list_ok:
                         try:
                             # Keep the EARLIEST missed window (nx=True → don't
                             # overwrite an older marker); expire after 7 days.
@@ -374,17 +401,19 @@ async def _delta_sync_integration_snap(db, redis, integration):
                             pass
                         continue
 
-                    _msg_list = resp.json().get("messages", [])
-                    # Clear the catch-up marker only when the window fit in one
-                    # page — a full page (50) may mean older outage mail is still
-                    # unlisted, so keep the marker and let the next cycle continue
-                    # (the seen-set prevents reprocessing).
-                    if len(_msg_list) < 50:
+                    # Only clear the catch-up marker once the whole window is
+                    # drained (no pending pageToken). If we hit the page cap with
+                    # a token still pending, keep the marker so the next cycle
+                    # continues from the same window (seen-set prevents rework).
+                    if _drained:
                         try:
                             await redis.delete(_catchup_key)
                         except Exception:
                             pass
-                    logger.info(f"Gmail delta: {len(_msg_list)} messages for {user_email} (since epoch {_user_since})")
+                    logger.info(
+                        f"Gmail delta: {len(_msg_list)} messages for {user_email} "
+                        f"(since epoch {_user_since}, drained={_drained})"
+                    )
                     for msg_ref in _msg_list:
                         msg_id = msg_ref.get("id")
                         if not msg_id:
@@ -1034,31 +1063,47 @@ async def _delta_sync_integration_snap(db, redis, integration):
                 try:
                     # Fetch messages from inbox only — /messages queries ALL folders
                     # including Sent Items which causes sender=recipient bugs for outbound mail
+                    # Fetch inbox messages, following @odata.nextLink to drain
+                    # the whole window. A single $top=50 page dropped anything
+                    # past the first 50 received in the lookback window (bursty
+                    # inbound / test batches); with the cursor advancing those
+                    # were lost. Paginating fixes the same gap Gmail had.
                     _msg_url = (
                         f"{GRAPH_API_BASE}/users/{_m365_user_email}/mailFolders/inbox/messages"
-                        f"?$top=50"
+                        f"?$top=100"
                         f"&$filter=receivedDateTime ge {since_iso}"
                         f"&$select=id,sender,toRecipients,receivedDateTime,subject,"
                         f"hasAttachments,body,internetMessageHeaders,isDraft"
                         f"&$orderby=receivedDateTime desc"
                     )
-                    _msg_resp = await client.get(_msg_url, headers=headers)
+                    _m365_msgs: list = []
+                    _next_url = _msg_url
+                    _m365_ok = True
+                    _M365_MAX_PAGES = int(os.getenv("M365_DELTA_MAX_PAGES", "10"))
+                    _pg = 0
+                    while _next_url and _pg < _M365_MAX_PAGES:
+                        _msg_resp = await client.get(_next_url, headers=headers)
+                        if _msg_resp.status_code == 401 and _pg == 0:
+                            # Token expired mid-scan — refresh and retry
+                            _new_tok = await _refresh_m365_token(refresh_token, integration.get("tenant_id") or integration.get("org_domain"))
+                            if _new_tok:
+                                access_token = _new_tok
+                                headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
+                                _msg_resp = await client.get(_next_url, headers=headers)
+                        if _msg_resp.status_code != 200:
+                            logger.warning(f"M365 delta messages failed for {_m365_user_email} (page {_pg}): "
+                                           f"{_msg_resp.status_code} {_msg_resp.text[:150]}")
+                            _m365_ok = False
+                            break
+                        _b = _msg_resp.json()
+                        _m365_msgs.extend(_b.get("value", []))
+                        _next_url = _b.get("@odata.nextLink")
+                        _pg += 1
 
-                    if _msg_resp.status_code == 401:
-                        # Token expired mid-scan — refresh and retry
-                        _new_tok = await _refresh_m365_token(refresh_token, integration.get("tenant_id") or integration.get("org_domain"))
-                        if _new_tok:
-                            access_token = _new_tok
-                            headers = {"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"}
-                            _msg_resp = await client.get(_msg_url, headers=headers)
-
-                    if _msg_resp.status_code != 200:
-                        logger.warning(f"M365 delta messages failed for {_m365_user_email}: "
-                                       f"{_msg_resp.status_code} {_msg_resp.text[:150]}")
+                    if not _m365_ok:
                         continue
 
-                    _m365_msgs = _msg_resp.json().get("value", [])
-                    logger.info(f"M365 delta: {len(_m365_msgs)} new messages for {_m365_user_email}")
+                    logger.info(f"M365 delta: {len(_m365_msgs)} new messages for {_m365_user_email} (pages={_pg})")
 
                     for msg in _m365_msgs:
                         m365_msg_id = msg.get("id", "")

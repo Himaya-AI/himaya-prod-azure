@@ -1,10 +1,11 @@
 """Background auto-scan loops for Draft Analysis and Spam Center."""
 import asyncio
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
-SCAN_INTERVAL_SECONDS = 90
+SCAN_INTERVAL_SECONDS = int(os.getenv("SPAM_DRAFT_SCAN_INTERVAL_SECONDS", "300"))
 
 # Serialize draft + spam writes to the same DB rows to prevent deadlocks
 _db_write_lock = asyncio.Lock()

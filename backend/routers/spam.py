@@ -555,9 +555,25 @@ async def _sync_org_spam(org_id: str, db: AsyncSession) -> dict:
                 except Exception as _sa_exc2:
                     logger.warning(f"Spam sync: SA failed for {user_email}: {_sa_exc2}, using OAuth")
                 try:
+                    # Load ids we've ALREADY synced for this mailbox so we don't
+                    # re-download full metadata for the entire SPAM folder every
+                    # cycle. Re-fetching hundreds of messages each 90s run was
+                    # saturating the per-user Gmail quota (persistent 429s) — which
+                    # also starved manual quarantine/spam actions of quota. We only
+                    # fetch details for ids not seen before.
+                    _synced_ids: set = set()
+                    try:
+                        _seen_rows = await db.execute(
+                            text("SELECT message_id FROM spam_items WHERE org_id = :o AND owner_email = :u"),
+                            {"o": org_id, "u": user_email},
+                        )
+                        _synced_ids = {r[0] for r in _seen_rows.fetchall()}
+                    except Exception:
+                        pass
                     async with httpx.AsyncClient(timeout=60) as client:
                         g_hdrs = {"Authorization": f"Bearer {_gmail_tok}"}
                         next_page_token: Optional[str] = None
+                        _rate_limited = False
                         while True:
                             g_params: dict = {"labelIds": "SPAM", "maxResults": "100"}
                             if next_page_token:
@@ -574,11 +590,21 @@ async def _sync_org_spam(org_id: str, db: AsyncSession) -> dict:
                             next_page_token = page_json.get("nextPageToken")
                             for m in page_json.get("messages", []):
                                 msg_id = m.get("id", "")
+                                # Already stored — skip the expensive detail fetch.
+                                if msg_id in _synced_ids:
+                                    continue
                                 det = await client.get(
                                     f"{GMAIL_API_BASE}/users/{user_email}/messages/{msg_id}",
                                     headers=g_hdrs,
                                     params={"format": "full"},
                                 )
+                                if det.status_code == 429:
+                                    # Quota exhausted for this mailbox — stop now
+                                    # so we don't burn the remaining budget that
+                                    # manual actions depend on. Resume next cycle.
+                                    logger.warning(f"Gmail spam sync hit 429 for {user_email}; deferring rest to next cycle")
+                                    _rate_limited = True
+                                    break
                                 if det.status_code != 200:
                                     continue
                                 msg_json = det.json()
@@ -617,7 +643,7 @@ async def _sync_org_spam(org_id: str, db: AsyncSession) -> dict:
                                     "spam_score": score,
                                     "received_at": received_at,
                                 })
-                            if not next_page_token:
+                            if _rate_limited or not next_page_token:
                                 break
                 except Exception as e:
                     logger.error(f"Gmail spam sync error for {user_email}: {e}")
