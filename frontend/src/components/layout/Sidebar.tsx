@@ -65,7 +65,7 @@ export default function Sidebar() {
     )}>
       {/* Logo + org name */}
       <div className="flex flex-col px-4 pt-4 pb-4 border-b border-[var(--border)] flex-shrink-0">
-        <div className="flex items-center justify-center bg-gradient-to-br from-[#1a1f3c] to-[#0d1224] rounded-xl px-3 py-2.5 border border-[#3b6ef6]/15">
+        <div className="flex items-center justify-center bg-white/[0.03] rounded-lg px-3 py-2.5 border border-white/[0.06]">
           <Image src="/himaya-logo.png" alt="Himaya" width={100} height={32} className="object-contain" />
         </div>
         {orgName && (
@@ -90,11 +90,11 @@ export default function Sidebar() {
                 key={href}
                 href={href}
                 className={clsx(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all',
+                  'relative flex items-center gap-3 px-3 py-2 rounded-md text-[13px] font-medium transition-all',
                   isRtl && 'flex-row-reverse text-right',
                   active
-                    ? 'bg-[var(--accent-subtle)] text-[var(--foreground)]'
-                    : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--accent-subtle)]'
+                    ? 'bg-white/[0.04] text-[var(--foreground)] before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[2px] before:rounded-full before:bg-[var(--accent)]'
+                    : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-white/[0.03]'
                 )}
               >
                 <Icon size={16} className={clsx(

@@ -5,7 +5,7 @@ import Image from 'next/image'
 export default function RegisterPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0a0f1e] px-4">
-      <div className="w-full max-w-md rounded-2xl border border-[#1a2744] bg-[#0d1b2e] p-10 text-center">
+      <div className="w-full max-w-md rounded-2xl border border-white/[0.07] bg-[#141417] p-10 text-center">
         <Image src="/himaya-logo.png" alt="Himaya" width={160} height={40} className="mx-auto mb-8" />
         <h1 className="text-xl font-bold text-white mb-3">Onboarding by invitation</h1>
         <p className="text-sm text-[#a1a1aa] leading-relaxed mb-8">

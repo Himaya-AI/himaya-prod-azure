@@ -350,7 +350,7 @@ export default function ThreatsPage() {
     <div className="space-y-5">
       {/* System Health Banner */}
       {systemHealth && (
-        <div className="flex flex-wrap items-center gap-3 bg-[#0d1b2e] border border-[#1a2d5a]/40 rounded-xl px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3 bg-[#141417] border border-white/[0.05] rounded-xl px-4 py-3">
           <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide mr-1">System Health</span>
           <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border font-medium ${
             systemHealth.deepseek_reachable
@@ -451,13 +451,13 @@ export default function ThreatsPage() {
       </div>
 
       {/* Filter Panel */}
-      <div className="bg-[#0d1b2e] border border-[#1a2d5a]/40 rounded-xl px-4 py-3 space-y-3">
+      <div className="bg-[#141417] border border-white/[0.05] rounded-xl px-4 py-3 space-y-3">
         {/* Type pills */}
         <FilterRow label="Type" options={TYPE_OPTIONS} value={filters.type} onChange={v => { setMultiTypes([]); setFilter('type', v) }} colorKey="color"
           multiValues={multiTypes as any}
           onMultiChange={(vs: any) => { setMultiTypes(vs); setFilters(f => ({...f, type: 'all'})); setPage(1) }}
         />
-        <div className="border-t border-[#1a2d5a]/30" />
+        <div className="border-t border-white/[0.05]" />
         {/* Severity + Status */}
         <div className="flex flex-wrap gap-4">
           <FilterRow label="Severity" options={SEVERITY_OPTIONS} value={filters.severity} onChange={v => setFilter('severity', v)} />
@@ -465,7 +465,7 @@ export default function ThreatsPage() {
         </div>
 
         {/* Date quick picks */}
-        <div className="border-t border-[#1a2d5a]/30 pt-2 flex items-center gap-2 flex-wrap">
+        <div className="border-t border-white/[0.05] pt-2 flex items-center gap-2 flex-wrap">
           <span className="text-[11px] text-slate-500 font-medium uppercase tracking-wide w-16 flex-shrink-0">
             <Calendar size={11} className="inline mr-1" />Date
           </span>
@@ -495,7 +495,7 @@ export default function ThreatsPage() {
 
         {/* Advanced filters — mirrors Message Trace */}
         {showAdvanced && (
-          <div className="border-t border-[#1a2d5a]/30 pt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="border-t border-white/[0.05] pt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div>
               <label className="text-[11px] text-slate-500 font-medium uppercase tracking-wide mb-1 block">Sender</label>
               <input
@@ -642,10 +642,10 @@ export default function ThreatsPage() {
     {showAudit && (
       <>
         <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setShowAudit(false)} />
-        <div className="fixed right-0 top-0 bottom-0 w-[560px] max-w-full bg-[#0d1b2e] border-l border-[#1a2744] z-50 flex flex-col overflow-hidden">
+        <div className="fixed right-0 top-0 bottom-0 w-[560px] max-w-full bg-[#141417] border-l border-white/[0.07] z-50 flex flex-col overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a2744] flex-shrink-0">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] flex-shrink-0">
             <div className="flex items-center gap-2">
               <ClipboardList size={16} className="text-[#3b6ef6]" />
               <span className="font-semibold text-white text-sm">Himaya Analysis — Audit Trail</span>
@@ -679,7 +679,7 @@ export default function ThreatsPage() {
                 <p className="text-slate-500 text-xs">Enable the agent and Himaya Analysis will start investigating threats. Results appear here.</p>
               </div>
             ) : (
-              <div className="divide-y divide-[#1a2744]/50">
+              <div className="divide-y divide-white/[0.04]">
                 {auditItems.map((item: any) => {
                   const VERDICT_CFG: Record<string, { color: string; bg: string; label: string }> = {
                     QUARANTINE:   { color: '#ef4444', bg: 'rgba(239,68,68,0.10)',  label: 'Quarantined' },
@@ -718,7 +718,7 @@ export default function ThreatsPage() {
 
                       {/* Reasoning */}
                       {item.reasoning && (
-                        <div className="bg-[#0a1628] rounded-lg px-3 py-2 mb-2 border border-[#1a2744]/50">
+                        <div className="bg-[#0e0e12] rounded-lg px-3 py-2 mb-2 border border-white/[0.04]">
                           <p className="text-[11px] text-slate-300 leading-relaxed">{item.reasoning}</p>
                         </div>
                       )}

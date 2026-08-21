@@ -64,7 +64,7 @@ function ScreenshotCard({ s }: { s: UrlScreenshot }) {
     : 'text-green-400 border-green-700/40 bg-green-900/20'
 
   return (
-    <div className="border border-[#1a2d5a]/60 rounded-lg overflow-hidden">
+    <div className="border border-white/[0.05] rounded-lg overflow-hidden">
       {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-2 bg-[#0e0e12] cursor-pointer"
@@ -93,7 +93,7 @@ function ScreenshotCard({ s }: { s: UrlScreenshot }) {
           {s.screenshot_b64 ? (
             <div>
               <p className="text-xs text-slate-500 mb-1.5">Browser screenshot (isolated environment)</p>
-              <div className="rounded overflow-hidden border border-[#1a2d5a]/40">
+              <div className="rounded overflow-hidden border border-white/[0.05]">
                 <img
                   src={`data:image/png;base64,${s.screenshot_b64}`}
                   alt={`Screenshot of ${s.url}`}
@@ -103,7 +103,7 @@ function ScreenshotCard({ s }: { s: UrlScreenshot }) {
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2 py-4 text-xs text-slate-500 justify-center border border-dashed border-[#1a2d5a]/40 rounded">
+            <div className="flex items-center gap-2 py-4 text-xs text-slate-500 justify-center border border-dashed border-white/[0.05] rounded">
               <Shield size={14} /> Screenshot not available
             </div>
           )}
@@ -265,9 +265,9 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
   const cfg = result ? VERDICT_CONFIG[result.verdict] ?? VERDICT_CONFIG.INCONCLUSIVE : null
 
   return (
-    <div className="border border-[#1a2d5a]/60 rounded-xl bg-[#0e0e12] overflow-hidden">
+    <div className="border border-white/[0.05] rounded-xl bg-[#0e0e12] overflow-hidden">
       {/* Header + Tabs */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a2d5a]/40">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.05]">
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveTab('auto')}
@@ -324,7 +324,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
             <div className="space-y-2">
               {autoDetonation.map((s, i) => <ScreenshotCard key={i} s={s} />)}
             </div>
-            <div className="mt-3 pt-3 border-t border-[#1a2d5a]/30">
+            <div className="mt-3 pt-3 border-t border-white/[0.05]">
               <p className="text-xs text-slate-500 mb-2">
                 Run a full sandbox analysis for deeper behavioural insight and MITRE ATT&CK mapping:
               </p>
@@ -381,7 +381,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
                     ['Network', 'Network monitored', 'All DNS + TCP activity logged'],
                     ['Timer', '30 min sessions', 'Auto-terminates; Azure billed per use'],
                   ].map(([, title, desc]) => (
-                    <div key={title} className="bg-[#060f1a] rounded-lg p-2 border border-[#1a2d5a]/40">
+                    <div key={title} className="bg-[#060f1a] rounded-lg p-2 border border-white/[0.05]">
                       <div className="font-medium text-slate-300 text-xs mb-0.5">{title}</div>
                       <div className="text-slate-500 text-[11px]">{desc}</div>
                     </div>

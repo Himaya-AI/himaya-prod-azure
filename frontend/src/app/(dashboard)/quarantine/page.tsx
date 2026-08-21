@@ -109,17 +109,18 @@ function fmt(iso: string | null) {
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
-function StatCard({ label, value, icon: Icon, accent }: {
-  label: string; value: number; icon: React.ElementType; accent: string
+function StatCard({ label, value, icon: Icon, dot }: {
+  label: string; value: number; icon: React.ElementType; dot?: string
 }) {
   return (
-    <div className="bg-[#0d1b2e] border border-[#1a2744] rounded-xl p-4 flex items-center gap-4">
-      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${accent}`}>
-        <Icon size={18} />
+    <div className="px-5 py-4">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Icon size={12} className="text-slate-500" strokeWidth={1.75} />
+        <span className="text-[11px] text-slate-500">{label}</span>
       </div>
-      <div>
-        <div className="text-xl font-bold text-white tabular-nums">{value}</div>
-        <div className="text-xs text-[#a1a1aa]">{label}</div>
+      <div className="flex items-center gap-2">
+        <span className="text-[22px] leading-none font-semibold text-white tabular-nums">{value}</span>
+        {dot && value > 0 && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
       </div>
     </div>
   )
@@ -152,9 +153,9 @@ function DetailPanel({
       <div className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
 
       {/* Drawer */}
-      <div className="fixed right-0 top-0 bottom-0 w-[480px] max-w-full bg-[#0d1b2e] border-l border-[#1a2744] z-50 flex flex-col overflow-hidden">
+      <div className="fixed right-0 top-0 bottom-0 w-[480px] max-w-full bg-[#141417] border-l border-white/[0.07] z-50 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#1a2744] flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] flex-shrink-0">
           <div className="flex items-center gap-2">
             <ShieldAlert size={18} className="text-[#3b6ef6]" />
             <span className="font-semibold text-white text-sm">Quarantine Detail</span>
@@ -256,7 +257,7 @@ function DetailPanel({
         </div>
 
         {/* Actions Footer */}
-        <div className="px-5 py-4 border-t border-[#1a2744] flex gap-2 flex-shrink-0 flex-wrap">
+        <div className="px-5 py-4 border-t border-white/[0.07] flex gap-2 flex-shrink-0 flex-wrap">
           {([
             { action: 'release' as const,           label: 'Release',       color: 'green',  title: '' },
             { action: 'block-permanently' as const,  label: 'Block → Trash', color: 'red',    title: 'Move to Gmail Trash permanently' },
@@ -411,11 +412,11 @@ export default function QuarantinePage() {
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="Total Quarantined" value={stats.total_quarantined} icon={ShieldAlert} accent="bg-[#3b6ef6]/20 text-[#3b6ef6]" />
-          <StatCard label="Released Today" value={stats.released_today} icon={CheckCircle} accent="bg-green-500/20 text-green-400" />
-          <StatCard label="False Positives" value={stats.false_positives} icon={Flag} accent="bg-slate-500/20 text-slate-400" />
-          <StatCard label="High-Risk Blocked" value={stats.high_risk_blocked} icon={Ban} accent="bg-red-500/20 text-red-400" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden divide-x divide-y lg:divide-y-0 divide-white/[0.06]">
+          <StatCard label="Total Quarantined" value={stats.total_quarantined} icon={ShieldAlert} dot="bg-[#3b6ef6]" />
+          <StatCard label="Released Today" value={stats.released_today} icon={CheckCircle} dot="bg-emerald-400" />
+          <StatCard label="False Positives" value={stats.false_positives} icon={Flag} />
+          <StatCard label="High-Risk Blocked" value={stats.high_risk_blocked} icon={Ban} dot="bg-[#f87171]" />
         </div>
       )}
 
@@ -430,25 +431,25 @@ export default function QuarantinePage() {
             value={filters[key]}
             onChange={e => { setFilters(f => ({ ...f, [key]: e.target.value })); setPage(1) }}
             placeholder={placeholder}
-            className="px-3 py-2 bg-[#0d1b2e] border border-[#1a2744] rounded-lg text-sm text-[#e4e4e7] placeholder-[#52525b] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+            className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] placeholder-[#52525b] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
           />
         ))}
         <input
           type="date"
           value={filters.date_from}
           onChange={e => { setFilters(f => ({ ...f, date_from: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#0d1b2e] border border-[#1a2744] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
         />
         <input
           type="date"
           value={filters.date_to}
           onChange={e => { setFilters(f => ({ ...f, date_to: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#0d1b2e] border border-[#1a2744] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
         />
         <select
           value={filters.status}
           onChange={e => { setFilters(f => ({ ...f, status: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#0d1b2e] border border-[#1a2744] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
         >
           <option value="unresolved">Unresolved</option>
           <option value="all">All Statuses</option>
@@ -459,7 +460,7 @@ export default function QuarantinePage() {
         <select
           value={filters.threat_type}
           onChange={e => { setFilters(f => ({ ...f, threat_type: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#0d1b2e] border border-[#1a2744] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
         >
           {THREAT_TYPES.map(t => <option key={t} value={t}>{t === 'all' ? 'All Types' : t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
         </select>
@@ -472,7 +473,7 @@ export default function QuarantinePage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#0d1b2e] border border-[#1a2744] rounded-xl overflow-hidden">
+      <div className="bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden">
         {loading ? (
           <div className="text-center text-[#a1a1aa] py-16 text-sm">Loading…</div>
         ) : items.length === 0 ? (
@@ -489,7 +490,7 @@ export default function QuarantinePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#1a2744] text-[#71717a] text-xs font-medium">
+                <tr className="border-b border-white/[0.07] text-[#71717a] text-xs font-medium">
                   {['Date/Time', 'Subject', 'Sender', 'Recipient', 'Threat Type', 'Risk Score', 'Action Taken', 'Status', 'Actions'].map(h => (
                     <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
@@ -500,7 +501,7 @@ export default function QuarantinePage() {
                   <tr
                     key={item.id}
                     onClick={() => setSelected(item)}
-                    className={`border-b border-[#1a2744]/50 cursor-pointer hover:bg-white/[0.02] transition-colors ${
+                    className={`border-b border-white/[0.04] cursor-pointer hover:bg-white/[0.02] transition-colors ${
                       i % 2 === 0 ? '' : 'bg-white/[0.01]'
                     }`}
                   >
@@ -516,8 +517,8 @@ export default function QuarantinePage() {
                         {STATUS_LABELS[item.status] ?? item.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                      <div className="flex gap-1.5 flex-wrap">
+                    <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                      <div className="flex gap-1 flex-nowrap items-center">
                         <button
                           onClick={() => handleAction(item.id, 'release')}
                           className="px-2 py-1 text-xs rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
@@ -547,7 +548,7 @@ export default function QuarantinePage() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-[#1a2744]/50">
+          <div className="flex items-center justify-between px-4 py-3 border-t border-white/[0.04]">
             <span className="text-xs text-[#71717a]">Page {page} of {totalPages}</span>
             <div className="flex gap-2">
               <button

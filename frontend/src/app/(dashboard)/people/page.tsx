@@ -270,18 +270,21 @@ function StatsRow({ employees }: { employees: Employee[] }) {
   const withThreats = employees.filter(e => (e.threats_30d ?? 0) > 0).length
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 md:grid-cols-4 bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden divide-x divide-y md:divide-y-0 divide-white/[0.06]">
       {[
-        { label: 'Total Users', value: total, icon: <Users size={14} />, color: 'text-[#3b6ef6]' },
-        { label: 'VIP Users', value: vip, icon: <Star size={14} className="fill-amber-400" />, color: 'text-amber-400' },
-        { label: 'High Risk (60+)', value: highRisk, icon: <TrendingUp size={14} />, color: 'text-red-400' },
-        { label: 'Active Threats (30d)', value: withThreats, icon: <ShieldAlert size={14} />, color: 'text-orange-400' },
-      ].map(({ label, value, icon, color }) => (
-        <div key={label} className="bg-[#141417] border border-white/[0.06] rounded-xl p-3.5 flex items-center gap-3">
-          <span className={color}>{icon}</span>
-          <div>
-            <p className="text-[11px] text-slate-500">{label}</p>
-            <p className={`text-xl font-bold ${color}`}>{value}</p>
+        { label: 'Total Users', value: total, icon: <Users size={12} className="text-slate-500" />, dot: '' },
+        { label: 'VIP Users', value: vip, icon: <Star size={12} className="text-slate-500" />, dot: 'bg-amber-400' },
+        { label: 'High Risk (60+)', value: highRisk, icon: <TrendingUp size={12} className="text-slate-500" />, dot: 'bg-[#f87171]' },
+        { label: 'Active Threats (30d)', value: withThreats, icon: <ShieldAlert size={12} className="text-slate-500" />, dot: 'bg-orange-400' },
+      ].map(({ label, value, icon, dot }) => (
+        <div key={label} className="px-5 py-4">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            {icon}
+            <span className="text-[11px] text-slate-500">{label}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[22px] leading-none font-semibold text-white tabular-nums">{value}</span>
+            {dot && value > 0 && <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
           </div>
         </div>
       ))}

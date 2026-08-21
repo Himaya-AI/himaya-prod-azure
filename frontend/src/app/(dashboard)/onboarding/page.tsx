@@ -54,7 +54,7 @@ function StatCard({ label, value, sub, color, icon }: {
   color: string; icon: React.ReactNode
 }) {
   return (
-    <div className="bg-[#0d1b2e] border border-[#1a2744]/60 rounded-xl p-4 flex flex-col gap-2">
+    <div className="bg-[#141417] border border-white/[0.04] rounded-xl p-4 flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <span className="text-slate-500">{icon}</span>
         <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wider">{label}</span>
@@ -173,7 +173,7 @@ function ProviderCard({
       {status.connected && (
         <div className="px-6 pb-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[#0a1628] border border-[#1a2744] rounded-xl p-3 flex items-center gap-3">
+            <div className="bg-[#0e0e12] border border-white/[0.07] rounded-xl p-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-[#3b6ef6]/10 flex items-center justify-center flex-shrink-0">
                 <Users size={15} className="text-[#3b6ef6]" />
               </div>
@@ -182,7 +182,7 @@ function ProviderCard({
                 <p className="text-[15px] font-bold text-white">{status.mailbox_count.toLocaleString()}</p>
               </div>
             </div>
-            <div className="bg-[#0a1628] border border-[#1a2744] rounded-xl p-3 flex items-center gap-3">
+            <div className="bg-[#0e0e12] border border-white/[0.07] rounded-xl p-3 flex items-center gap-3">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center flex-shrink-0">
                 <Clock size={15} className="text-emerald-400" />
               </div>
@@ -199,10 +199,10 @@ function ProviderCard({
 
           {/* Setup steps (e.g. DWD for Google) */}
           {setupSteps && (
-            <div className="border border-[#1a2744] rounded-xl overflow-hidden">
+            <div className="border border-white/[0.07] rounded-xl overflow-hidden">
               <button
                 onClick={() => setShowSetup(v => !v)}
-                className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[#93b4fd] hover:bg-[#0a1628] transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[#93b4fd] hover:bg-[#0e0e12] transition-colors"
               >
                 <span className="flex items-center gap-1.5">
                   <ShieldCheck size={13} />
@@ -211,7 +211,7 @@ function ProviderCard({
                 {showSetup ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
               </button>
               {showSetup && setupSteps.map(section => (
-                <div key={section.title} className="px-4 pb-4 pt-1 bg-[#0a1628] space-y-3">
+                <div key={section.title} className="px-4 pb-4 pt-1 bg-[#0e0e12] space-y-3">
                   <ol className="space-y-3">
                     {section.steps.map((step, i) => (
                       <li key={i} className="flex gap-3">
@@ -347,7 +347,7 @@ const APPS_SCRIPT_MANIFEST = `{
   "gmail": {
     "name": "Himaya Phish Reporter",
     "logoUrl": "https://app.himaya.ai/himaya-logo.png",
-    "primaryColor": "#1a2744",
+    "primaryColor": "#26262e",
     "secondaryColor": "#3b6ef6",
     "contextualTriggers": [{ "unconditional": {}, "onTriggerFunction": "onGmailMessageOpen" }]
   }
@@ -822,7 +822,7 @@ export default function OnboardingPage() {
 
       {/* Baseline scan progress — shown when connected and in progress */}
       {anyConnected && baselineProgress > 0 && baselineProgress < 100 && (
-        <div className="bg-[#0d1b2e] border border-[#1a2744] rounded-xl p-4 space-y-3">
+        <div className="bg-[#141417] border border-white/[0.07] rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Activity size={14} className="text-[#3b6ef6]" />

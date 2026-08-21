@@ -21,7 +21,7 @@ export function Thead({ className, children, ...props }: HTMLAttributes<HTMLTabl
 
 export function Tbody({ className, children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <tbody className={clsx('divide-y divide-white/[0.06]/30', className)} {...props}>
+    <tbody className={clsx('divide-y divide-white/[0.04]', className)} {...props}>
       {children}
     </tbody>
   )
@@ -29,7 +29,7 @@ export function Tbody({ className, children, ...props }: HTMLAttributes<HTMLTabl
 
 export function Tr({ className, children, ...props }: HTMLAttributes<HTMLTableRowElement>) {
   return (
-    <tr className={clsx('hover:bg-white/[0.06] transition-colors', className)} {...props}>
+    <tr className={clsx('hover:bg-white/[0.03] transition-colors', className)} {...props}>
       {children}
     </tr>
   )

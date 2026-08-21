@@ -66,7 +66,7 @@ export default function ReportsPage() {
           ) : reports.length === 0 ? (
             <div className="text-center text-slate-500 py-16 text-sm">No reports generated yet</div>
           ) : (
-            <div className="divide-y divide-white/[0.06]/30">
+            <div className="divide-y divide-white/[0.04]">
               {reports.map(r => (
                 <div key={r.id} className="flex items-center gap-4 px-4 py-3">
                   <FileText size={16} className="text-slate-500" />

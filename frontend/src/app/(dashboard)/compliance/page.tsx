@@ -602,7 +602,7 @@ export default function CompliancePage() {
 
       {/* AI Analysis Summary */}
       {controls.length > 0 && (
-        <div className="bg-[#0d1628] border border-[#1a2d5a]/50 rounded-xl overflow-hidden">
+        <div className="bg-[#0d1628] border border-white/[0.05] rounded-xl overflow-hidden">
           <button
             onClick={() => setShowAi(v => !v)}
             className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
@@ -618,9 +618,9 @@ export default function CompliancePage() {
           </button>
 
           {showAi && (
-            <div className="px-5 pb-5 space-y-4 border-t border-[#1a2d5a]/30">
+            <div className="px-5 pb-5 space-y-4 border-t border-white/[0.05]">
               {/* Headline */}
-              <div className="mt-4 px-4 py-3 bg-[#0a1628] rounded-xl border border-[#1a2744]">
+              <div className="mt-4 px-4 py-3 bg-[#0e0e12] rounded-xl border border-white/[0.07]">
                 <p className="text-[13px] text-slate-200 leading-relaxed font-medium">{aiSummary.headline}</p>
               </div>
 
@@ -658,7 +658,7 @@ export default function CompliancePage() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 pt-1 border-t border-[#1a2d5a]/30">
+              <div className="flex items-center gap-2 pt-1 border-t border-white/[0.05]">
                 <span className="text-[10px] text-slate-600">
                   Analysis generated from live compliance data · {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                 </span>
