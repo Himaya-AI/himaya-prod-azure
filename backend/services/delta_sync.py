@@ -330,10 +330,25 @@ async def _delta_sync_integration_snap(db, redis, integration):
                     impersonated = await _get_sa_headers_async(subject_email=user_email)
                     user_headers = impersonated if impersonated else oauth_headers
 
+                    # Per-user catch-up cursor: if a previous cycle could not list
+                    # this mailbox (Gmail 429/5xx), the org-wide cursor kept
+                    # advancing and — with only a short lookback — mail delivered
+                    # during the outage would be skipped FOREVER. Resume from the
+                    # earliest failed window instead; the seen-set + process_email
+                    # dedup make the wider re-scan safe and cheap.
+                    _user_since = since_epoch
+                    _catchup_key = f"delta_catchup:google:{org_id}:{user_email}"
+                    try:
+                        _cu = await redis.get(_catchup_key)
+                        if _cu:
+                            _user_since = min(_user_since, int(float(_cu)))
+                    except Exception:
+                        pass
+
                     resp = await client.get(
                         f"{GMAIL_API_BASE}/users/{user_email}/messages",
                         headers=user_headers,
-                        params={"maxResults": 50, "q": f"after:{since_epoch}"},
+                        params={"maxResults": 50, "q": f"after:{_user_since}"},
                     )
                     if resp.status_code == 401:
                         new_token = await _refresh_google_token(refresh_token)
@@ -344,14 +359,32 @@ async def _delta_sync_integration_snap(db, redis, integration):
                             resp = await client.get(
                                 f"{GMAIL_API_BASE}/users/{user_email}/messages",
                                 headers=user_headers,
-                                params={"maxResults": 50, "q": f"after:{since_epoch}"},
+                                params={"maxResults": 50, "q": f"after:{_user_since}"},
                             )
                     if resp.status_code != 200:
-                        logger.debug(f"Delta sync: Gmail list failed for {user_email}: {resp.status_code}")
+                        logger.warning(
+                            f"Delta sync: Gmail list failed for {user_email}: {resp.status_code} — "
+                            f"will catch up from epoch {_user_since} on next successful cycle"
+                        )
+                        try:
+                            # Keep the EARLIEST missed window (nx=True → don't
+                            # overwrite an older marker); expire after 7 days.
+                            await redis.set(_catchup_key, str(_user_since), ex=7 * 24 * 3600, nx=True)
+                        except Exception:
+                            pass
                         continue
 
                     _msg_list = resp.json().get("messages", [])
-                    logger.info(f"Gmail delta: {len(_msg_list)} messages for {user_email} (since epoch {since_epoch})")
+                    # Clear the catch-up marker only when the window fit in one
+                    # page — a full page (50) may mean older outage mail is still
+                    # unlisted, so keep the marker and let the next cycle continue
+                    # (the seen-set prevents reprocessing).
+                    if len(_msg_list) < 50:
+                        try:
+                            await redis.delete(_catchup_key)
+                        except Exception:
+                            pass
+                    logger.info(f"Gmail delta: {len(_msg_list)} messages for {user_email} (since epoch {_user_since})")
                     for msg_ref in _msg_list:
                         msg_id = msg_ref.get("id")
                         if not msg_id:
