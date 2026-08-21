@@ -224,6 +224,10 @@ async def release_email(
                 if new_id:
                     await mark_capture_released(cap["id"])
                     reinjected = True
+                    # The reinjected copy has a NEW provider message id — persist
+                    # it so later analyst actions (re-quarantine/spam/trash) target
+                    # the live message instead of the deleted original.
+                    threat.email_message_id = new_id
                     logger.info(f"Released captured message back to {threat.recipient_email} as {new_id}")
         except Exception as _re:
             logger.warning(f"capture reinject failed, falling back to label restore: {_re}")
@@ -374,6 +378,47 @@ async def block_permanently(
             if not threat:
                 raise HTTPException(status_code=404, detail="Threat not found after rollback")
 
+    # Physically move the message to Trash / Deleted Items too — "block" must
+    # remove the mail from the user's view, not just create a policy for
+    # future mail. Best-effort: the block policy is created regardless.
+    physically_trashed = False
+    if threat.email_message_id and threat.recipient_email:
+        try:
+            import httpx as _httpx
+            from backend.services.quarantine_service import (
+                _get_m365_app_token, _get_sa_headers_async, _request_with_retry, GMAIL_API_BASE,
+            )
+            _is_m365 = len(threat.email_message_id or "") > 100 or (threat.email_message_id or "").startswith("AAMk")
+            if _is_m365:
+                _tok = await _get_m365_app_token(str(current_user.org_id))
+                if _tok:
+                    async with _httpx.AsyncClient(timeout=30) as _c:
+                        _r = await _request_with_retry(
+                            _c, "POST",
+                            f"https://graph.microsoft.com/v1.0/users/{threat.recipient_email}/messages/{threat.email_message_id}/move",
+                            headers={"Authorization": f"Bearer {_tok}"},
+                            json={"destinationId": "deleteditems"},
+                        )
+                        physically_trashed = _r.status_code in (200, 201)
+                        if physically_trashed:
+                            _nid = (_r.json() or {}).get("id")
+                            if _nid:
+                                threat.email_message_id = _nid
+            else:
+                _headers = await _get_sa_headers_async(threat.recipient_email)
+                if _headers:
+                    async with _httpx.AsyncClient(timeout=30) as _c:
+                        _r = await _request_with_retry(
+                            _c, "POST",
+                            f"{GMAIL_API_BASE}/users/{threat.recipient_email}/messages/{threat.email_message_id}/trash",
+                            headers=_headers,
+                        )
+                        physically_trashed = _r.status_code == 200
+            if not physically_trashed:
+                logger.warning(f"block-permanently: physical trash failed for {threat.email_message_id} ({threat.recipient_email})")
+        except Exception as _te:
+            logger.warning(f"block-permanently: physical trash errored (policy still created): {_te}")
+
     threat.status = "resolved"
     threat.action_taken = "BLOCK_DELETE"
     threat.resolved_at = datetime.now(timezone.utc)
@@ -390,7 +435,7 @@ async def block_permanently(
     except Exception as _ge:
         logger.debug(f"block-permanently: graph update failed (non-fatal): {_ge}")
 
-    return {"message": "Email permanently blocked", "threat_id": threat_id, "policy_created": policy_created}
+    return {"message": "Email permanently blocked", "threat_id": threat_id, "policy_created": policy_created, "moved_to_trash": physically_trashed}
 
 
 @router.post("/{threat_id}/quarantine")

@@ -370,7 +370,9 @@ export default function QuarantinePage() {
     setTotal(prev => Math.max(0, prev - 1))
     if (selected?.id === id) setSelected(null)
     try {
-      const r = await api.post(`/api/quarantine/${id}/${action}`)
+      // Provider mailbox work (reinject/untrash with 429 retries) can exceed
+      // the 15s default timeout — allow 90s before declaring failure.
+      const r = await api.post(`/api/quarantine/${id}/${action}`, undefined, { timeout: 90000 })
       if (r.data?.gmail_moved === false && action !== 'report-fp') {
         console.warn(`Action ${action} recorded but Gmail physical move failed — DWD may need configuration`)
       }

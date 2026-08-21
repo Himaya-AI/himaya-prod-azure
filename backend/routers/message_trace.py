@@ -475,6 +475,10 @@ async def perform_action(
                     if new_id:
                         await mark_capture_released(cap["id"])
                         restored = True
+                        # Persist the reinjected copy's NEW provider message id so
+                        # later analyst actions (re-quarantine/spam/trash) target
+                        # the live message instead of the deleted original.
+                        t.email_message_id = new_id
             except Exception as _re:
                 import logging as _logging
                 _logging.getLogger(__name__).warning(f"message_trace release reinject failed: {_re}")

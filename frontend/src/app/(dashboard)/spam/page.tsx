@@ -452,23 +452,23 @@ function SpamInboxTab() {
   }
 
   const doRelease = async (id: string) => {
-    try { await api.post(`/api/spam/items/${id}/release`) } catch (e) { console.error(e) }
+    try { await api.post(`/api/spam/items/${id}/release`, undefined, { timeout: 90000 }) } catch (e) { console.error(e) }
     await Promise.all([fetchStats(), fetchItems()])
   }
 
   const doDelete = async (id: string) => {
-    try { await api.post(`/api/spam/items/${id}/delete`) } catch (e) { console.error(e) }
+    try { await api.post(`/api/spam/items/${id}/delete`, undefined, { timeout: 90000 }) } catch (e) { console.error(e) }
     await Promise.all([fetchStats(), fetchItems()])
   }
 
   const doBulkRelease = async () => {
-    await Promise.all(selected.map(id => api.post(`/api/spam/items/${id}/release`).catch(() => {})))
+    await Promise.all(selected.map(id => api.post(`/api/spam/items/${id}/release`, undefined, { timeout: 90000 }).catch(() => {})))
     setSelected([])
     await Promise.all([fetchStats(), fetchItems()])
   }
 
   const doBulkDelete = async () => {
-    await Promise.all(selected.map(id => api.post(`/api/spam/items/${id}/delete`).catch(() => {})))
+    await Promise.all(selected.map(id => api.post(`/api/spam/items/${id}/delete`, undefined, { timeout: 90000 }).catch(() => {})))
     setSelected([])
     await Promise.all([fetchStats(), fetchItems()])
   }

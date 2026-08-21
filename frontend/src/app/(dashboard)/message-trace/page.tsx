@@ -342,7 +342,10 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
     setActionLoading(action)
     setActionMsg(null)
     try {
-      const res = await api.post(`/api/message-trace/${row.id}/action`, { action })
+      // Mailbox actions do real provider API work (auth + capture + move,
+      // with 429 retries) — the 15s default timeout aborts the UI while the
+      // backend is still succeeding. Give these 90s.
+      const res = await api.post(`/api/message-trace/${row.id}/action`, { action }, { timeout: 90000 })
       const updated = { ...row }
       // Only reflect state the backend actually confirmed. A failed quarantine
       // returns HTTP 502 (handled in catch), so reaching here means it moved.
