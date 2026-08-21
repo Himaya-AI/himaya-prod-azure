@@ -251,6 +251,24 @@ async def _ingest_m365(
         logger.warning(f"M365 demo token for org {org_id} — skipping real ingestion")
         return await _run_simulated_baseline(org_id, 50, redis, progress_base, progress_share)
 
+    # Resolve the org's M365 tenant (org_domain) once so mid-scan token refreshes
+    # use the app-level client_credentials flow instead of the delegated 'common'
+    # fallback (which 403s on other users' mailboxes).
+    _m365_tenant = None
+    try:
+        import uuid as _uuid
+        from backend.models.db_models import OrgIntegration as _OI
+        from sqlalchemy import select as _sel
+        _oid = _uuid.UUID(org_id) if isinstance(org_id, str) else org_id
+        _r = await db.execute(
+            _sel(_OI.org_domain).where(
+                _OI.org_id == _oid, _OI.provider == "m365", _OI.status == "active"
+            )
+        )
+        _m365_tenant = (_r.scalar_one_or_none() or "").strip() or None
+    except Exception:
+        pass
+
     headers = {"Authorization": f"Bearer {access_token}"}
     since_date = (datetime.now(timezone.utc) - timedelta(days=DAYS_LOOKBACK)).strftime("%Y-%m-%dT%H:%M:%SZ")
     total = 0
@@ -330,7 +348,7 @@ async def _ingest_m365(
 
                     if resp.status_code == 401:
                         # Token expired — try refresh
-                        new_token = await _refresh_m365_token(refresh_token)
+                        new_token = await _refresh_m365_token(refresh_token, _m365_tenant)
                         if new_token:
                             access_token = new_token
                             headers = {"Authorization": f"Bearer {access_token}"}

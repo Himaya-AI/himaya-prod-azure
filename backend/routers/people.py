@@ -271,7 +271,7 @@ async def list_groups(
             _m365_token: str | None = None
             if _m365_intg:
                 if _m365_intg.refresh_token_enc:
-                    _m365_token = await _refresh_m365_token(_dec(_m365_intg.refresh_token_enc))
+                    _m365_token = await _refresh_m365_token(_dec(_m365_intg.refresh_token_enc), _m365_intg.org_domain)
                 if not _m365_token and _m365_intg.access_token_enc:
                     _m365_token = _dec(_m365_intg.access_token_enc)  # fallback
 
@@ -434,7 +434,7 @@ async def list_groups(
                 from backend.services.baseline_ingestion import _refresh_m365_token
 
                 refresh_token = _decrypt(integration.refresh_token_enc) if integration.refresh_token_enc else ""
-                access_token = await _refresh_m365_token(refresh_token) if refresh_token else None
+                access_token = await _refresh_m365_token(refresh_token, integration.org_domain) if refresh_token else None
                 if not access_token:
                     access_token = _decrypt(integration.access_token_enc) if integration.access_token_enc else ""
                 if not access_token:

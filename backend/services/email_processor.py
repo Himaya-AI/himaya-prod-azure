@@ -667,34 +667,65 @@ async def process_email(
                 )
                 action = "FLAGGED_HIGH"
 
-        # Step 5b: Auto-action via Gmail API based on determined action
+        # Step 5b: Auto-action based on determined action.
+        # provider tells us which mailbox API to drive. Both providers use
+        # hard-capture (fetch → encrypt-store → remove from mailbox entirely) so
+        # quarantined mail is pulled OUT — not merely labelled/foldered where the
+        # user can still see it. org_id is required for hard-capture; without it
+        # the call silently degrades to a visible label move, so we ALWAYS pass it.
         auto_action_success = False
+        _provider = (email_data.get("provider") or "").lower()
         if action == "QUARANTINED" and message_id and recipient_email:
             try:
-                from backend.services.quarantine_service import quarantine_gmail_message
-                auto_action_success = await quarantine_gmail_message(
-                    user_email=recipient_email,
-                    gmail_message_id=message_id,
-                    access_token=None,
-                )
-                if auto_action_success:
-                    logger.info(f"Auto-quarantined email {message_id} for {recipient_email}")
+                if _provider in ("m365", "microsoft", "office365", "outlook"):
+                    from backend.services.quarantine_service import quarantine_m365_message_with_fallback
+                    auto_action_success = await quarantine_m365_message_with_fallback(
+                        user_email=recipient_email,
+                        m365_message_id=message_id,
+                        org_id=org_id,
+                    )
                 else:
-                    logger.warning(f"Auto-quarantine failed for {message_id} — email remains in inbox")
+                    from backend.services.quarantine_service import quarantine_gmail_message
+                    auto_action_success = await quarantine_gmail_message(
+                        user_email=recipient_email,
+                        gmail_message_id=message_id,
+                        access_token=None,
+                        org_id=org_id,
+                    )
+                if auto_action_success:
+                    logger.info(f"Auto-quarantined email {message_id} for {recipient_email} (provider={_provider or 'gmail'})")
+                else:
+                    logger.warning(f"Auto-quarantine failed for {message_id} — email remains in mailbox")
             except Exception as _aq_err:
                 logger.warning(f"Auto-quarantine error (non-fatal): {_aq_err}")
 
         elif action == "MARKED_SPAM" and message_id and recipient_email:
             try:
-                from backend.services.quarantine_service import mark_as_spam_gmail
-                auto_action_success = await mark_as_spam_gmail(
-                    user_email=recipient_email,
-                    gmail_message_id=message_id,
-                )
+                if _provider in ("m365", "microsoft", "office365", "outlook"):
+                    from backend.services.quarantine_service import mark_as_spam_m365
+                    auto_action_success = await mark_as_spam_m365(
+                        user_email=recipient_email,
+                        m365_message_id=message_id,
+                        org_id=org_id,
+                    )
+                else:
+                    from backend.services.quarantine_service import mark_as_spam_gmail
+                    auto_action_success = await mark_as_spam_gmail(
+                        user_email=recipient_email,
+                        gmail_message_id=message_id,
+                    )
                 if auto_action_success:
-                    logger.info(f"Auto-marked spam {message_id} for {recipient_email}")
+                    logger.info(f"Auto-marked spam {message_id} for {recipient_email} (provider={_provider or 'gmail'})")
             except Exception as _sp_err:
                 logger.warning(f"Auto-spam mark error (non-fatal): {_sp_err}")
+
+        # Truthful action/status: if we decided to QUARANTINE but the physical
+        # mailbox move did not succeed, record QUARANTINE_FAILED (status open) so
+        # the console never claims containment that didn't happen and analysts can
+        # retry. Any other action (spam/flag/clean) keeps its decided value.
+        _effective_action = action
+        if action == "QUARANTINED" and not auto_action_success:
+            _effective_action = "QUARANTINE_FAILED"
 
         # Map compliance controls
         sama_controls, nca_controls = _map_compliance_controls(threat_type)
@@ -776,8 +807,8 @@ async def process_email(
                     _existing_threat.content_score     = content_result["content_score"]
                     _existing_threat.graph_score       = graph_score
                     _existing_threat.reputation_score  = reputation_result["reputation_score"]
-                    _existing_threat.action_taken      = action
-                    _existing_threat.status            = "open" if action in ("QUARANTINED", "FLAGGED_HIGH") else "resolved"
+                    _existing_threat.action_taken      = _effective_action
+                    _existing_threat.status            = "quarantined" if _effective_action == "QUARANTINED" else ("open" if _effective_action in ("QUARANTINE_FAILED", "FLAGGED_HIGH") else "resolved")
                     _existing_threat.ai_explanation_en = content_result["ai_explanation_en"]
                     _existing_threat.ai_explanation_ar = content_result["ai_explanation_ar"]
                     _existing_threat.threat_indicators = all_indicators
@@ -805,11 +836,12 @@ async def process_email(
                         content_score=content_result["content_score"],
                         reputation_score=reputation_result["reputation_score"],
                         status=(
-                            "quarantined" if action in ("QUARANTINED", "QUARANTINE", "BLOCK_DELETE") else
-                            "new" if action in ("FLAGGED_HIGH", "FLAGGED_LOW", "BANNER", "HOLD") else
+                            "quarantined" if _effective_action in ("QUARANTINED", "QUARANTINE", "BLOCK_DELETE") else
+                            "open" if _effective_action == "QUARANTINE_FAILED" else
+                            "new" if _effective_action in ("FLAGGED_HIGH", "FLAGGED_LOW", "BANNER", "HOLD") else
                             "resolved"
                         ),
-                        action_taken=action,
+                        action_taken=_effective_action,
                         ai_explanation_en=content_result["ai_explanation_en"],
                         ai_explanation_ar=content_result["ai_explanation_ar"],
                         threat_indicators=all_indicators,

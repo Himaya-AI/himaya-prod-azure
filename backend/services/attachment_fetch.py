@@ -77,7 +77,7 @@ async def fetch_threat_attachments(db, threat) -> list[dict]:
                         pass
                 elif intg.provider == "m365" and not headers:
                     try:
-                        tok = (await _refresh_m365_token(_dec(intg.refresh_token_enc))
+                        tok = (await _refresh_m365_token(_dec(intg.refresh_token_enc), intg.org_domain)
                                if intg.refresh_token_enc
                                else (_dec(intg.access_token_enc) if intg.access_token_enc else None))
                         if tok:

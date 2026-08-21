@@ -138,7 +138,10 @@ async def _get_access_token(integration: OrgIntegration) -> str:
             access_token = new_tok
     elif provider == "m365":
         from backend.services.baseline_ingestion import _refresh_m365_token
-        new_tok = await _refresh_m365_token(refresh_token)
+        # Pass the org's concrete tenant (org_domain) so the app-level
+        # client_credentials flow is used (Mail.ReadWrite across ALL mailboxes).
+        # Without it, the delegated 'common' fallback 403s on other mailboxes.
+        new_tok = await _refresh_m365_token(refresh_token, tenant_id=(integration.org_domain or None))
         if new_tok:
             access_token = new_tok
     return access_token
@@ -464,7 +467,7 @@ async def _sync_org_spam(org_id: str, db: AsyncSession) -> dict:
         elif provider == "m365":
             try:
                 from backend.services.baseline_ingestion import _refresh_m365_token
-                new_tok = await _refresh_m365_token(refresh_token)
+                new_tok = await _refresh_m365_token(refresh_token, tenant_id=(org_domain or None))
                 if new_tok:
                     access_token = new_tok
             except Exception:

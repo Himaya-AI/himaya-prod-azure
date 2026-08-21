@@ -275,11 +275,14 @@ async def release_email(
                     except Exception:
                         pass
 
-                    remove_labels = ["SPAM"]
+                    # TRASH removal un-trashes the message (Trash is the current
+                    # quarantine fallback); SPAM + the legacy Himaya-Quarantine
+                    # label are removed for older quarantines.
+                    remove_labels = ["SPAM", "TRASH"]
                     if helios_label_id:
                         remove_labels.append(helios_label_id)
 
-                    # Restore INBOX and remove Himaya-Quarantine + SPAM labels
+                    # Restore INBOX and remove Trash / Himaya-Quarantine + SPAM labels
                     resp = await client.post(
                         f"https://gmail.googleapis.com/gmail/v1/users/{threat.recipient_email}/messages/{threat.email_message_id}/modify",
                         headers={**headers, "Content-Type": "application/json"},
@@ -411,11 +414,6 @@ async def manual_quarantine(
     if not threat:
         raise HTTPException(status_code=404, detail="Threat not found")
 
-    # Mark as quarantined in DB
-    threat.status = "quarantined"
-    threat.action_taken = "QUARANTINED"
-    await db.flush()
-
     # Attempt to physically move the email — detect provider by message_id format
     physically_moved = False
     is_m365 = len(threat.email_message_id or '') > 100 or (threat.email_message_id or '').startswith('AAMk')
@@ -441,9 +439,16 @@ async def manual_quarantine(
             import logging
             logging.getLogger(__name__).warning(f"Manual quarantine move failed ({'m365' if is_m365 else 'gmail'}): {e}")
 
+    # Only record the quarantined state when the mailbox move actually succeeded —
+    # otherwise the console would show "contained" while the email is still visible.
+    if physically_moved:
+        threat.status = "quarantined"
+        threat.action_taken = "QUARANTINED"
+        await db.flush()
+
     provider = 'M365' if is_m365 else 'Gmail'
     return {
-        "message": f"Email quarantined and moved ({provider})" if physically_moved else f"Quarantine recorded — physical move to {provider} folder failed",
+        "message": f"Email quarantined and moved ({provider})" if physically_moved else f"Quarantine FAILED — could not move the email out of the {provider} mailbox",
         "threat_id": threat_id,
         "physically_moved": physically_moved,
         "gmail_moved": physically_moved,  # keep legacy field name
@@ -490,12 +495,18 @@ async def mark_as_spam(
             import logging
             logging.getLogger(__name__).warning(f"Spam mark failed (provider={'m365' if is_m365 else 'gmail'}): {e}")
 
-    threat.status = "resolved"
-    threat.action_taken = "MARKED_SPAM"
-    threat.resolved_at = datetime.now(timezone.utc)
-    await db.flush()
     provider_label = "Junk Email (M365)" if (threat.email_message_id or "").startswith("AAMk") or len(threat.email_message_id or "") > 100 else "Spam (Gmail)"
-    return {"message": f"Marked as spam — moved to {provider_label}", "threat_id": threat_id, "gmail_moved": spam_moved}
+    # Only record MARKED_SPAM when the mailbox move actually succeeded.
+    if spam_moved:
+        threat.status = "resolved"
+        threat.action_taken = "MARKED_SPAM"
+        threat.resolved_at = datetime.now(timezone.utc)
+        await db.flush()
+        return {"message": f"Marked as spam — moved to {provider_label}", "threat_id": threat_id, "gmail_moved": True}
+    raise HTTPException(
+        status_code=502,
+        detail=f"Could not move the email to {provider_label} (provider API error). The message was NOT marked as spam.",
+    )
 
 
 @router.post("/{threat_id}/report-fp")

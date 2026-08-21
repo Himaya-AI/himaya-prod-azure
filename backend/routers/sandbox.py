@@ -603,7 +603,7 @@ async def create_interactive_session(
                                     pass
                             elif _intg.provider == "m365" and not _gmail_headers:
                                 try:
-                                    _tok = (await _refresh_m365_token(_dec_s(_intg.refresh_token_enc))
+                                    _tok = (await _refresh_m365_token(_dec_s(_intg.refresh_token_enc), _intg.org_domain)
                                             if _intg.refresh_token_enc
                                             else (_dec_s(_intg.access_token_enc) if _intg.access_token_enc else None))
                                     if _tok:

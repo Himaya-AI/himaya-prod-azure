@@ -127,6 +127,37 @@ async def store_capture(
         return None
 
 
+async def capture_exists(
+    *, org_id: str, user_email: str, original_message_id: str
+) -> bool:
+    """True if a still-held capture already exists for this message. Used to make
+    hard-capture idempotent: a re-quarantine of an already-captured (and therefore
+    already-deleted) message must report success, not a false failure — otherwise
+    the second attempt's 404 on the vanished original overwrites the correct
+    QUARANTINED status with QUARANTINE_FAILED."""
+    if not org_id or not original_message_id:
+        return False
+    from backend.database import AsyncSessionLocal
+    from sqlalchemy import text as _text
+    try:
+        async with AsyncSessionLocal() as db:
+            row = (await db.execute(
+                _text(
+                    """
+                    SELECT 1 FROM quarantined_captures
+                    WHERE org_id = :org_id AND user_email = :ue
+                      AND original_message_id = :omid AND status = 'held'
+                    LIMIT 1
+                    """
+                ),
+                {"org_id": org_id, "ue": user_email, "omid": original_message_id},
+            )).scalar()
+            return bool(row)
+    except Exception as e:
+        logger.debug(f"capture_exists check failed (non-fatal): {e}")
+        return False
+
+
 async def delete_capture(cap_id: str) -> None:
     """Remove a stored capture (used to roll back if the mailbox delete fails)."""
     from backend.database import AsyncSessionLocal
@@ -184,7 +215,9 @@ async def mark_capture_released(cap_id: str) -> None:
 # ── Gmail capture / reinject ──────────────────────────────────────────────────
 async def _fetch_gmail_raw(client: httpx.AsyncClient, headers: dict, user_email: str, msg_id: str):
     """Return (raw_bytes, internet_message_id) or (None, None)."""
-    resp = await client.get(
+    from backend.services.quarantine_service import _request_with_retry
+    resp = await _request_with_retry(
+        client, "GET",
         f"{GMAIL_API_BASE}/users/{user_email}/messages/{msg_id}",
         headers=headers,
         params={"format": "raw"},
@@ -209,10 +242,16 @@ async def capture_gmail(
     *, user_email: str, msg_id: str, headers: dict, org_id: str | None, threat_id: str | None = None
 ) -> bool:
     """Fetch → store → hard-delete a Gmail message. Returns True only if the
-    message was both stored AND removed from the mailbox. On any failure the
+    the message was both stored AND removed from the mailbox. On any failure the
     stored copy (if any) is rolled back so the caller can fall back cleanly."""
     if not org_id:
         return False
+    # Idempotency: if we already hold a capture for this message, it has already
+    # been pulled out of the mailbox. A re-quarantine must report success — the
+    # original is gone (so a fresh fetch would 404 and look like a failure).
+    if await capture_exists(org_id=org_id, user_email=user_email, original_message_id=msg_id):
+        logger.info(f"capture_gmail: {msg_id} already held for {user_email} — idempotent success")
+        return True
     # Gmail occasionally drops the connection mid-request ("Server disconnected
     # without sending a response"). Without a retry a single transient blip makes
     # us permanently fall back to the hidden-label move (which a user CAN un-hide),
@@ -248,7 +287,9 @@ async def capture_gmail(
             del_resp = None
             for _attempt in range(1, _RETRIES + 1):
                 try:
-                    del_resp = await client.delete(
+                    from backend.services.quarantine_service import _request_with_retry as _rwr
+                    del_resp = await _rwr(
+                        client, "DELETE",
                         f"{GMAIL_API_BASE}/users/{user_email}/messages/{msg_id}",
                         headers=headers,
                     )
@@ -287,8 +328,12 @@ async def reinject_gmail(user_email: str, raw: bytes) -> str | None:
     try:
         raw_b64 = base64.urlsafe_b64encode(raw).decode()
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                f"{GMAIL_API_BASE}/users/{user_email}/messages/insert",
+            # Gmail's REST path for messages.insert is POST .../messages
+            # (NOT .../messages/insert, which 404s). Verified against the live API.
+            from backend.services.quarantine_service import _request_with_retry as _rwr
+            resp = await _rwr(
+                client, "POST",
+                f"{GMAIL_API_BASE}/users/{user_email}/messages",
                 headers={**headers, "Content-Type": "application/json"},
                 params={"internalDateSource": "dateHeader"},
                 json={"raw": raw_b64, "labelIds": ["INBOX", "UNREAD"]},
@@ -316,7 +361,9 @@ async def _fetch_m365_mime(client: httpx.AsyncClient, headers: dict, user_email:
             imid = meta.json().get("internetMessageId")
     except Exception:
         pass
-    resp = await client.get(
+    from backend.services.quarantine_service import _request_with_retry as _rwr
+    resp = await _rwr(
+        client, "GET",
         f"{GRAPH_API_BASE}/users/{user_email}/messages/{msg_id}/$value",
         headers=headers,
     )
@@ -333,6 +380,11 @@ async def capture_m365(
     message. Returns True only if stored AND removed from normal folders."""
     if not org_id:
         return False
+    # Idempotency (see capture_gmail): already-held capture means the original was
+    # already removed — report success instead of a false failure on re-quarantine.
+    if await capture_exists(org_id=org_id, user_email=user_email, original_message_id=msg_id):
+        logger.info(f"capture_m365: {msg_id} already held for {user_email} — idempotent success")
+        return True
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -347,7 +399,9 @@ async def capture_m365(
             if not cap_id:
                 return False
             # Move to Deleted Items → get the new id → delete it (Recoverable Items).
-            mv = await client.post(
+            from backend.services.quarantine_service import _request_with_retry as _rwr
+            mv = await _rwr(
+                client, "POST",
                 f"{GRAPH_API_BASE}/users/{user_email}/messages/{msg_id}/move",
                 headers=headers,
                 json={"destinationId": "deleteditems"},
@@ -382,7 +436,9 @@ async def reinject_m365(user_email: str, mime: bytes, org_id: str) -> str | None
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             # Create from MIME (lands in Drafts).
-            create = await client.post(
+            from backend.services.quarantine_service import _request_with_retry as _rwr
+            create = await _rwr(
+                client, "POST",
                 f"{GRAPH_API_BASE}/users/{user_email}/messages",
                 headers={"Authorization": f"Bearer {token}", "Content-Type": "text/plain"},
                 content=base64.b64encode(mime),

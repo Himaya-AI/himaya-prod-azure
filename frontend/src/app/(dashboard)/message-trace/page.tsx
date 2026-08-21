@@ -344,13 +344,19 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
     try {
       const res = await api.post(`/api/message-trace/${row.id}/action`, { action })
       const updated = { ...row }
+      // Only reflect state the backend actually confirmed. A failed quarantine
+      // returns HTTP 502 (handled in catch), so reaching here means it moved.
       if (action === 'quarantine') { updated.action_taken = 'QUARANTINED'; updated.status = 'quarantined' }
       if (action === 'release')    { updated.action_taken = 'CLEAN';       updated.status = 'resolved' }
       if (action === 'false_positive') { updated.action_taken = 'CLEAN'; updated.status = 'false_positive'; updated.threat_type = 'CLEAN' }
       setRow(updated)
       onRowUpdated(updated)
       setCompletedAction(action)
-      setActionMsg(`✓ ${label} applied`)
+      if (action === 'release' && res?.data?.restored === false) {
+        setActionMsg('Released in Himaya, but the mailbox copy could not be restored automatically.')
+      } else {
+        setActionMsg(`✓ ${label} applied`)
+      }
       // Refresh detail
       const r2 = await api.get(`/api/message-trace/${row.id}/detail`, { timeout: 15000 })
       setDetail(r2.data)

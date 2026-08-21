@@ -19,6 +19,39 @@ GRAPH_API_BASE = "https://graph.microsoft.com/v1.0"
 HELIOS_LABEL = "Himaya-Quarantine"
 
 
+async def _request_with_retry(
+    client: "httpx.AsyncClient", method: str, url: str,
+    *, max_attempts: int = 4, **kwargs,
+) -> "httpx.Response":
+    """
+    Issue a Graph/Gmail request, retrying on 429 and 5xx with exponential backoff.
+
+    Honors the provider's ``Retry-After`` header when present (both Gmail and
+    Graph return it on 429). Without this, a transient per-user rate limit made
+    quarantine/spam/label moves silently fail — leaving mail in the inbox.
+    """
+    import asyncio as _asyncio
+    resp = None
+    for attempt in range(max_attempts):
+        resp = await client.request(method, url, **kwargs)
+        if resp.status_code != 429 and resp.status_code < 500:
+            return resp
+        if attempt == max_attempts - 1:
+            return resp
+        delay = 2.0 ** attempt  # 1s, 2s, 4s
+        ra = resp.headers.get("Retry-After")
+        if ra:
+            try:
+                delay = max(delay, float(ra))
+            except ValueError:
+                pass
+        logger.warning(
+            f"{method} {url.split('?')[0]} -> {resp.status_code}; retry {attempt + 1}/{max_attempts} in {delay:.0f}s"
+        )
+        await _asyncio.sleep(min(delay, 30.0))
+    return resp
+
+
 def _get_sa_headers(user_email: str) -> dict | None:
     """Sync wrapper — only use outside of async contexts."""
     try:
@@ -50,8 +83,12 @@ async def quarantine_gmail_message(
     hard-deleted so the user cannot see it anywhere (not even All Mail). Requires
     org_id (to key the stored copy) and the full mail DWD scope.
 
-    Fallback (capture disabled/failed, or no org_id): the legacy behaviour —
-    move to the hidden "Himaya-Quarantine" label and remove from INBOX.
+    Fallback (capture disabled/failed, or no org_id): move the message to Gmail
+    TRASH. Unlike the old hidden-label move, a trashed message does NOT appear in
+    Inbox OR "All Mail" — it only shows under Trash and Gmail auto-purges it after
+    ~30 days. This is a single native, retry-able call so it survives per-user 429
+    rate limits far better than the label move, and it is reversible on release
+    (untrash → Inbox).
 
     Returns True if the message was quarantined by either path.
     """
@@ -65,7 +102,7 @@ async def quarantine_gmail_message(
         logger.warning(f"No auth available to quarantine {gmail_message_id} for {user_email}")
         return False
 
-    # Try full capture-and-remove first; fall back to hidden move on any failure.
+    # Try full capture-and-remove first; fall back to Trash on any failure.
     try:
         from backend.services.mailbox_capture_service import hard_capture_enabled, capture_gmail
         if hard_capture_enabled() and org_id:
@@ -74,37 +111,30 @@ async def quarantine_gmail_message(
                 org_id=org_id, threat_id=threat_id,
             ):
                 return True
-            logger.info(f"gmail capture fell back to hidden move for {gmail_message_id}")
+            logger.info(f"gmail capture fell back to Trash for {gmail_message_id}")
     except Exception as _ce:
-        logger.warning(f"gmail capture path errored, using hidden move: {_ce}")
+        logger.warning(f"gmail capture path errored, using Trash: {_ce}")
 
+    # Fallback: move the message to Trash. A trashed message is removed from the
+    # Inbox AND from "All Mail" (it only appears under Trash), so — unlike the old
+    # hidden-label move — the user does not see it sitting in a browsable folder.
+    # Single native call, retried on 429; reversible on release (untrash → Inbox).
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            # Step 1: Get or create "Himaya-Quarantine" label
-            label_id = await _get_or_create_gmail_label(client, headers, user_email)
-
-            # Step 2: Move message — remove INBOX, add Himaya-Quarantine label
-            modify_payload = {
-                "removeLabelIds": ["INBOX"],
-            }
-            if label_id:
-                modify_payload["addLabelIds"] = [label_id]
-
-            resp = await client.post(
-                f"{GMAIL_API_BASE}/users/{user_email}/messages/{gmail_message_id}/modify",
-                headers={**headers, "Content-Type": "application/json"},
-                json=modify_payload,
+            resp = await _request_with_retry(
+                client, "POST",
+                f"{GMAIL_API_BASE}/users/{user_email}/messages/{gmail_message_id}/trash",
+                headers=headers,
             )
-
             if resp.status_code == 200:
-                logger.info(f"Quarantined Gmail message {gmail_message_id} for {user_email}")
+                logger.info(f"Quarantined (trashed) Gmail message {gmail_message_id} for {user_email}")
                 return True
             else:
-                logger.warning(f"Gmail quarantine failed for {user_email}/{gmail_message_id}: {resp.status_code} {resp.text[:200]}")
+                logger.warning(f"Gmail quarantine (trash) failed for {user_email}/{gmail_message_id}: {resp.status_code} {resp.text[:200]}")
                 return False
 
     except Exception as e:
-        logger.warning(f"Gmail quarantine error for {user_email}/{gmail_message_id}: {e}")
+        logger.warning(f"Gmail quarantine (trash) error for {user_email}/{gmail_message_id}: {e}")
         return False
 
 
@@ -215,7 +245,8 @@ async def mark_as_spam_gmail(user_email: str, gmail_message_id: str) -> bool:
         return False
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
+            resp = await _request_with_retry(
+                client, "POST",
                 f"{GMAIL_API_BASE}/users/{user_email}/messages/{gmail_message_id}/modify",
                 headers={**headers, "Content-Type": "application/json"},
                 json={"addLabelIds": ["SPAM"], "removeLabelIds": ["INBOX"]},
@@ -251,7 +282,8 @@ async def quarantine_m365_message(user_email: str, m365_message_id: str, access_
                 return False
 
             # Step 2: Move message
-            resp = await client.post(
+            resp = await _request_with_retry(
+                client, "POST",
                 f"{GRAPH_API_BASE}/users/{user_email}/messages/{m365_message_id}/move",
                 headers=headers,
                 json={"destinationId": folder_id},
@@ -615,10 +647,17 @@ async def _get_m365_app_token(org_id: str) -> str | None:
             integration = _res.scalar_one_or_none()
             if not integration:
                 return None
+            # Pass the org's concrete tenant (stored in org_domain, e.g.
+            # "contoso.onmicrosoft.com") so _refresh_m365_token uses the app-level
+            # client_credentials flow — which grants Mail.ReadWrite across ALL
+            # mailboxes. Without a tenant it falls back to the delegated 'common'
+            # refresh grant, whose token 403s on other users' mailboxes and makes
+            # quarantine/spam/capture silently fail. client_credentials needs no
+            # refresh token, so call it even when refresh_token is absent.
+            tenant = (getattr(integration, "org_domain", None) or "").strip() or None
             refresh_token = _decrypt(integration.refresh_token_enc) if integration.refresh_token_enc else None
-            if refresh_token:
-                token = await _refresh_m365_token(refresh_token)
-                return token
+            token = await _refresh_m365_token(refresh_token, tenant_id=tenant)
+            return token
     except Exception as _e:
         logger.debug(f"_get_m365_app_token failed: {_e}")
     return None
@@ -642,7 +681,8 @@ async def block_to_trash_m365(user_email: str, m365_message_id: str, access_toke
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
+            resp = await _request_with_retry(
+                client, "POST",
                 f"{GRAPH_API_BASE}/users/{user_email}/messages/{m365_message_id}/move",
                 headers=headers,
                 json={"destinationId": "deleteditems"},
@@ -810,7 +850,8 @@ async def mark_as_spam_m365(
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     try:
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
+            resp = await _request_with_retry(
+                client, "POST",
                 f"{GRAPH_API_BASE}/users/{user_email}/messages/{m365_message_id}/move",
                 headers=headers,
                 json={"destinationId": "junkemail"},

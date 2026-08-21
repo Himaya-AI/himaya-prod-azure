@@ -427,6 +427,22 @@ async def perform_action(
             except Exception as _e:
                 import logging as _logging
                 _logging.getLogger(__name__).warning(f"Quarantine {'M365' if _is_m365_msg else 'Gmail'} call failed: {_e}")
+        # Be truthful: only record the message as quarantined when it was
+        # actually moved out of the mailbox. Otherwise the analyst would see
+        # "Quarantined" while the email is still sitting in the user's inbox.
+        if not success:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                f"message_trace quarantine did NOT move {t.email_message_id} for {t.recipient_email} "
+                f"(provider={'m365' if _is_m365_msg else 'gmail'}); leaving status unchanged"
+            )
+            t.analyst_notes = (notes + " " if notes else "") + "[quarantine attempted — physical move failed]"
+            t.reviewed_at = datetime.utcnow()
+            await db.commit()
+            raise HTTPException(
+                status_code=502,
+                detail="Could not move the email out of the mailbox (provider API error). The message was NOT quarantined.",
+            )
         t.action_taken = "QUARANTINED"
         t.status = "quarantined"
         t.analyst_verdict = "confirmed_malicious"
@@ -434,24 +450,51 @@ async def perform_action(
         t.analyst_notes = notes or f"Manually quarantined by analyst"
         t.reviewed_at = datetime.utcnow()
         await db.commit()
-        return {"status": "ok", "action": "quarantined", "gmail_moved": success}
+        return {"status": "ok", "action": "quarantined", "moved": True, "gmail_moved": success}
 
     elif action == "release":
-        # Restore from quarantine — move back to inbox
+        # Restore from quarantine. Preferred path: re-inject the hard-captured
+        # encrypted copy (works for BOTH Gmail and M365). Fallback: Gmail label
+        # restore for legacy hidden-folder quarantine.
+        restored = False
         if t.email_message_id and t.recipient_email:
             try:
-                from backend.services.quarantine_service import _get_sa_headers
-                import httpx as _httpx
-                headers = _get_sa_headers(t.recipient_email)
-                if headers:
-                    async with _httpx.AsyncClient(timeout=15) as client:
-                        await client.post(
-                            f"https://gmail.googleapis.com/gmail/v1/users/{t.recipient_email}/messages/{t.email_message_id}/modify",
-                            headers={**headers, "Content-Type": "application/json"},
-                            json={"addLabelIds": ["INBOX"], "removeLabelIds": ["SPAM"]},
-                        )
-            except Exception:
-                pass
+                from backend.services.mailbox_capture_service import (
+                    get_capture_for_release, reinject_gmail, reinject_m365, mark_capture_released,
+                )
+                cap = await get_capture_for_release(
+                    org_id=str(org_id),
+                    user_email=t.recipient_email,
+                    original_message_id=t.email_message_id,
+                )
+                if cap:
+                    if cap["provider"] == "m365":
+                        new_id = await reinject_m365(t.recipient_email, cap["raw"], str(org_id))
+                    else:
+                        new_id = await reinject_gmail(t.recipient_email, cap["raw"])
+                    if new_id:
+                        await mark_capture_released(cap["id"])
+                        restored = True
+            except Exception as _re:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(f"message_trace release reinject failed: {_re}")
+
+            # Legacy fallback: Gmail label restore (hidden-folder quarantine only).
+            if not restored and not _is_m365_msg:
+                try:
+                    from backend.services.quarantine_service import _get_sa_headers
+                    import httpx as _httpx
+                    headers = _get_sa_headers(t.recipient_email)
+                    if headers:
+                        async with _httpx.AsyncClient(timeout=15) as client:
+                            r = await client.post(
+                                f"https://gmail.googleapis.com/gmail/v1/users/{t.recipient_email}/messages/{t.email_message_id}/modify",
+                                headers={**headers, "Content-Type": "application/json"},
+                                json={"addLabelIds": ["INBOX"], "removeLabelIds": ["SPAM", "TRASH"]},
+                            )
+                            restored = r.status_code == 200
+                except Exception:
+                    pass
         t.action_taken = "CLEAN"
         t.status = "resolved"
         t.analyst_verdict = "false_positive"
@@ -459,7 +502,7 @@ async def perform_action(
         t.analyst_notes = notes or "Released from quarantine by analyst"
         t.reviewed_at = datetime.utcnow()
         await db.commit()
-        return {"status": "ok", "action": "released"}
+        return {"status": "ok", "action": "released", "restored": restored}
 
     elif action == "block_sender":
         # Create a policy rule that blocks all future emails from this sender/domain

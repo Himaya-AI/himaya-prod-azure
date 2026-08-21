@@ -933,29 +933,44 @@ async def _apply_verdict(
             threat.threat_indicators = existing_ti
 
             if verdict == "QUARANTINE":
-                threat.action_taken = "QUARANTINED"
-                threat.status = "resolved"   # resolved + action=QUARANTINED means contained
-                threat.resolved_at = now
-                # Physically move the email to quarantine folder
+                # Physically move the email FIRST, then record status truthfully.
+                # Previously this fired the move as a background task and marked the
+                # threat QUARANTINED regardless of the result — so a failed move left
+                # the malicious mail in the inbox while the console showed "contained".
+                moved = False
                 try:
                     from backend.services.quarantine_service import quarantine_gmail_message, quarantine_m365_message_with_fallback
                     if threat.email_message_id and threat.recipient_email:
                         is_m365 = len(threat.email_message_id or '') > 100 or (threat.email_message_id or '').startswith('AAMk')
                         if is_m365:
-                            asyncio.create_task(quarantine_m365_message_with_fallback(
+                            moved = await quarantine_m365_message_with_fallback(
                                 user_email=threat.recipient_email,
                                 m365_message_id=threat.email_message_id,
                                 org_id=org_id,
-                            ))
+                            )
                         else:
-                            asyncio.create_task(quarantine_gmail_message(
+                            moved = await quarantine_gmail_message(
                                 user_email=threat.recipient_email,
                                 gmail_message_id=threat.email_message_id,
                                 org_id=str(org_id) if org_id else None,
                                 threat_id=str(threat.id),
-                            ))
+                            )
                 except Exception as _qe:
-                    logger.warning(f"auto_triage: physical quarantine move failed (non-fatal): {_qe}")
+                    logger.warning(f"auto_triage: physical quarantine move errored: {_qe}")
+
+                if moved:
+                    threat.action_taken = "QUARANTINED"
+                    threat.status = "resolved"   # resolved + action=QUARANTINED means contained
+                    threat.resolved_at = now
+                else:
+                    # Move failed — do NOT claim containment. Flag for human review
+                    # so the mail is not silently left in the inbox.
+                    threat.action_taken = "QUARANTINE_FAILED"
+                    threat.status = "open"
+                    logger.error(
+                        f"auto_triage: QUARANTINE physical move FAILED for threat {threat.id} "
+                        f"({threat.recipient_email}, msg={threat.email_message_id}); email remains in mailbox"
+                    )
 
                 # Update Neo4j — add FLAGGED_AS edge so future graph scoring is informed
                 try:
@@ -969,27 +984,37 @@ async def _apply_verdict(
                     logger.debug(f"auto_triage: graph QUARANTINE update failed (non-fatal): {_gqe}")
 
             elif verdict == "MARK_AS_SPAM":
-                threat.action_taken = "MARKED_SPAM"
-                threat.status = "resolved"  # spam = resolved (moved to junk)
-                threat.resolved_at = now
-                # Physically move the email to spam/junk folder
+                # Move to spam/junk FIRST, then record status truthfully.
+                moved = False
                 try:
                     from backend.services.quarantine_service import mark_as_spam_gmail, mark_as_spam_m365
                     if threat.email_message_id and threat.recipient_email:
                         is_m365 = len(threat.email_message_id or '') > 100 or (threat.email_message_id or '').startswith('AAMk')
                         if is_m365:
-                            asyncio.create_task(mark_as_spam_m365(
+                            moved = await mark_as_spam_m365(
                                 user_email=threat.recipient_email,
                                 m365_message_id=threat.email_message_id,
                                 org_id=org_id,
-                            ))
+                            )
                         else:
-                            asyncio.create_task(mark_as_spam_gmail(
+                            moved = await mark_as_spam_gmail(
                                 user_email=threat.recipient_email,
                                 gmail_message_id=threat.email_message_id,
-                            ))
+                            )
                 except Exception as _se:
-                    logger.warning(f"auto_triage: physical spam move failed (non-fatal): {_se}")
+                    logger.warning(f"auto_triage: physical spam move errored: {_se}")
+
+                if moved:
+                    threat.action_taken = "MARKED_SPAM"
+                    threat.status = "resolved"  # spam = resolved (moved to junk)
+                    threat.resolved_at = now
+                else:
+                    threat.action_taken = "SPAM_MOVE_FAILED"
+                    threat.status = "open"
+                    logger.error(
+                        f"auto_triage: MARK_AS_SPAM physical move FAILED for threat {threat.id} "
+                        f"({threat.recipient_email}, msg={threat.email_message_id}); email remains in inbox"
+                    )
 
             elif verdict == "ESCALATE":
                 # Escalated = needs human review, stays open

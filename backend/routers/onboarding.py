@@ -1038,7 +1038,7 @@ async def search_groups_for_scope(
     results = []
     try:
         if provider == "m365":
-            new_tok = await _refresh_m365_token(refresh_token)
+            new_tok = await _refresh_m365_token(refresh_token, integration.org_domain)
             if new_tok: access_token = new_tok
             async with _hx.AsyncClient(timeout=10) as client:
                 url = f"https://graph.microsoft.com/v1.0/groups?$select=id,mail,displayName,description"
