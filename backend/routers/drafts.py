@@ -384,6 +384,10 @@ def _extract_gmail_body(payload: dict) -> str:
 async def _fetch_gmail_drafts(user_email: str, access_token: str) -> list[dict]:
     """Fetch all draft messages from Gmail for a user using the Drafts API with pagination."""
     drafts = []
+    from backend.services.gmail_quota import gmail_user_cooling_down, note_gmail_429
+    if await gmail_user_cooling_down(user_email):
+        logger.info(f"Draft scan: skipping {user_email} — Gmail cooldown active")
+        return drafts
     try:
         async with httpx.AsyncClient(timeout=60) as client:
             headers = {"Authorization": f"Bearer {access_token}"}
@@ -404,6 +408,8 @@ async def _fetch_gmail_drafts(user_email: str, access_token: str) -> list[dict]:
                         f"Gmail drafts list failed for {user_email}: "
                         f"{list_resp.status_code} {list_resp.text[:200]}"
                     )
+                    if list_resp.status_code == 429:
+                        await note_gmail_429(user_email)
                     break
                 page = list_resp.json()
                 for d in page.get("drafts", []):

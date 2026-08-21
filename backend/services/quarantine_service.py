@@ -48,7 +48,11 @@ async def _request_with_retry(
         logger.warning(
             f"{method} {url.split('?')[0]} -> {resp.status_code}; retry {attempt + 1}/{max_attempts} in {delay:.0f}s"
         )
-        await _asyncio.sleep(min(delay, 30.0))
+        # Cap each sleep low so a throttled mailbox returns a fast, clear error
+        # to interactive callers instead of hanging long enough for the ingress
+        # to 504. Total budget across 4 attempts is now ~15s (1+2+4+8) rather
+        # than up to ~90s.
+        await _asyncio.sleep(min(delay, 8.0))
     return resp
 
 

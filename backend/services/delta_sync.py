@@ -65,6 +65,15 @@ async def run_delta_sync_loop():
             if cycle % 10 == 1:
                 logger.info(f"Delta sync heartbeat: cycle {cycle}")
 
+            # Only ONE replica runs the poll — the backend is HTTP-autoscaled to
+            # multiple replicas and every one starts this loop, which otherwise
+            # multiplies Gmail/Graph API pressure (per-user 429s).
+            from backend.services.gmail_quota import acquire_loop_leader
+            _is_leader = await acquire_loop_leader("delta_sync", ttl=DELTA_INTERVAL_SECONDS * 3)
+            if not _is_leader:
+                await asyncio.sleep(DELTA_INTERVAL_SECONDS)
+                continue
+
             if in_flight:
                 logger.warning(
                     f"Delta sync cycle {cycle} skipped — previous cycle still in flight "
@@ -336,6 +345,15 @@ async def _delta_sync_integration_snap(db, redis, integration):
                     # during the outage would be skipped FOREVER. Resume from the
                     # earliest failed window instead; the seen-set + process_email
                     # dedup make the wider re-scan safe and cheap.
+                    # Skip mailboxes that are currently rate-limited so we don't
+                    # keep burning their exhausted Gmail quota (which starves
+                    # interactive quarantine/spam actions → 504s). They resume
+                    # automatically once the cooldown expires.
+                    from backend.services.gmail_quota import gmail_user_cooling_down, note_gmail_429
+                    if await gmail_user_cooling_down(user_email):
+                        logger.info(f"Delta sync: skipping {user_email} — Gmail cooldown active")
+                        continue
+
                     _user_since = since_epoch
                     _catchup_key = f"delta_catchup:google:{org_id}:{user_email}"
                     try:
@@ -383,6 +401,8 @@ async def _delta_sync_integration_snap(db, redis, integration):
                                 f"{resp.status_code} — will catch up from epoch {_user_since} "
                                 f"on next successful cycle"
                             )
+                            if resp.status_code == 429:
+                                await note_gmail_429(user_email)
                             _list_ok = False
                             break
                         _body = resp.json()

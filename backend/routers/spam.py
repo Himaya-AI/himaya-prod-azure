@@ -539,6 +539,12 @@ async def _sync_org_spam(org_id: str, db: AsyncSession) -> dict:
                     logger.error(f"M365 spam sync error for {user_email}: {e}")
 
             elif provider in ("gmail", "google"):
+                # Skip mailboxes currently rate-limited so we don't keep burning
+                # their exhausted Gmail quota (starves interactive actions).
+                from backend.services.gmail_quota import gmail_user_cooling_down, note_gmail_429
+                if await gmail_user_cooling_down(user_email):
+                    logger.info(f"Spam sync: skipping {user_email} — Gmail cooldown active")
+                    continue
                 # Use DWD SA impersonation via run_in_executor (most reliable)
                 _gmail_tok = access_token  # OAuth fallback
                 try:
@@ -585,6 +591,8 @@ async def _sync_org_spam(org_id: str, db: AsyncSession) -> dict:
                             )
                             if list_resp.status_code != 200:
                                 logger.warning(f"Gmail spam list failed for {user_email}: {list_resp.status_code} {list_resp.text[:200]}")
+                                if list_resp.status_code == 429:
+                                    await note_gmail_429(user_email)
                                 break
                             page_json = list_resp.json()
                             next_page_token = page_json.get("nextPageToken")
@@ -603,6 +611,7 @@ async def _sync_org_spam(org_id: str, db: AsyncSession) -> dict:
                                     # so we don't burn the remaining budget that
                                     # manual actions depend on. Resume next cycle.
                                     logger.warning(f"Gmail spam sync hit 429 for {user_email}; deferring rest to next cycle")
+                                    await note_gmail_429(user_email)
                                     _rate_limited = True
                                     break
                                 if det.status_code != 200:

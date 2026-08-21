@@ -197,8 +197,13 @@ async def _collect_google(org_id: str, db) -> list[dict]:
 
     findings: list[dict] = []
     async with httpx.AsyncClient(timeout=20) as client:
+        from backend.services.gmail_quota import gmail_user_cooling_down
         users = await _get_google_users(db, org_id)
         for email in users[:_MAX_MAILBOXES]:
+            # Don't add settings-API load to a mailbox that's already 429'd —
+            # its quota is needed for interactive quarantine/spam actions.
+            if await gmail_user_cooling_down(email):
+                continue
             hdrs = await _get_sa_headers_async(subject_email=email)
             if not hdrs:
                 break
@@ -516,8 +521,14 @@ async def run_exfil_monitor_loop() -> None:
     from backend.database import AsyncSessionLocal
     await asyncio.sleep(30)  # let startup settle
     logger.info(f"Exfil monitor loop started (interval {EXFIL_SCAN_INTERVAL}s)")
+    from backend.services.gmail_quota import acquire_loop_leader
     while True:
         try:
+            # Only one replica runs this — avoids N× Gmail settings API calls
+            # (delegates/forwardingAddresses) that otherwise exhaust per-user quota.
+            if not await acquire_loop_leader("exfil_monitor", ttl=EXFIL_SCAN_INTERVAL * 2):
+                await asyncio.sleep(EXFIL_SCAN_INTERVAL)
+                continue
             async with AsyncSessionLocal() as db:
                 await ensure_exfil_table(db)
                 rows = (await db.execute(text(

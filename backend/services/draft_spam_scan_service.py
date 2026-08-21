@@ -80,9 +80,11 @@ async def _scan_all_orgs_spam():
 async def run_draft_scan_loop():
     logger.info("Draft auto-scan loop starting...")
     await asyncio.sleep(30)  # let DB/connections stabilize at startup
+    from backend.services.gmail_quota import acquire_loop_leader
     while True:
         try:
-            await _scan_all_orgs_drafts()
+            if await acquire_loop_leader("draft_scan", ttl=SCAN_INTERVAL_SECONDS * 3):
+                await _scan_all_orgs_drafts()
         except Exception as e:
             logger.error(f"Draft scan loop crash: {e}")
         await asyncio.sleep(SCAN_INTERVAL_SECONDS)
@@ -91,9 +93,11 @@ async def run_draft_scan_loop():
 async def run_spam_sync_loop():
     logger.info("Spam auto-sync loop starting...")
     await asyncio.sleep(75)  # offset further from draft loop (was 45)
+    from backend.services.gmail_quota import acquire_loop_leader
     while True:
         try:
-            await _scan_all_orgs_spam()
+            if await acquire_loop_leader("spam_sync", ttl=SCAN_INTERVAL_SECONDS * 3):
+                await _scan_all_orgs_spam()
         except Exception as e:
             logger.error(f"Spam sync loop crash: {e}")
         await asyncio.sleep(SCAN_INTERVAL_SECONDS)
