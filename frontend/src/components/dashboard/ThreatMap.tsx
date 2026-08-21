@@ -80,7 +80,7 @@ function ThreatWorldMap({ data }: { data: CountryThreat[] }) {
     }
   }, [data])
 
-  return <div ref={mapRef} className="w-full h-[320px] lg:h-[420px]" />
+  return <div ref={mapRef} className="w-full h-[340px] lg:h-[460px]" />
 }
 
 export default function ThreatMap() {
@@ -134,9 +134,9 @@ export default function ThreatMap() {
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 h-[260px] animate-pulse bg-white/[0.04] rounded-lg" />
-          <div className="space-y-2">
+        <div className="space-y-4">
+          <div className="h-[340px] lg:h-[460px] animate-pulse bg-white/[0.04] rounded-lg" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-8 animate-pulse bg-white/[0.04] rounded" />
             ))}
@@ -150,14 +150,12 @@ export default function ThreatMap() {
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-          {/* Choropleth map */}
-          <div className="lg:col-span-2 min-w-0">
-            <ThreatWorldMap data={displayed} />
-          </div>
+        <div className="space-y-5">
+          {/* Choropleth map — full width */}
+          <ThreatWorldMap data={displayed} />
 
-          {/* Ranked list */}
-          <div className="space-y-2.5">
+          {/* Ranked list below */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-3 border-t border-white/[0.05] pt-4">
             {displayed.map((row, i) => {
               const pct = Math.round((row.threat_count / maxCount) * 100)
               const code = row.country_code.toLowerCase()
