@@ -134,7 +134,7 @@ function FilterRow<T extends string>({
   )
 }
 
-const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-white/[0.07] text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#f87171]/50 transition-colors'
+const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-white/[0.07] text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#24befa]/50 transition-colors'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ThreatsPage() {
@@ -372,61 +372,63 @@ export default function ThreatsPage() {
         <div>
           <h1 className="text-[18px] font-semibold text-[var(--foreground)]">Threat Queue</h1>
         </div>
-        {/* Auto-Triage Toggle */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">Auto Triage</span>
+        {/* Auto-Triage control cluster — SCM-style toolbar */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5 h-9 pl-3 pr-2.5 rounded-lg bg-[#141417] border border-white/[0.07]">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Auto Triage</span>
             <button
               onClick={() => toggleAutoTriage(!autoTriageOn)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${autoTriageOn ? 'bg-green-500' : 'bg-slate-700'}`}
+              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors ${autoTriageOn ? 'bg-emerald-500' : 'bg-slate-700'}`}
             >
               <span className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow transform transition-transform ${autoTriageOn ? 'translate-x-4' : 'translate-x-0'}`} />
             </button>
-            {autoTriageOn && (
-              <span className="flex items-center gap-1 text-[11px] text-green-400 font-medium">
-                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-                Agent Active
+            {autoTriageOn ? (
+              <span className="flex items-center gap-1.5 text-[11px] text-emerald-400 font-medium">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Active
+              </span>
+            ) : (
+              <span className="text-[11px] text-slate-600 font-medium">Off</span>
+            )}
+            {autoTriageStatus?.last_run && autoTriageOn && (
+              <span className="text-[11px] text-slate-500 border-l border-white/[0.07] pl-2.5">
+                {new Date(autoTriageStatus.last_run * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {autoTriageStatus.last_processed !== undefined && ` · ${autoTriageStatus.last_processed}`}
               </span>
             )}
           </div>
+
           {autoTriageOn && (
             <button
               onClick={() => setShowRunNowModal(true)}
               disabled={autoTriageRunning}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-lg bg-[#0ea5e9] hover:bg-[#0b96d6] text-white transition-colors disabled:opacity-50"
             >
-              {autoTriageRunning ? <Loader2 size={12} className="animate-spin" /> : <Zap size={12} />}
+              {autoTriageRunning ? <Loader2 size={13} className="animate-spin" /> : <Zap size={13} />}
               {autoTriageRunning ? 'Running…' : 'Run Now'}
             </button>
           )}
-          {autoTriageStatus?.last_run && autoTriageOn && (
-            <span className="text-[11px] text-slate-500">
-              Last: {new Date(autoTriageStatus.last_run * 1000).toLocaleTimeString()}
-              {autoTriageStatus.last_processed !== undefined && ` · ${autoTriageStatus.last_processed} processed`}
-            </span>
-          )}
-          {autoTriageResult && (
-            <span className="text-[11px] text-slate-400 max-w-[200px] truncate">{autoTriageResult}</span>
-          )}
-          {/* Audit trail button */}
           <button
             onClick={openAudit}
             title="View auto-triage audit trail"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/[0.04] hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 border border-white/[0.07] transition-colors"
+            className="flex items-center gap-1.5 h-9 px-3 text-xs font-medium rounded-lg bg-[#141417] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] transition-colors"
           >
-            <ClipboardList size={12} />
+            <ClipboardList size={13} />
             Audit Trail
           </button>
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-1.5 h-9 px-3 text-xs text-slate-400 hover:text-white bg-[#141417] border border-white/[0.07] hover:border-white/[0.15] rounded-lg transition-colors"
+            >
+              <X size={13} /> Clear
+            </button>
+          )}
         </div>
-        {hasActiveFilters && (
-          <button
-            onClick={clearFilters}
-            className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 px-2.5 py-1.5 rounded-lg transition-colors"
-          >
-            <X size={12} /> Clear all filters
-          </button>
-        )}
       </div>
+      {autoTriageResult && (
+        <p className="text-[11px] text-slate-400 -mt-2">{autoTriageResult}</p>
+      )}
 
       {/* Filter Panel */}
       <div className="bg-[#141417] border border-white/[0.05] rounded-xl px-4 py-3 space-y-3">

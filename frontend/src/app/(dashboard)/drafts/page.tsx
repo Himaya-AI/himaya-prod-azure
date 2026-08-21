@@ -89,7 +89,7 @@ function DetailDrawer({ draft, onClose }: { draft: DraftEvent; onClose: () => vo
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <PenLine size={16} className="text-indigo-400" />
+            <PenLine size={16} className="text-[#24befa]" />
             <span className="font-semibold text-sm text-white">Draft Details</span>
           </div>
           <button onClick={onClose} className="text-[var(--muted)] hover:text-white transition-colors">
@@ -283,7 +283,7 @@ export default function DraftsPage() {
         <button
           onClick={handleScan}
           disabled={scanning}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 text-sm font-medium transition-colors"
         >
           <RefreshCw size={14} className={scanning ? 'animate-spin' : ''} />
           {scanning ? 'Scanning…' : 'Scan Now'}
@@ -320,7 +320,7 @@ export default function DraftsPage() {
             <select
               value={providerFilter}
               onChange={(e) => { setProviderFilter(e.target.value); setPage(1) }}
-              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-[#24befa]/50"
             >
               <option value="">All Sources</option>
               <option value="gmail">Gmail</option>
@@ -329,7 +329,7 @@ export default function DraftsPage() {
             <select
               value={classFilter}
               onChange={(e) => { setClassFilter(e.target.value); setPage(1) }}
-              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-[#24befa]/50"
             >
               <option value="">All Classifications</option>
               <option value="CLEAN">Clean</option>
@@ -342,7 +342,7 @@ export default function DraftsPage() {
               placeholder="Filter by owner email…"
               value={ownerFilter}
               onChange={(e) => { setOwnerFilter(e.target.value); setPage(1) }}
-              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-indigo-500/50 w-56"
+              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[#24befa]/50 w-56"
             />
             <select
               value={`${sortBy}:${sortOrder}`}
@@ -350,7 +350,7 @@ export default function DraftsPage() {
                 const [sb, so] = e.target.value.split(':') as ['analyzed_at' | 'last_modified_at', 'desc' | 'asc']
                 setSortBy(sb); setSortOrder(so); setPage(1)
               }}
-              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+              className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-[#24befa]/50"
             >
               <option value="analyzed_at:desc">Analyzed (Newest First)</option>
               <option value="analyzed_at:asc">Analyzed (Oldest First)</option>

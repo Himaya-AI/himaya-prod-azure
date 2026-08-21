@@ -944,6 +944,7 @@ export default function MessageTracePage() {
   const [pagination, setPagination] = useState<Pagination>({ total: 0, page: 1, page_size: 50, total_pages: 0 })
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedRow, setSelectedRow] = useState<TraceResult | null>(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(50)
@@ -966,14 +967,14 @@ export default function MessageTracePage() {
     return new URLSearchParams(params).toString()
   }, [keyword, subject, sender, recipient, senderDomain, dateFrom, dateTo, threatType, actionTaken, status, minScore, maxScore, authFail, page, pageSize])
 
-  const fetchResults = useCallback(async (p = page, ps = pageSize) => {
-    setLoading(true)
+  const fetchResults = useCallback(async (p = page, ps = pageSize, silent = false) => {
+    if (silent) setRefreshing(true); else setLoading(true)
     try {
       const res = await api.get(`/api/message-trace?${buildParams(p, ps)}`)
       setResults(res.data.results ?? [])
       setPagination(res.data.pagination ?? { total: 0, page: p, page_size: ps, total_pages: 0 })
     } catch (e) { console.error(e) }
-    finally { setLoading(false) }
+    finally { if (silent) setRefreshing(false); else setLoading(false) }
   }, [buildParams, page, pageSize])
 
   const fetchStats = useCallback(async () => {
@@ -987,7 +988,7 @@ export default function MessageTracePage() {
     return () => clearTimeout(t)
   }, [keyword, subject, sender, recipient, senderDomain, dateFrom, dateTo, threatType, actionTaken, status, minScore, maxScore, authFail])
   useEffect(() => {
-    const t = setInterval(() => { fetchResults(page, pageSize); fetchStats() }, 30000)
+    const t = setInterval(() => { fetchResults(page, pageSize, true); fetchStats() }, 30000)
     return () => clearInterval(t)
   }, [fetchResults, fetchStats, page, pageSize])
 
@@ -1031,7 +1032,7 @@ export default function MessageTracePage() {
     { label: 'Clean',         value: (stats.by_action?.CLEAN ?? 0) + (stats.by_action?.DELIVER ?? 0), color: 'text-green-400' },
   ] : []
 
-  const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-white/[0.07] text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#f87171]/50 transition-colors'
+  const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-white/[0.07] text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#24befa]/50 transition-colors'
 
   return (
     <div className="space-y-5">
@@ -1040,7 +1041,8 @@ export default function MessageTracePage() {
         <h1 className="text-[18px] font-semibold text-[var(--foreground)]">Message Trace</h1>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse inline-block" /> Live
+            <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', refreshing ? 'bg-[#24befa] animate-pulse' : 'bg-emerald-400/80 animate-pulse')} />
+            {refreshing ? 'Updating…' : 'Live'}
           </span>
           <button onClick={() => { fetchResults(page, pageSize); fetchStats() }}
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-[#141417] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] transition-colors">

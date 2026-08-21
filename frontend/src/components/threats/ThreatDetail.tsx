@@ -265,7 +265,7 @@ export default function ThreatDetail({ threat }: Props) {
         {/* AI Explanation */}
         <Card className="col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><BrainCircuit size={16} className="text-[#f87171]" /> AI Analysis</CardTitle>
+            <CardTitle className="flex items-center gap-2"><BrainCircuit size={16} className="text-[#24befa]" /> AI Analysis</CardTitle>
           </CardHeader>
           <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{threat.ai_explanation_en || 'No AI explanation available.'}</p>
 

@@ -239,7 +239,7 @@ function ConfirmModal({
           <button onClick={onCancel} className="px-3 py-1.5 rounded-lg text-sm bg-white/10 hover:bg-white/20 transition-colors">Cancel</button>
           <button
             onClick={onConfirm}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${danger ? 'bg-red-600 hover:bg-red-500' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${danger ? 'bg-red-600 hover:bg-red-500' : 'bg-[#0ea5e9] hover:bg-[#0b96d6]'}`}
           >
             {confirmLabel}
           </button>
@@ -295,7 +295,7 @@ function RuleFormModal({
             <input
               required value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
               placeholder="e.g. Block marketing emails"
-              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-indigo-500/50"
+              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[#24befa]/50"
             />
           </div>
           <div>
@@ -303,14 +303,14 @@ function RuleFormModal({
             <textarea
               value={form.description} onChange={(e) => setForm(f => ({ ...f, description: e.target.value }))}
               rows={2}
-              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-indigo-500/50 resize-none"
+              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[#24befa]/50 resize-none"
             />
           </div>
           <div>
             <label className="block text-xs text-[var(--muted)] mb-1">Rule Type *</label>
             <select
               value={form.rule_type} onChange={(e) => setForm(f => ({ ...f, rule_type: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+              className="w-full px-3 py-2 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-[#24befa]/50"
             >
               <option value="SENDER_EMAIL">Sender Email</option>
               <option value="SENDER_DOMAIN">Sender Domain</option>
@@ -324,14 +324,14 @@ function RuleFormModal({
             <input
               required value={form.match_value} onChange={(e) => setForm(f => ({ ...f, match_value: e.target.value }))}
               placeholder="e.g. newsletters.example.com"
-              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-indigo-500/50"
+              className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[#24befa]/50"
             />
           </div>
           <div>
             <label className="block text-xs text-[var(--muted)] mb-1">Action *</label>
             <select
               value={form.action} onChange={(e) => setForm(f => ({ ...f, action: e.target.value }))}
-              className="w-full px-3 py-2 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+              className="w-full px-3 py-2 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-[#24befa]/50"
             >
               <option value="MOVE_TO_INBOX">Move to Inbox</option>
               <option value="DELETE">Delete</option>
@@ -343,7 +343,7 @@ function RuleFormModal({
             <button
               type="button"
               onClick={() => setForm(f => ({ ...f, enabled: !f.enabled }))}
-              className={`transition-colors ${form.enabled ? 'text-indigo-400' : 'text-[var(--muted)]'}`}
+              className={`transition-colors ${form.enabled ? 'text-[#24befa]' : 'text-[var(--muted)]'}`}
             >
               {form.enabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
             </button>
@@ -354,7 +354,7 @@ function RuleFormModal({
             </button>
             <button
               type="submit" disabled={saving}
-              className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+              className="flex-1 px-3 py-2 rounded-lg text-sm font-medium bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 transition-colors"
             >
               {saving ? 'Saving…' : 'Save Rule'}
             </button>
@@ -565,7 +565,7 @@ function SpamInboxTab() {
           </div>
           <select
             value={classFilter} onChange={(e) => { setClassFilter(e.target.value); setPage(1) }}
-            className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+            className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-[#24befa]/50"
           >
             <option value="">All Types</option>
             <option value="SPAM">Spam</option>
@@ -576,11 +576,11 @@ function SpamInboxTab() {
           <input
             type="text" placeholder="Filter by owner…" value={ownerFilter}
             onChange={(e) => { setOwnerFilter(e.target.value); setPage(1) }}
-            className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-indigo-500/50 w-48"
+            className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white placeholder-[var(--muted)] focus:outline-none focus:border-[#24befa]/50 w-48"
           />
           <button
             onClick={() => setShowReleased(r => !r)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showReleased ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-400' : 'bg-white/5 border-white/10 text-[var(--muted)]'}`}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm border transition-colors ${showReleased ? 'bg-[#0ea5e9]/10 border-[#24befa]/30 text-[#24befa]' : 'bg-white/5 border-white/10 text-[var(--muted)]'}`}
           >
             {showReleased ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
             Show Released
@@ -591,7 +591,7 @@ function SpamInboxTab() {
               const [sb, so] = e.target.value.split(':') as ['received_at' | 'synced_at', 'desc' | 'asc']
               setSortBy(sb); setSortOrder(so); setPage(1)
             }}
-            className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-indigo-500/50"
+            className="px-3 py-1.5 rounded-lg bg-[#141417] border border-white/10 text-sm text-white focus:outline-none focus:border-[#24befa]/50"
           >
             <option value="received_at:desc">Received (Newest First)</option>
             <option value="received_at:asc">Received (Oldest First)</option>
@@ -622,7 +622,7 @@ function SpamInboxTab() {
           )}
           <button
             onClick={handleSync} disabled={syncing}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium transition-colors"
+            className="flex items-center gap-2 px-4 py-1.5 rounded-lg bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 text-sm font-medium transition-colors"
           >
             <RefreshCw size={13} className={syncing ? 'animate-spin' : ''} />
             {syncing ? 'Syncing…' : 'Sync Now'}
@@ -804,7 +804,7 @@ function AntiSpamRulesTab() {
         </p>
         <button
           onClick={() => setShowForm(true)}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#0ea5e9] hover:bg-[#0b96d6] text-sm font-medium transition-colors"
         >
           <Plus size={14} /> Add Rule
         </button>
@@ -849,7 +849,7 @@ function AntiSpamRulesTab() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button onClick={() => handleToggle(rule)} className={`transition-colors ${rule.enabled ? 'text-indigo-400' : 'text-[var(--muted)]'}`}>
+                    <button onClick={() => handleToggle(rule)} className={`transition-colors ${rule.enabled ? 'text-[#24befa]' : 'text-[var(--muted)]'}`}>
                       {rule.enabled ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
                     </button>
                   </td>
@@ -914,7 +914,7 @@ export default function SpamPage() {
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
               tab === t.id
-                ? 'border-indigo-500 text-white'
+                ? 'border-[#24befa] text-white'
                 : 'border-transparent text-[var(--muted)] hover:text-white'
             }`}
           >

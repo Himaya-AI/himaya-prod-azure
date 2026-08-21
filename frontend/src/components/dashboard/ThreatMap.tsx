@@ -71,8 +71,22 @@ function ThreatWorldMap({ data }: { data: CountryThreat[] }) {
     }
 
     initMap()
+
+    // jsvectormap computes its scale once at init — if the container was
+    // still settling (flex/grid layout, sidebar animation), the map stays
+    // tiny. Re-fit on every container resize.
+    let resizeObserver: ResizeObserver | null = null
+    if (mapRef.current && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(() => {
+        const inst = mapInstanceRef.current as { updateSize?: () => void } | null
+        try { inst?.updateSize?.() } catch { /* noop */ }
+      })
+      resizeObserver.observe(mapRef.current)
+    }
+
     return () => {
       cancelled = true
+      resizeObserver?.disconnect()
       if (mapInstanceRef.current) {
         try { (mapInstanceRef.current as { destroy: () => void }).destroy() } catch { /* noop */ }
         mapInstanceRef.current = null

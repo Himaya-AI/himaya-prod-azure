@@ -319,6 +319,7 @@ export default function QuarantinePage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selected, setSelected] = useState<QuarantineItem | null>(null)
   const [filters, setFilters] = useState({
     sender: '', recipient: '', date_from: '', date_to: '', threat_type: 'all', status: 'unresolved'
@@ -332,8 +333,8 @@ export default function QuarantinePage() {
     } catch {}
   }, [])
 
-  const loadItems = useCallback(async () => {
-    setLoading(true)
+  const loadItems = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true); else setLoading(true)
     try {
       const params: Record<string, string | number> = { page, page_size: 20 }
       if (filters.sender) params.sender = filters.sender
@@ -346,17 +347,17 @@ export default function QuarantinePage() {
       setItems(res.data.items ?? [])
       setTotal(res.data.total ?? 0)
     } catch {}
-    setLoading(false)
+    if (silent) setRefreshing(false); else setLoading(false)
   }, [page, filters])
 
-  const refresh = useCallback(() => {
-    loadItems()
+  const refresh = useCallback((silent = false) => {
+    loadItems(silent)
     loadStats()
   }, [loadItems, loadStats])
 
   useEffect(() => {
     refresh()
-    intervalRef.current = setInterval(refresh, 30000)
+    intervalRef.current = setInterval(() => refresh(true), 30000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [refresh])
 
@@ -396,14 +397,17 @@ export default function QuarantinePage() {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
+        <div className="flex items-center gap-3">
           <h1 className="text-[18px] font-semibold text-[var(--foreground)]">
             Quarantine
           </h1>
-
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+            <span className={`w-1.5 h-1.5 rounded-full inline-block animate-pulse ${refreshing ? 'bg-[#24befa]' : 'bg-emerald-400/80'}`} />
+            {refreshing ? 'Updating…' : 'Live'}
+          </span>
         </div>
         <button
-          onClick={refresh}
+          onClick={() => refresh()}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-[#a1a1aa] hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-colors"
         >
           <RefreshCw size={13} /> Refresh
@@ -491,8 +495,8 @@ export default function QuarantinePage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/[0.07] text-[#71717a] text-xs font-medium">
-                  {['Date/Time', 'Subject', 'Sender', 'Recipient', 'Threat Type', 'Risk Score', 'Action Taken', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="text-left px-4 py-3 whitespace-nowrap">{h}</th>
+                  {['Date/Time', 'Subject', 'Sender', 'Recipient', 'Type', 'Risk', 'Status', 'Actions'].map(h => (
+                    <th key={h} className="text-left px-3 py-3 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -505,19 +509,18 @@ export default function QuarantinePage() {
                       i % 2 === 0 ? '' : 'bg-white/[0.01]'
                     }`}
                   >
-                    <td className="px-4 py-3 text-[#a1a1aa] whitespace-nowrap text-xs">{fmt(item.detected_at)}</td>
-                    <td className="px-4 py-3 text-[#e4e4e7] max-w-[220px] truncate" title={item.subject ?? ''}>{item.subject || '(no subject)'}</td>
-                    <td className="px-4 py-3 text-[#e4e4e7] max-w-[160px] truncate" title={item.sender}>{item.sender}</td>
-                    <td className="px-4 py-3 text-[#a1a1aa] max-w-[160px] truncate" title={item.recipient_email}>{item.recipient_email}</td>
-                    <td className="px-4 py-3">{threatBadge(item.threat_type)}</td>
-                    <td className="px-4 py-3"><RiskBar score={item.risk_score} /></td>
-                    <td className="px-4 py-3 text-[#a1a1aa] text-xs">{item.action_taken}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 text-[#a1a1aa] whitespace-nowrap text-xs">{fmt(item.detected_at)}</td>
+                    <td className="px-3 py-3 text-[#e4e4e7] max-w-[200px] truncate" title={item.subject ?? ''}>{item.subject || '(no subject)'}</td>
+                    <td className="px-3 py-3 text-[#e4e4e7] max-w-[130px] truncate" title={item.sender}>{item.sender}</td>
+                    <td className="px-3 py-3 text-[#a1a1aa] max-w-[130px] truncate" title={item.recipient_email}>{item.recipient_email}</td>
+                    <td className="px-3 py-3">{threatBadge(item.threat_type)}</td>
+                    <td className="px-3 py-3"><RiskBar score={item.risk_score} /></td>
+                    <td className="px-3 py-3">
                       <span className={`px-2 py-0.5 rounded-full text-xs ${STATUS_COLORS[item.status] ?? 'bg-slate-500/20 text-slate-400'}`}>
                         {STATUS_LABELS[item.status] ?? item.status}
                       </span>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
+                    <td className="px-3 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="flex gap-0.5 flex-nowrap items-center">
                         <button
                           onClick={() => handleAction(item.id, 'release')}
