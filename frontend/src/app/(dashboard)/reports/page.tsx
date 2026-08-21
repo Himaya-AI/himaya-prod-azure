@@ -41,8 +41,8 @@ export default function ReportsPage() {
           { icon: FileText, label: 'Compliance Report', desc: 'SAMA/NCA compliance status', type: 'compliance' },
         ].map(({ icon: Icon, label, desc, type }) => (
           <Card key={type} className="flex items-start gap-4">
-            <div className="p-2.5 rounded-lg bg-[#0f3460]/40">
-              <Icon size={18} className="text-[#e94560]" />
+            <div className="p-2.5 rounded-lg bg-white/[0.04]">
+              <Icon size={18} className="text-[#f87171]" />
             </div>
             <div className="flex-1">
               <div className="text-sm font-semibold text-slate-200">{label}</div>
@@ -58,15 +58,15 @@ export default function ReportsPage() {
       {/* Report history */}
       <div>
         <h2 className="text-sm font-semibold text-slate-300 mb-3">Recent Reports</h2>
-        <div className="bg-[#16213e] border border-[#0f3460]/50 rounded-xl overflow-hidden">
+        <div className="bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden">
           {loading ? (
             <div className="p-6 space-y-3">
-              {[...Array(3)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-[#0f3460]/20 rounded" />)}
+              {[...Array(3)].map((_, i) => <div key={i} className="h-12 animate-pulse bg-white/[0.04] rounded" />)}
             </div>
           ) : reports.length === 0 ? (
             <div className="text-center text-slate-500 py-16 text-sm">No reports generated yet</div>
           ) : (
-            <div className="divide-y divide-[#0f3460]/30">
+            <div className="divide-y divide-white/[0.06]/30">
               {reports.map(r => (
                 <div key={r.id} className="flex items-center gap-4 px-4 py-3">
                   <FileText size={16} className="text-slate-500" />

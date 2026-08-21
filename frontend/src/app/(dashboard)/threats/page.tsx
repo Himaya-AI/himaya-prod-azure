@@ -156,7 +156,7 @@ function FilterRow<T extends string>({
   )
 }
 
-const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0d1b2a] border border-[#0f3460]/60 text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#e94560]/50 transition-colors'
+const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-white/[0.07] text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#f87171]/50 transition-colors'
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function ThreatsPage() {
@@ -434,7 +434,7 @@ export default function ThreatsPage() {
           <button
             onClick={openAudit}
             title="View auto-triage audit trail"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[#0f3460]/40 hover:bg-[#0f3460]/70 text-slate-400 hover:text-slate-200 border border-[#0f3460]/50 transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-white/[0.04] hover:bg-white/[0.06] text-slate-400 hover:text-slate-200 border border-white/[0.07] transition-colors"
           >
             <ClipboardList size={12} />
             Audit Trail
@@ -476,7 +476,7 @@ export default function ThreatsPage() {
               className={clsx(
                 'px-2.5 py-1 rounded-full text-xs font-medium border transition-all',
                 activeDateQuick === q.key
-                  ? 'bg-[#0f3460] border-[#3b6ef6] text-blue-300'
+                  ? 'bg-[#1e1e26] border-[#3b6ef6] text-blue-300'
                   : 'bg-slate-800/40 border-slate-600/40 text-slate-400 hover:bg-slate-800/60'
               )}
             >
@@ -581,7 +581,7 @@ export default function ThreatsPage() {
       {error ? (
         <div className="text-center text-red-400 py-10 text-sm">{error}</div>
       ) : (
-        <div className="bg-[#16213e] border border-[#0f3460]/50 rounded-xl overflow-hidden">
+        <div className="bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden">
           <ThreatTable
             threats={threats}
             selected={selected}
@@ -594,7 +594,7 @@ export default function ThreatsPage() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-[#0f3460]/30">
+            <div className="flex items-center justify-between px-4 py-3 border-t border-white/[0.07]">
               <span className="text-xs text-slate-500">
                 Page {page} of {totalPages} · {total.toLocaleString()} total
               </span>
@@ -615,7 +615,7 @@ export default function ThreatsPage() {
     {/* ── Run Now Confirmation Modal ─────────────────────────────────────── */}
     {showRunNowModal && (
       <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-        <div className="bg-[#0d1b2a] border border-[#0f3460] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+        <div className="bg-[#0e0e12] border border-white/[0.09] rounded-2xl p-6 w-full max-w-md shadow-2xl">
           <h2 className="text-white font-semibold text-base mb-2">Run Auto-Triage Now?</h2>
           <p className="text-slate-400 text-sm leading-relaxed mb-6">
             This will immediately analyse all unresolved threats in the queue and apply actions (quarantine, flag, dismiss). This cannot be undone.

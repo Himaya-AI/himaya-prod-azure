@@ -839,7 +839,7 @@ export default function PoliciesPage() {
       {/* Apply Now Confirmation Modal */}
       {showApplyModal && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0d1b2a] border border-[#0f3460] rounded-2xl p-6 w-full max-w-md shadow-2xl">
+          <div className="bg-[#0e0e12] border border-white/[0.09] rounded-2xl p-6 w-full max-w-md shadow-2xl">
             <h2 className="text-white font-semibold text-base mb-2">Apply Policies Retroactively?</h2>
             <p className="text-slate-400 text-sm leading-relaxed mb-6">
               This will re-analyse ALL emails in every connected inbox using your active policies. Depending on inbox size, this may generate a large number of threat alerts and quarantine notifications. Are you sure?

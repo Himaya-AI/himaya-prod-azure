@@ -22,7 +22,7 @@ function ThreatTypeBreakdown({ data, loading }: { data: Record<string, number>; 
   const sorted = Object.entries(data).sort((a, b) => b[1] - a[1]).slice(0, 5)
 
   const COLOR_MAP: Record<string, string> = {
-    BEC: '#e94560', PHISHING: '#f97316', MALWARE: '#ef4444',
+    BEC: '#f87171', PHISHING: '#f97316', MALWARE: '#ef4444',
     IMPERSONATION: '#a855f7', SPAM: '#6b7280', SUPPLY_CHAIN: '#0ea5e9',
     GOV_IMPERSONATION: '#f59e0b', ACCOUNT_TAKEOVER: '#ec4899',
     CREDENTIAL_HARVESTING: '#14b8a6', LOOKALIKE_DOMAIN: '#84cc16',
@@ -32,7 +32,7 @@ function ThreatTypeBreakdown({ data, loading }: { data: Record<string, number>; 
     <div className="bg-[#141417] border border-white/[0.07] rounded-xl p-5 h-full">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-[13px] font-semibold text-white flex items-center gap-2">
-          <AlertTriangle size={14} className="text-[#e94560]" /> Email Classification Type
+          <AlertTriangle size={14} className="text-[#f87171]" /> Email Classification Type
         </h3>
         {!loading && Object.keys(data).length > 0 && (
           <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
@@ -91,7 +91,7 @@ interface RuleUsageData {
 
 const ACTION_COLOR: Record<string, string> = {
   QUARANTINE: '#3b6ef6',
-  BLOCK_DELETE: '#e94560',
+  BLOCK_DELETE: '#f87171',
   DELIVER_WITH_BANNER: '#f59e0b',
   HOLD_FOR_REVIEW: '#a855f7',
   ALLOW: '#22c55e',
@@ -239,7 +239,7 @@ function RiskScoreTile() {
   const score = data?.score ?? 0
   const level = data?.risk_level ?? 'low'
   // Colour maps to both numeric score AND named risk level (new scoring returns guarded/elevated)
-  const color = (level === 'critical' || score >= 80) ? '#e94560'
+  const color = (level === 'critical' || score >= 80) ? '#f87171'
     : (level === 'high' || score >= 60) ? '#f97316'
     : (level === 'elevated' || score >= 40) ? '#f59e0b'
     : (level === 'guarded' || score >= 20) ? '#eab308'

@@ -1161,7 +1161,7 @@ function WorkersStatusBanner({ status, isLive, onToggleLive }: { status?: Worker
   ]
 
   return (
-    <div className="flex items-center justify-between bg-gradient-to-r from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl px-5 py-3">
+    <div className="flex items-center justify-between bg-[#141417] border border-white/[0.06] rounded-xl px-5 py-3">
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
           <Activity size={16} className="text-emerald-400" />
@@ -1585,9 +1585,9 @@ function WorkspaceOverviewTab() {
       {/* Key Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {/* Cloud Resources */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FF9900]/10 border border-[#FF9900]/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <Cloud size={18} className="text-[#FF9900]" />
             </div>
             {(displayStats.cloud_stats?.total_resources ?? 0) > 0 && (
@@ -1612,9 +1612,9 @@ function WorkspaceOverviewTab() {
         </div>
 
         {/* Connected Apps */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <Layers size={18} className="text-[#3b6ef6]" />
             </div>
             {displayStats.connected_apps > 0 && (
@@ -1648,9 +1648,9 @@ function WorkspaceOverviewTab() {
         </div>
 
         {/* Sensitive Files */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <FileWarning size={18} className="text-red-400" />
             </div>
             {displayStats.sensitive_files > 0 && (
@@ -1670,9 +1670,9 @@ function WorkspaceOverviewTab() {
         </div>
 
         {/* Alerts Today */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <ShieldAlert size={18} className="text-amber-400" />
             </div>
             {displayStats.alerts_today > 0 && (
@@ -1694,9 +1694,9 @@ function WorkspaceOverviewTab() {
         </div>
 
         {/* External Shares */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <Globe size={18} className="text-purple-400" />
             </div>
           </div>
@@ -1710,9 +1710,9 @@ function WorkspaceOverviewTab() {
         </div>
 
         {/* Posture Score */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <ShieldCheck size={18} className="text-emerald-400" />
             </div>
             <div className={`px-2 py-0.5 rounded-full border ${
@@ -5414,7 +5414,7 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
         zoomMin: 1,
         showTooltip: true,
         regionStyle: {
-          initial: { fill: '#1a1a2e', fillOpacity: 1, stroke: '#2a2a3e', strokeWidth: 0.6 },
+          initial: { fill: '#141417', fillOpacity: 1, stroke: '#2a2a3e', strokeWidth: 0.6 },
           hover:   { fillOpacity: 0.9, cursor: 'pointer' },
         },
         series: {
@@ -9907,7 +9907,7 @@ function WorldMap({
         showTooltip: true,
         regionStyle: {
           initial: {
-            fill: '#1a1a2e',
+            fill: '#141417',
             fillOpacity: 1,
             stroke: '#2a2a3e',
             strokeWidth: 0.5,

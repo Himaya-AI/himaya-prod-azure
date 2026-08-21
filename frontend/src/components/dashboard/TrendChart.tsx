@@ -18,15 +18,15 @@ export default function TrendChart({ data, loading }: Props) {
         <div className="flex items-center justify-between">
           <CardTitle>30-Day Potential Threat Trend</CardTitle>
           {hasData && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 border border-red-500/20 text-red-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse" />
               Live
             </span>
           )}
         </div>
       </CardHeader>
       {loading ? (
-        <div className="h-48 animate-pulse bg-[#0f3460]/20 rounded" />
+        <div className="h-48 animate-pulse bg-white/[0.04] rounded" />
       ) : !hasData ? (
         <div className="h-[220px] flex flex-col items-center justify-center gap-3 text-center">
           <div className="w-12 h-12 rounded-full bg-[#3b6ef6]/10 flex items-center justify-center">
@@ -40,7 +40,7 @@ export default function TrendChart({ data, loading }: Props) {
       ) : (
         <ResponsiveContainer width="100%" height={220}>
           <LineChart data={data} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#0f3460" />
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" vertical={false} />
             <XAxis
               dataKey="date"
               tick={{ fill: '#64748b', fontSize: 11 }}
@@ -51,7 +51,7 @@ export default function TrendChart({ data, loading }: Props) {
             />
             <YAxis tick={{ fill: '#64748b', fontSize: 11 }} tickLine={false} axisLine={false} allowDecimals={false} />
             <Tooltip
-              contentStyle={{ background: '#16213e', border: '1px solid #0f3460', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ background: '#1a1a1f', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 12 }}
               labelStyle={{ color: '#94a3b8' }}
               labelFormatter={(v) => {
                 try { return new Date(String(v)).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' }) } catch { return String(v) }
@@ -62,7 +62,7 @@ export default function TrendChart({ data, loading }: Props) {
               type="monotone"
               dataKey="threats_detected"
               name="Potential Threats"
-              stroke="#e94560"
+              stroke="#f87171"
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4 }}

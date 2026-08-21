@@ -13,7 +13,7 @@ export function Table({ className, children, ...props }: HTMLAttributes<HTMLTabl
 
 export function Thead({ className, children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <thead className={clsx('border-b border-[#0f3460]/50', className)} {...props}>
+    <thead className={clsx('border-b border-white/[0.07]', className)} {...props}>
       {children}
     </thead>
   )
@@ -21,7 +21,7 @@ export function Thead({ className, children, ...props }: HTMLAttributes<HTMLTabl
 
 export function Tbody({ className, children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
   return (
-    <tbody className={clsx('divide-y divide-[#0f3460]/30', className)} {...props}>
+    <tbody className={clsx('divide-y divide-white/[0.06]/30', className)} {...props}>
       {children}
     </tbody>
   )
@@ -29,7 +29,7 @@ export function Tbody({ className, children, ...props }: HTMLAttributes<HTMLTabl
 
 export function Tr({ className, children, ...props }: HTMLAttributes<HTMLTableRowElement>) {
   return (
-    <tr className={clsx('hover:bg-[#0f3460]/20 transition-colors', className)} {...props}>
+    <tr className={clsx('hover:bg-white/[0.06] transition-colors', className)} {...props}>
       {children}
     </tr>
   )

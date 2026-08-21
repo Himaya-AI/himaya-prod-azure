@@ -62,7 +62,7 @@ function ScoreBar({ label, value }: { label: string; value: number }) {
       <div className="flex justify-between text-xs text-slate-400 mb-1">
         <span>{label}</span><span>{pct}</span>
       </div>
-      <div className="h-2 bg-[#0f3460]/40 rounded-full">
+      <div className="h-2 bg-white/[0.04] rounded-full">
         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
     </div>
@@ -222,7 +222,7 @@ export default function ThreatDetail({ threat }: Props) {
                   <p className="text-xs text-slate-500 italic">No URLs extracted</p>
                 )}
                 {attachments.length > 0 && (
-                  <div className="border-t border-[#0f3460]/30 pt-3">
+                  <div className="border-t border-white/[0.07] pt-3">
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 mb-2">
                       <Paperclip size={11} /> Attachments ({attachments.length})
                     </div>
@@ -253,7 +253,7 @@ export default function ThreatDetail({ threat }: Props) {
               <Mail size={14} className="text-slate-400" /> Email Body Preview
             </CardTitle>
           </CardHeader>
-          <div className="bg-[#060d1a] border border-[#0f3460]/40 rounded-lg p-4">
+          <div className="bg-[#060d1a] border border-white/[0.07] rounded-lg p-4">
             <pre className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-sans break-words max-h-64 overflow-y-auto">
               {(threat as any).email_body_preview}
             </pre>
@@ -265,7 +265,7 @@ export default function ThreatDetail({ threat }: Props) {
         {/* AI Explanation */}
         <Card className="col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><BrainCircuit size={16} className="text-[#e94560]" /> AI Analysis</CardTitle>
+            <CardTitle className="flex items-center gap-2"><BrainCircuit size={16} className="text-[#f87171]" /> AI Analysis</CardTitle>
           </CardHeader>
           <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{threat.ai_explanation_en || 'No AI explanation available.'}</p>
 
@@ -274,7 +274,7 @@ export default function ThreatDetail({ threat }: Props) {
             const { urls, attachments } = extractArtifacts(threat)
             if (urls.length === 0 && attachments.length === 0) return null
             return (
-              <div className="mt-4 pt-4 border-t border-[#0f3460]/40 space-y-3">
+              <div className="mt-4 pt-4 border-t border-white/[0.07] space-y-3">
                 {urls.length > 0 && (
                   <div>
                     <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 mb-2">
@@ -342,7 +342,7 @@ export default function ThreatDetail({ threat }: Props) {
             <ScoreBar label="Graph Score" value={threat.graph_score ?? 0} />
             <ScoreBar label="Content Score" value={threat.content_score ?? 0} />
             <ScoreBar label="Reputation Score" value={threat.reputation_score ?? 0} />
-            <div className="pt-2 border-t border-[#0f3460]/30">
+            <div className="pt-2 border-t border-white/[0.07]">
               <ScoreBar label="Overall Score" value={threat.overall_score ?? 0} />
             </div>
           </div>

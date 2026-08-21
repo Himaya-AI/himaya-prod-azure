@@ -65,8 +65,8 @@ export default function ThreatFeed() {
         <div className="flex items-center gap-2">
           <span className="text-[13px] font-semibold text-[#e4e4e7]">{t(lang, 'liveThreats')}</span>
           {lastUpdated && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 border border-red-500/20 text-red-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse" />
               Live
             </span>
           )}

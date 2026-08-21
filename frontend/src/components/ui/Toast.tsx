@@ -72,12 +72,12 @@ type ThemeStyles = { bg: string; border: string; text: string; iconColor: string
 function getStyles(kind: ToastKind, light: boolean): ThemeStyles {
   if (light) {
     const base = { bg: '#ffffff', dismissColor: '#94a3b8', dismissHover: '#374151' }
-    if (kind === 'error')   return { ...base, barColor: '#e94560', border: 'rgba(233,69,96,0.35)',  iconColor: '#dc2626', text: '#7f1d1d' }
+    if (kind === 'error')   return { ...base, barColor: '#f87171', border: 'rgba(233,69,96,0.35)',  iconColor: '#dc2626', text: '#7f1d1d' }
     if (kind === 'success') return { ...base, barColor: '#16a34a', border: 'rgba(22,163,74,0.35)',  iconColor: '#15803d', text: '#14532d' }
     return                         { ...base, barColor: '#3b6ef6', border: 'rgba(59,110,246,0.35)', iconColor: '#2563eb', text: '#1e3a8a' }
   } else {
     const base = { bg: '#0d1b2e', dismissColor: '#64748b', dismissHover: '#cbd5e1' }
-    if (kind === 'error')   return { ...base, barColor: '#e94560', border: 'rgba(233,69,96,0.30)',  iconColor: '#e94560', text: '#fca5a5' }
+    if (kind === 'error')   return { ...base, barColor: '#f87171', border: 'rgba(233,69,96,0.30)',  iconColor: '#f87171', text: '#fca5a5' }
     if (kind === 'success') return { ...base, barColor: '#4ade80', border: 'rgba(74,222,128,0.30)', iconColor: '#4ade80', text: '#bbf7d0' }
     return                         { ...base, barColor: '#3b6ef6', border: 'rgba(59,110,246,0.30)', iconColor: '#3b6ef6', text: '#bfdbfe' }
   }

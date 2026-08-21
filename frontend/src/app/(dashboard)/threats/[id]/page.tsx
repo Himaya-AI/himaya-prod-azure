@@ -30,7 +30,7 @@ export default function ThreatDetailPage() {
       {loading && (
         <div className="space-y-4">
           {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 animate-pulse bg-[#16213e] rounded-xl border border-[#0f3460]/30" />
+            <div key={i} className="h-24 animate-pulse bg-[#141417] rounded-xl border border-white/[0.07]" />
           ))}
         </div>
       )}

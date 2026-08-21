@@ -13,9 +13,9 @@ interface Props {
 export default function BulkActions({ count, onQuarantine, onRelease, onFalsePositive, onClear }: Props) {
   if (count === 0) return null
   return (
-    <div className="flex items-center gap-3 px-4 py-3 bg-[#0f3460]/40 border border-[#0f3460]/50 rounded-lg">
+    <div className="flex items-center gap-3 px-4 py-3 bg-white/[0.04] border border-white/[0.07] rounded-lg">
       <span className="text-sm text-slate-300 font-medium">{count} selected</span>
-      <div className="h-4 w-px bg-[#0f3460]" />
+      <div className="h-4 w-px bg-[#1e1e26]" />
       <Button size="sm" variant="secondary" onClick={onQuarantine}>
         <Shield size={13} /> Quarantine
       </Button>

@@ -66,14 +66,13 @@ export function TopTargetedGroups() {
         </h3>
         <div className="flex items-center gap-2">
           {!loading && totalThreats > 0 && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 border border-red-500/20 text-red-400">
-              <span className="w-1 h-1 rounded-full bg-red-400 animate-pulse" />
+            <span className="text-[10px] font-medium text-slate-500">
               {totalThreats} hits
             </span>
           )}
           {lastUpdated && (
-            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 border border-red-500/20 text-red-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse" />
               Live
             </div>
           )}
@@ -106,8 +105,9 @@ export function TopTargetedGroups() {
                 <div className="text-[10px] text-slate-500 truncate">{g.email}</div>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full"
-                  style={{ background: g.threat_count > 0 ? 'rgba(239,68,68,0.12)' : 'rgba(255,255,255,0.05)', color: g.threat_count > 0 ? '#f87171' : '#6b7280' }}>
+                <span className="flex items-center gap-1.5 text-[11px] font-medium"
+                  style={{ color: g.threat_count > 0 ? '#d4d4d8' : '#6b7280' }}>
+                  {g.threat_count > 0 && <span className="w-1.5 h-1.5 rounded-full bg-[#f87171]" />}
                   {g.threat_count} {g.threat_count === 1 ? 'hit' : 'hits'}
                 </span>
               </div>
@@ -201,21 +201,21 @@ export default function AtRiskEmployees({ employees: propEmployees, loading: pro
           <div className="flex items-center gap-2 flex-wrap">
             <CardTitle>Top At-Risk Employees</CardTitle>
             {!loading && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#e94560]/10 border border-[#e94560]/20 text-[#e94560]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#e94560] animate-pulse" />
+              <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#f87171]" />
                 {liveCount} at risk
               </span>
             )}
             {totalMailboxes > 0 && !loading && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 text-[#3b6ef6]">
+              <span className="text-[10px] font-medium text-slate-500">
                 {totalMailboxes} inboxes monitored
               </span>
             )}
           </div>
           <div className="flex items-center gap-2">
             {live && lastUpdated && (
-              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-500/10 border border-red-500/20 text-red-400">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              <div className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse" />
                 Live
               </div>
             )}
@@ -231,7 +231,7 @@ export default function AtRiskEmployees({ employees: propEmployees, loading: pro
       {loading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-10 animate-pulse bg-[#0f3460]/20 rounded" />
+            <div key={i} className="h-10 animate-pulse bg-white/[0.04] rounded" />
           ))}
         </div>
       ) : (

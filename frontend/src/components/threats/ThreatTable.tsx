@@ -35,7 +35,7 @@ export default function ThreatTable({ threats, selected, onSelect, onSelectAll, 
     return (
       <div className="space-y-2">
         {[...Array(5)].map((_, i) => (
-          <div key={i} className="h-12 animate-pulse bg-[#0f3460]/20 rounded" />
+          <div key={i} className="h-12 animate-pulse bg-white/[0.04] rounded" />
         ))}
       </div>
     )
@@ -48,7 +48,7 @@ export default function ThreatTable({ threats, selected, onSelect, onSelectAll, 
           <Th className="w-10">
             <input
               type="checkbox"
-              className="rounded border-[#0f3460] bg-transparent"
+              className="rounded border-white/[0.09] bg-transparent"
               checked={selected.length === threats.length && threats.length > 0}
               onChange={onSelectAll}
             />
@@ -68,7 +68,7 @@ export default function ThreatTable({ threats, selected, onSelect, onSelectAll, 
             <Td onClick={e => e.stopPropagation()}>
               <input
                 type="checkbox"
-                className="rounded border-[#0f3460] bg-transparent"
+                className="rounded border-white/[0.09] bg-transparent"
                 checked={selected.includes(t.id)}
                 onChange={() => onSelect(t.id)}
               />
@@ -90,7 +90,7 @@ export default function ThreatTable({ threats, selected, onSelect, onSelectAll, 
                 value={t.status || 'new'}
                 onChange={e => changeStatus(t.id, e.target.value, e as any)}
                 disabled={updatingStatus === t.id}
-                className="bg-[#0f1923] text-[11px] border border-[#0f3460] rounded px-1.5 py-0.5 text-slate-300 cursor-pointer focus:outline-none hover:border-[#3b6ef6]/50"
+                className="bg-[#0f1923] text-[11px] border border-white/[0.09] rounded px-1.5 py-0.5 text-slate-300 cursor-pointer focus:outline-none hover:border-[#3b6ef6]/50"
                 title="Change investigation status"
               >
                 <option value="new">New</option>

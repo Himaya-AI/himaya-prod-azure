@@ -369,9 +369,9 @@ function OverviewTab({ stats, events, loading }: {
       {/* Key Metrics Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Events */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <Activity size={18} className="text-[#3b6ef6]" />
             </div>
             <div className="flex items-center gap-1 text-[11px]">
@@ -399,9 +399,9 @@ function OverviewTab({ stats, events, loading }: {
         </div>
 
         {/* Blocked / Held */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <Ban size={18} className="text-red-400" />
             </div>
             <div className="px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20">
@@ -425,9 +425,9 @@ function OverviewTab({ stats, events, loading }: {
         </div>
 
         {/* Active Policies */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <ShieldCheck size={18} className="text-emerald-400" />
             </div>
           </div>
@@ -443,9 +443,9 @@ function OverviewTab({ stats, events, loading }: {
         </div>
 
         {/* Queue Status */}
-        <div className="bg-gradient-to-br from-[#13131a] to-[#1a1a24] border border-white/[0.06] rounded-xl p-5">
+        <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
               <Clock size={18} className="text-amber-400" />
             </div>
             {(stats?.held_today ?? 0) > 0 && (
@@ -1872,7 +1872,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
         <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-500/20 rounded-xl p-5">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
                 <ShieldCheck size={20} className="text-emerald-400" />
               </div>
               <div>
@@ -1895,7 +1895,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-[#3b6ef6]/10 flex items-center justify-center">
+              <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
                 <Shield size={20} className="text-[#3b6ef6]" />
               </div>
               <div>

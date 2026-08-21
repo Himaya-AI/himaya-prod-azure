@@ -487,7 +487,7 @@ export default function CompliancePage() {
                 onClick={() => setActiveTab(f)}
                 className={`flex flex-col px-4 py-2.5 rounded-xl text-sm transition-all ${
                   activeTab === f
-                    ? 'bg-[#e94560] text-white shadow-lg shadow-[#e94560]/20'
+                    ? 'bg-[#f87171] text-white shadow-lg shadow-[#f87171]/20'
                     : 'bg-[#141417] text-slate-400 hover:text-white border border-white/[0.06] hover:border-white/[0.12]'
                 }`}
               >
@@ -594,7 +594,7 @@ export default function CompliancePage() {
                 ? 'linear-gradient(90deg, #4ade80, #22d3ee)'
                 : pct >= 60
                 ? 'linear-gradient(90deg, #fbbf24, #f97316)'
-                : 'linear-gradient(90deg, #f87171, #e94560)',
+                : 'linear-gradient(90deg, #f87171, #f87171)',
             }}
           />
         </div>

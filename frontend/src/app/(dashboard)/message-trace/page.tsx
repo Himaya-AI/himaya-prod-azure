@@ -133,7 +133,7 @@ function CopyButton({ text }: { text: string }) {
 
 // ─── Email Flow Timeline ──────────────────────────────────────────────────────
 
-const DOT: Record<string, string> = { ok: '#4ade80', flagged: '#fbbf24', blocked: '#e94560' }
+const DOT: Record<string, string> = { ok: '#4ade80', flagged: '#fbbf24', blocked: '#f87171' }
 const FLOW_BG: Record<string, string> = {
   ok: 'bg-green-900/20 border-green-700/30',
   flagged: 'bg-amber-900/20 border-amber-700/30',
@@ -162,7 +162,7 @@ function EmailFlowTimeline({ steps }: { steps: EmailFlowStep[] }) {
           <li key={i} className="flex gap-3">
             <div className="flex flex-col items-center">
               <div className="w-3 h-3 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: DOT[step.status] }} />
-              {i < steps.length - 1 && <div className="w-0.5 flex-1 min-h-[24px] bg-[#0f3460]/60 mt-1" />}
+              {i < steps.length - 1 && <div className="w-0.5 flex-1 min-h-[24px] bg-white/[0.04] mt-1" />}
             </div>
             <div className={clsx('flex-1 mb-4 rounded-lg p-3 border', FLOW_BG[step.status])}>
               <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -372,11 +372,11 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
-      <div className="w-full max-w-xl bg-[#0d1b2a] border-l border-[#0f3460]/60 h-full overflow-y-auto shadow-2xl"
+      <div className="w-full max-w-xl bg-[#0e0e12] border-l border-white/[0.07] h-full overflow-y-auto shadow-2xl"
         onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[#0f3460]/50 sticky top-0 bg-[#0d1b2a] z-10">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-white/[0.07] sticky top-0 bg-[#0e0e12] z-10">
           <div>
             <h2 className="text-base font-semibold text-white">Message Details</h2>
             <p className="text-xs text-slate-500 mt-0.5 font-mono break-all leading-relaxed">{d.message_id ?? d.id}</p>
@@ -491,7 +491,7 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
                     .then(r => setDetail(r.data))
                     .catch(() => setDetailError('Still timing out. Try again shortly.'))
                     .finally(() => setDetailLoading(false))
-                }} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs bg-[#0f3460]/60 hover:bg-[#0f3460] text-slate-300 transition-colors">
+                }} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs bg-white/[0.04] hover:bg-white/[0.06] text-slate-300 transition-colors">
                   <RefreshCw size={11} /> Retry
                 </button>
               </div>
@@ -558,11 +558,11 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
           {/* Scores */}
           <section>
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Detection Scores</h3>
-            <div className="space-y-3 bg-[#16213e] rounded-lg p-4 border border-[#0f3460]/40">
+            <div className="space-y-3 bg-[#141417] rounded-lg p-4 border border-white/[0.07]">
               <ScoreBar label="Graph Score" value={d.graph_score} />
               <ScoreBar label="Content Score" value={d.content_score} />
               <ScoreBar label="Reputation Score" value={d.reputation_score} />
-              <div className="pt-1 border-t border-[#0f3460]/40 flex justify-between text-xs">
+              <div className="pt-1 border-t border-white/[0.07] flex justify-between text-xs">
                 <span className="text-slate-400 font-medium">Overall Risk</span>
                 <span className={clsx('font-bold text-sm', riskColor(d.risk_score))}>{d.risk_score ?? '—'}</span>
               </div>
@@ -653,9 +653,9 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
             return (
               <section>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Reputation Intelligence</h3>
-                <div className="space-y-2 bg-[#16213e] rounded-lg p-3 border border-[#0f3460]/40">
+                <div className="space-y-2 bg-[#141417] rounded-lg p-3 border border-white/[0.07]">
                   {hasAuth && (
-                    <div className="flex flex-wrap gap-2 pb-2 border-b border-[#0f3460]/30">
+                    <div className="flex flex-wrap gap-2 pb-2 border-b border-white/[0.07]">
                       {(['spf', 'dkim', 'dmarc'] as const).map(k => {
                         const pass = ri[`${k}_pass` as keyof ReputationIntel] as boolean | null
                         if (pass === null) return null
@@ -824,7 +824,7 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
             <section>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Sender Intelligence</h3>
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-[#16213e] rounded-lg p-3 border border-[#0f3460]/40 flex flex-col gap-1">
+                <div className="bg-[#141417] rounded-lg p-3 border border-white/[0.07] flex flex-col gap-1">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500"><Globe size={12} /> Domain activity</div>
                   <span className={clsx('text-2xl font-bold', detail.similar_threats_count > 5 ? 'text-red-400' : detail.similar_threats_count > 0 ? 'text-amber-400' : 'text-green-400')}>
                     {detail.similar_threats_count}
@@ -835,7 +835,7 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
                       : `other emails from ${d.sender_domain ?? 'this domain'} in last 30 days`}
                   </span>
                 </div>
-                <div className="bg-[#16213e] rounded-lg p-3 border border-[#0f3460]/40 flex flex-col gap-1">
+                <div className="bg-[#141417] rounded-lg p-3 border border-white/[0.07] flex flex-col gap-1">
                   <div className="flex items-center gap-1.5 text-xs text-slate-500"><Users size={12} /> Recipient exposure</div>
                   <span className={clsx('text-2xl font-bold', detail.recipient_threat_history > 10 ? 'text-red-400' : detail.recipient_threat_history > 3 ? 'text-amber-400' : 'text-green-400')}>
                     {detail.recipient_threat_history}
@@ -1031,7 +1031,7 @@ export default function MessageTracePage() {
     { label: 'Clean',         value: (stats.by_action?.CLEAN ?? 0) + (stats.by_action?.DELIVER ?? 0), color: 'text-green-400' },
   ] : []
 
-  const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0d1b2a] border border-[#0f3460]/60 text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#e94560]/50 transition-colors'
+  const inputCls = 'w-full px-3 py-2 rounded-lg bg-[#0e0e12] border border-white/[0.07] text-slate-200 text-sm placeholder-slate-600 focus:outline-none focus:border-[#f87171]/50 transition-colors'
 
   return (
     <div className="space-y-5">
@@ -1039,11 +1039,11 @@ export default function MessageTracePage() {
       <div className="flex items-start justify-between">
         <h1 className="text-[18px] font-semibold text-[var(--foreground)]">Message Trace</h1>
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-[#4ade80] bg-[#4ade80]/10 border border-[#4ade80]/20 px-2.5 py-1 rounded-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#4ade80] animate-pulse inline-block" /> Live
+          <span className="flex items-center gap-1.5 text-[10px] font-medium text-slate-500">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400/80 animate-pulse inline-block" /> Live
           </span>
           <button onClick={() => { fetchResults(page, pageSize); fetchStats() }}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-[#16213e] hover:bg-[#0f3460] text-slate-300 border border-[#0f3460]/60 transition-colors">
+            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm bg-[#141417] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] transition-colors">
             <RefreshCw size={14} /> Refresh
           </button>
         </div>
@@ -1053,7 +1053,7 @@ export default function MessageTracePage() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {statItems.map(({ label, value, color }) => (
-            <div key={label} className="bg-[#16213e] rounded-xl p-4 border border-[#0f3460]/40">
+            <div key={label} className="bg-[#141417] rounded-xl p-4 border border-white/[0.07]">
               <p className="text-xs text-slate-500 mb-1">{label}</p>
               <p className={clsx('text-2xl font-bold', color)}>{value.toLocaleString()}</p>
             </div>
@@ -1062,7 +1062,7 @@ export default function MessageTracePage() {
       )}
 
       {/* Search Panel */}
-      <div className="bg-[#16213e] rounded-xl border border-[#0f3460]/40 p-5">
+      <div className="bg-[#141417] rounded-xl border border-white/[0.07] p-5">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
           <input className={clsx(inputCls, 'col-span-full')}
             placeholder="Search by sender, recipient, subject, or domain"
@@ -1083,7 +1083,7 @@ export default function MessageTracePage() {
         </div>
 
         {showAdvanced && (
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-3 pt-3 border-t border-[#0f3460]/40">
+          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-3 pt-3 border-t border-white/[0.07]">
             <div>
               <label className="text-xs text-slate-500 mb-1 block">Date From</label>
               <input type="datetime-local" className={inputCls} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
@@ -1143,15 +1143,15 @@ export default function MessageTracePage() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleSearch}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#e94560] hover:bg-[#c73652] text-white transition-colors">
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#f87171] hover:bg-[#c73652] text-white transition-colors">
             <Search size={14} /> Search
           </button>
           <button onClick={handleClear}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[#0d1b2a] hover:bg-[#0f3460] text-slate-300 border border-[#0f3460]/60 transition-colors">
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[#0e0e12] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] transition-colors">
             <X size={14} /> Clear
           </button>
           <button onClick={exportCSV}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[#0d1b2a] hover:bg-[#0f3460] text-slate-300 border border-[#0f3460]/60 transition-colors">
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm bg-[#0e0e12] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] transition-colors">
             <Download size={14} /> Export CSV
           </button>
         </div>
@@ -1167,7 +1167,7 @@ export default function MessageTracePage() {
         ].map(({ label, key }) => (
           <button key={key}
             onClick={() => key === 'all' ? handleClear() : applyQuickFilter(key)}
-            className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#16213e] hover:bg-[#0f3460] text-slate-300 border border-[#0f3460]/60 transition-colors">
+            className="px-3 py-1.5 rounded-full text-xs font-medium bg-[#141417] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] transition-colors">
             {label}
           </button>
         ))}
@@ -1175,7 +1175,7 @@ export default function MessageTracePage() {
       </div>
 
       {/* Table */}
-      <div className="bg-[#16213e] rounded-xl border border-[#0f3460]/40 overflow-hidden">
+      <div className="bg-[#141417] rounded-xl border border-white/[0.07] overflow-hidden">
         {loading ? (
           <div className="flex items-center justify-center py-16 text-slate-400">
             <RefreshCw size={18} className="animate-spin mr-2" /> Loading…
@@ -1190,7 +1190,7 @@ export default function MessageTracePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#0f3460]/40">
+                <tr className="border-b border-white/[0.07]">
                   {['Delivered', 'Sender', 'Recipient', 'Domain', 'Classification', 'Risk', 'Himaya Status', ''].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider whitespace-nowrap">{h}</th>
                   ))}
@@ -1199,7 +1199,7 @@ export default function MessageTracePage() {
               <tbody>
                 {results.map(row => (
                   <tr key={row.id}
-                    className="border-b border-[#0f3460]/20 hover:bg-[#0d1b2a]/60 transition-colors cursor-pointer group"
+                    className="border-b border-white/[0.07] hover:bg-[#0e0e12]/60 transition-colors cursor-pointer group"
                     onClick={() => setSelectedRow(row)}>
                     <td className="px-4 py-3 text-slate-400 whitespace-nowrap text-xs">
                       {(() => {
@@ -1244,7 +1244,7 @@ export default function MessageTracePage() {
                     </td>
                     <td className="px-4 py-3">
                       <button onClick={e => { e.stopPropagation(); setSelectedRow(row) }}
-                        className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs bg-[#0f3460]/60 hover:bg-[#0f3460] text-slate-300 transition-colors whitespace-nowrap">
+                        className="flex items-center gap-1 px-2.5 py-1.5 rounded text-xs bg-white/[0.04] hover:bg-white/[0.06] text-slate-300 transition-colors whitespace-nowrap">
                         <Eye size={12} /> Details
                       </button>
                     </td>
@@ -1264,18 +1264,18 @@ export default function MessageTracePage() {
               {((pagination.page - 1) * pagination.page_size) + 1}–{Math.min(pagination.page * pagination.page_size, pagination.total)} of {pagination.total.toLocaleString()}
             </span>
             <select value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1) }}
-              className="text-xs px-2 py-1 rounded bg-[#16213e] border border-[#0f3460]/60 text-slate-300">
+              className="text-xs px-2 py-1 rounded bg-[#141417] border border-white/[0.07] text-slate-300">
               {[25, 50, 100, 200].map(n => <option key={n} value={n}>{n} / page</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">
             <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-[#16213e] hover:bg-[#0f3460] text-slate-300 border border-[#0f3460]/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-[#141417] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               <ChevronLeft size={14} /> Prev
             </button>
             <span className="text-xs text-slate-400 px-2">Page {pagination.page} of {pagination.total_pages}</span>
             <button disabled={page >= pagination.total_pages} onClick={() => setPage(p => p + 1)}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-[#16213e] hover:bg-[#0f3460] text-slate-300 border border-[#0f3460]/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-[#141417] hover:bg-white/[0.06] text-slate-300 border border-white/[0.07] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               Next <ChevronRight size={14} />
             </button>
           </div>

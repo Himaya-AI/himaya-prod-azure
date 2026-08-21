@@ -67,7 +67,7 @@ function ScreenshotCard({ s }: { s: UrlScreenshot }) {
     <div className="border border-[#1a2d5a]/60 rounded-lg overflow-hidden">
       {/* Header */}
       <div
-        className="flex items-center justify-between px-3 py-2 bg-[#0d1b2a] cursor-pointer"
+        className="flex items-center justify-between px-3 py-2 bg-[#0e0e12] cursor-pointer"
         onClick={() => setExpanded(v => !v)}
       >
         <div className="flex-1 min-w-0">
@@ -265,14 +265,14 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
   const cfg = result ? VERDICT_CONFIG[result.verdict] ?? VERDICT_CONFIG.INCONCLUSIVE : null
 
   return (
-    <div className="border border-[#1a2d5a]/60 rounded-xl bg-[#0d1b2a] overflow-hidden">
+    <div className="border border-[#1a2d5a]/60 rounded-xl bg-[#0e0e12] overflow-hidden">
       {/* Header + Tabs */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a2d5a]/40">
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveTab('auto')}
             className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              activeTab === 'auto' ? 'bg-[#e94560]/20 text-[#e94560] border border-[#e94560]/30' : 'text-slate-400 hover:text-slate-200')}
+              activeTab === 'auto' ? 'bg-[#f87171]/20 text-[#f87171] border border-[#f87171]/30' : 'text-slate-400 hover:text-slate-200')}
           >
             <FlaskConical size={13} /> Auto Analysis
           </button>
@@ -288,7 +288,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
           {state === 'idle' && (
             <button
               onClick={submit}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#e94560]/20 hover:bg-[#e94560]/30 text-[#e94560] border border-[#e94560]/30 transition-colors"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#f87171]/20 hover:bg-[#f87171]/30 text-[#f87171] border border-[#f87171]/30 transition-colors"
             >
               Run Analysis
             </button>
@@ -330,7 +330,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
               </p>
               <button
                 onClick={submit}
-                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#e94560]/20 hover:bg-[#e94560]/30 text-[#e94560] border border-[#e94560]/30 transition-colors"
+                className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#f87171]/20 hover:bg-[#f87171]/30 text-[#f87171] border border-[#f87171]/30 transition-colors"
               >
                 Full Sandbox Analysis
               </button>
@@ -635,7 +635,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
               </div>
             )}
 
-            <div className="text-xs text-slate-600 border-t border-[#0f3460]/20 pt-2">
+            <div className="text-xs text-slate-600 border-t border-white/[0.07] pt-2">
               Analysed {result.analyzed_at ? new Date(result.analyzed_at).toLocaleString() : 'recently'} · isolated browser terminated
             </div>
           </div>
