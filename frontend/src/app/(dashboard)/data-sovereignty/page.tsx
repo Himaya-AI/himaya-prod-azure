@@ -371,14 +371,7 @@ export default function DataSovereigntyPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#24befa]/25 to-[#24befa]/5 border border-[#24befa]/25 flex items-center justify-center shadow-lg shadow-[#24befa]/10">
-            <Globe2 size={24} className="text-[#24befa]" />
-          </div>
-          <div>
-            <h1 className="text-[20px] font-semibold text-[var(--foreground)]">Data Sovereignty</h1>
-          </div>
-        </div>
+        <h1 className="text-[18px] font-semibold text-[var(--foreground)]">Data Sovereignty</h1>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="secondary" onClick={seedDefaults} loading={seeding}>
             <Scale size={14} className="mr-1" /> Seed Jurisdiction Packs

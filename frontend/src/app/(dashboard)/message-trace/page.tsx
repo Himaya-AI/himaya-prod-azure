@@ -1143,7 +1143,7 @@ export default function MessageTracePage() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button onClick={handleSearch}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#f87171] hover:bg-[#c73652] text-white transition-colors">
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-[#0ea5e9] hover:bg-[#0b96d6] text-white transition-colors">
             <Search size={14} /> Search
           </button>
           <button onClick={handleClear}

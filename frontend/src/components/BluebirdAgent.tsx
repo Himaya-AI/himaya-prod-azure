@@ -223,7 +223,7 @@ export default function FalconAgent() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-[#24befa] to-[#6366f1] hover:from-[#0b96d6] hover:to-[#4f46e5] text-white rounded-full shadow-lg shadow-[#24befa]/25 transition-all duration-200 hover:scale-105 group"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-[#0ea5e9] hover:bg-[#0b96d6] text-white rounded-full shadow-lg shadow-[#24befa]/25 transition-all duration-200 hover:scale-105 group"
       >
         <div className="relative">
           <Bot size={20} />
@@ -255,7 +255,7 @@ export default function FalconAgent() {
       ) : (
         <div className="bg-[#0f0f12] border border-[var(--border)] rounded-2xl shadow-2xl flex flex-col h-full overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-gradient-to-r from-[#24befa]/10 to-[#6366f1]/10">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[#24befa]/[0.06]">
             <div className="flex items-center gap-2">
               <div className="relative">
                 <Bot size={20} className="text-[#24befa]" />

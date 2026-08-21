@@ -10,6 +10,7 @@ import type { DashboardSummary, TrendDataPoint } from '@/lib/types'
 import {
   Shield, Lock, CheckSquare, RefreshCw, AlertTriangle,
   Zap, Brain, TrendingUp, Target, BookOpen, Info, X, ArrowRight,
+  ShieldAlert, CalendarDays, MailCheck,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
@@ -405,7 +406,7 @@ export default function DashboardPage() {
           label="Potential Threats This Week"
           value={loading ? '—' : (summary?.threats_this_week ?? summary?.total_threats_week ?? 0)}
           accent="red"
-          icon={<Shield size={18} />}
+          icon={<ShieldAlert size={18} />}
           loading={loading}
         />
         <MetricCard
@@ -436,7 +437,7 @@ export default function DashboardPage() {
           value={loading ? '—' : (summary?.total_threats_month ?? 0)}
           sublabel="Last 30 days"
           accent="red"
-          icon={<Shield size={18} />}
+          icon={<CalendarDays size={18} />}
           loading={loading}
         />
         <MetricCard
@@ -452,7 +453,7 @@ export default function DashboardPage() {
           value={loading ? '—' : (summary?.top_threat_type ?? 'None')}
           sublabel="Most common verdict this period"
           accent="red"
-          icon={<AlertTriangle size={18} />}
+          icon={<MailCheck size={18} />}
           loading={loading}
         />
         {/* Risk Score tile */}
