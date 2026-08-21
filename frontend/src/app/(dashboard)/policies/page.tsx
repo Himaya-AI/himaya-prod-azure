@@ -10,7 +10,7 @@ import { toast } from '@/components/ui/Toast'
 
 // ─── Shared style constants (module-level — no re-creation on render) ─────────
 const _labelClass = 'block text-[12px] font-medium text-[#71717a] mb-1'
-const _inputClass = 'w-full bg-[#1e1e24] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[#e4e4e7] focus:outline-none focus:border-[#3b6ef6]/50'
+const _inputClass = 'w-full bg-[#1e1e24] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[#e4e4e7] focus:outline-none focus:border-[#24befa]/50'
 const _selectClass = `${_inputClass} cursor-pointer`
 
 interface Policy {
@@ -274,7 +274,7 @@ function PolicyFormContent({
             onClick={() => setBuilderTab?.('visual')}
             className={`flex-1 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
               builderTab === 'visual'
-                ? 'bg-[#3b6ef6] text-white shadow'
+                ? 'bg-[#0ea5e9] text-white shadow'
                 : 'text-[#71717a] hover:text-[#a1a1aa]'
             }`}
           >
@@ -284,7 +284,7 @@ function PolicyFormContent({
             onClick={() => setBuilderTab?.('advanced')}
             className={`flex-1 py-1.5 text-[12px] font-medium rounded-md transition-colors ${
               builderTab === 'advanced'
-                ? 'bg-[#3b6ef6] text-white shadow'
+                ? 'bg-[#0ea5e9] text-white shadow'
                 : 'text-[#71717a] hover:text-[#a1a1aa]'
             }`}
           >
@@ -369,7 +369,7 @@ function PolicyFormContent({
 
           {/* notify_admin for advanced mode */}
           <label className="flex items-center gap-2 text-[13px] text-[#a1a1aa] cursor-pointer">
-            <input type="checkbox" checked={form.notify_admin} onChange={e => f('notify_admin', e.target.checked)} className="accent-[#3b6ef6]" />
+            <input type="checkbox" checked={form.notify_admin} onChange={e => f('notify_admin', e.target.checked)} className="accent-[#24befa]" />
             Notify admin on match
           </label>
         </div>
@@ -418,7 +418,7 @@ function PolicyFormContent({
             <div className="col-span-2 flex flex-wrap gap-6 items-start">
               <div className="flex flex-col gap-2">
                 <label className="flex items-center gap-2 text-[13px] text-[#a1a1aa] cursor-pointer">
-                  <input type="checkbox" checked={form.has_attachment} onChange={e => f('has_attachment', e.target.checked)} className="accent-[#3b6ef6]" />
+                  <input type="checkbox" checked={form.has_attachment} onChange={e => f('has_attachment', e.target.checked)} className="accent-[#24befa]" />
                   Has attachment
                 </label>
                 {form.has_attachment && (
@@ -427,7 +427,7 @@ function PolicyFormContent({
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 max-h-36 overflow-y-auto pr-1">
                       {ATTACHMENT_TYPE_OPTIONS.map(opt => (
                         <label key={opt.value} className="flex items-center gap-1.5 text-[12px] text-[#a1a1aa] cursor-pointer">
-                          <input type="checkbox" checked={form.attachment_types.includes(opt.value)} onChange={() => toggleAttachmentType(opt.value)} className="accent-[#3b6ef6]" />
+                          <input type="checkbox" checked={form.attachment_types.includes(opt.value)} onChange={() => toggleAttachmentType(opt.value)} className="accent-[#24befa]" />
                           {opt.label}
                         </label>
                       ))}
@@ -436,11 +436,11 @@ function PolicyFormContent({
                 )}
               </div>
               <label className="flex items-center gap-2 text-[13px] text-[#a1a1aa] cursor-pointer">
-                <input type="checkbox" checked={form.has_link} onChange={e => f('has_link', e.target.checked)} className="accent-[#3b6ef6]" />
+                <input type="checkbox" checked={form.has_link} onChange={e => f('has_link', e.target.checked)} className="accent-[#24befa]" />
                 Contains links
               </label>
               <label className="flex items-center gap-2 text-[13px] text-[#a1a1aa] cursor-pointer">
-                <input type="checkbox" checked={form.notify_admin} onChange={e => f('notify_admin', e.target.checked)} className="accent-[#3b6ef6]" />
+                <input type="checkbox" checked={form.notify_admin} onChange={e => f('notify_admin', e.target.checked)} className="accent-[#24befa]" />
                 Notify admin on match
               </label>
             </div>
@@ -494,7 +494,7 @@ function TemplateCard({ tpl, onInstall }: { tpl: ExtendedTemplate; onInstall: (t
           {tpl.frameworks && tpl.frameworks.length > 0 && (
             <div className="flex gap-1 flex-wrap">
               {tpl.frameworks.slice(0, 3).map(f => (
-                <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-[#3b6ef6]/10 text-[#93b4fd]">{f}</span>
+                <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-[#24befa]/10 text-[#93b4fd]">{f}</span>
               ))}
             </div>
           )}
@@ -863,7 +863,7 @@ export default function PoliciesPage() {
       )}
 
       {/* How policies work callout */}
-      <div className="flex items-start gap-3 bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl px-5 py-3.5 text-[12px] text-[#93b4fd]">
+      <div className="flex items-start gap-3 bg-[#24befa]/[0.06] border border-[#24befa]/20 rounded-xl px-5 py-3.5 text-[12px] text-[#93b4fd]">
         <Info size={13} className="mt-0.5 flex-shrink-0" />
         <div>
           <span className="font-semibold">Execution order:</span> Policies run <span className="font-medium">before</span> AI analysis.
@@ -947,12 +947,12 @@ export default function PoliciesPage() {
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => { setEditPolicy(p); setForm(formFromPolicy(p)); setError('') }}
-                        className="text-[#71717a] hover:text-[#3b6ef6] transition-colors p-1" title="Edit policy">
+                        className="text-[#71717a] hover:text-[#24befa] transition-colors p-1" title="Edit policy">
                         <Pencil size={13} />
                       </button>
                       {p.status !== 'active' ? (
                         <button onClick={() => activatePolicy(p.id)}
-                          className="text-[#3b6ef6] hover:text-white transition-colors p-1" title="Activate">
+                          className="text-[#24befa] hover:text-white transition-colors p-1" title="Activate">
                           <Play size={13} />
                         </button>
                       ) : (
@@ -1015,7 +1015,7 @@ export default function PoliciesPage() {
               onClick={() => setTemplateTab(group.key)}
               className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-[12px] font-medium rounded-md transition-colors ${
                 templateTab === group.key
-                  ? 'bg-[#3b6ef6] text-white shadow'
+                  ? 'bg-[#0ea5e9] text-white shadow'
                   : 'text-[#71717a] hover:text-[#a1a1aa]'
               }`}
             >

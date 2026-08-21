@@ -509,11 +509,11 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
               'rounded-lg p-4 border',
               detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive
                 ? 'border-amber-700/40 bg-amber-900/10'
-                : 'border-[#3b6ef6]/30 bg-[#3b6ef6]/5'
+                : 'border-[#24befa]/30 bg-[#24befa]/5'
             )}>
               <div className="flex items-center gap-2 mb-2">
-                <Sparkles size={14} className={detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive ? 'text-amber-400' : 'text-[#3b6ef6]'} />
-                <span className={clsx('text-xs font-semibold', detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive ? 'text-amber-400' : 'text-[#3b6ef6]')}>
+                <Sparkles size={14} className={detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive ? 'text-amber-400' : 'text-[#24befa]'} />
+                <span className={clsx('text-xs font-semibold', detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive ? 'text-amber-400' : 'text-[#24befa]')}>
                   Himaya AI Analysis
                   {detail?.email_flow?.find(s => s.stage === 'AI Classification')?.inconclusive && (
                     <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-900/40 text-amber-300 border border-amber-700/40">INCONCLUSIVE</span>
@@ -906,10 +906,10 @@ function DetailPanel({ row: initialRow, onClose, onRowUpdated }: {
                 <button
                   disabled={!!actionLoading || (completedAction !== null && completedAction !== 'false_positive')}
                   onClick={() => doAction('false_positive', 'Marked as False Positive')}
-                  className={clsx('w-full px-4 py-2.5 rounded-lg text-sm font-medium bg-[#3b6ef6]/10 hover:bg-[#3b6ef6]/20 text-blue-300 border border-[#3b6ef6]/30 transition-colors text-left flex items-center gap-2',
+                  className={clsx('w-full px-4 py-2.5 rounded-lg text-sm font-medium bg-[#24befa]/10 hover:bg-[#24befa]/20 text-blue-300 border border-[#24befa]/30 transition-colors text-left flex items-center gap-2',
                     completedAction !== null && completedAction !== 'false_positive' ? 'opacity-30 cursor-not-allowed' : '',
                     completedAction === 'false_positive' ? 'ring-1 ring-blue-400/40' : '')}>
-                  {actionLoading === 'false_positive' ? <RefreshCw size={14} className="animate-spin" /> : <Brain size={14} className="text-[#3b6ef6]" />}
+                  {actionLoading === 'false_positive' ? <RefreshCw size={14} className="animate-spin" /> : <Brain size={14} className="text-[#24befa]" />}
                   Mark as False Positive
                   <span className="ml-auto text-xs text-blue-600">Trains AI model</span>
                 </button>

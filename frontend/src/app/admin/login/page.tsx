@@ -61,7 +61,7 @@ export default function AdminLogin() {
     startCooldown()
   }
 
-  const inputClass = "w-full bg-[#1e1e24] border border-white/[0.08] rounded-lg px-4 py-2.5 text-[13px] text-[#e4e4e7] placeholder-[#52525b] focus:outline-none focus:border-[#3b6ef6]/60 transition-colors"
+  const inputClass = "w-full bg-[#1e1e24] border border-white/[0.08] rounded-lg px-4 py-2.5 text-[13px] text-[#e4e4e7] placeholder-[#52525b] focus:outline-none focus:border-[#24befa]/60 transition-colors"
 
   return (
     <div className="min-h-screen bg-[#0c0c0e] flex flex-col items-center justify-center p-4">
@@ -88,7 +88,7 @@ export default function AdminLogin() {
                 <input type="password" value={password} onChange={e => setPassword(e.target.value)} className={inputClass} placeholder="••••••••" required />
               </div>
               <button type="submit" disabled={loading}
-                className="w-full bg-[#3b6ef6] hover:bg-[#2f5de0] disabled:opacity-50 text-white text-[13px] font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors mt-1">
+                className="w-full bg-[#0ea5e9] hover:bg-[#2f5de0] disabled:opacity-50 text-white text-[13px] font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors mt-1">
                 {loading ? 'Sending code…' : <><span>Continue</span><ArrowRight size={14} /></>}
               </button>
             </form>
@@ -101,11 +101,11 @@ export default function AdminLogin() {
               <input
                 type="text" value={otp}
                 onChange={e => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="w-full bg-[#1e1e24] border border-white/[0.08] rounded-lg px-4 py-3.5 text-[22px] font-bold text-[#e4e4e7] text-center tracking-[0.6em] focus:outline-none focus:border-[#3b6ef6]/60 transition-colors"
+                className="w-full bg-[#1e1e24] border border-white/[0.08] rounded-lg px-4 py-3.5 text-[22px] font-bold text-[#e4e4e7] text-center tracking-[0.6em] focus:outline-none focus:border-[#24befa]/60 transition-colors"
                 placeholder="000000" maxLength={6} required
               />
               <button type="submit" disabled={loading || otp.length !== 6}
-                className="w-full bg-[#3b6ef6] hover:bg-[#2f5de0] disabled:opacity-50 text-white text-[13px] font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors">
+                className="w-full bg-[#0ea5e9] hover:bg-[#2f5de0] disabled:opacity-50 text-white text-[13px] font-medium py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors">
                 {loading ? 'Verifying…' : <><span>Verify & Sign In</span><ArrowRight size={14} /></>}
               </button>
               <div className="flex items-center justify-between pt-1">

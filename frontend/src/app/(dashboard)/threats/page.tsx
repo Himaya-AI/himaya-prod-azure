@@ -52,31 +52,7 @@ const DATE_QUICK = [
   { label: '90 days',key: '90d',  ms: 90 * 86_400_000 },
 ]
 
-// ── Colour maps ───────────────────────────────────────────────────────────────
-const TYPE_COLOR_MAP: Record<string, string> = {
-  red:    'bg-red-900/30 border-red-700/40 text-red-300 hover:bg-red-900/50',
-  orange: 'bg-orange-900/30 border-orange-700/40 text-orange-300 hover:bg-orange-900/50',
-  amber:  'bg-amber-900/30 border-amber-700/40 text-amber-300 hover:bg-amber-900/50',
-  purple: 'bg-purple-900/30 border-purple-700/40 text-purple-300 hover:bg-purple-900/50',
-  blue:   'bg-blue-900/30 border-blue-700/40 text-blue-300 hover:bg-blue-900/50',
-  yellow: 'bg-yellow-900/20 border-yellow-700/40 text-yellow-300 hover:bg-yellow-900/40',
-  teal:   'bg-teal-900/30 border-teal-700/40 text-teal-300 hover:bg-teal-900/50',
-  pink:   'bg-pink-900/30 border-pink-700/40 text-pink-300 hover:bg-pink-900/50',
-  slate:  'bg-slate-800/40 border-slate-600/40 text-slate-400 hover:bg-slate-800/60',
-}
-const ACTIVE_TYPE_MAP: Record<string, string> = {
-  red:    'bg-red-700/50 border-red-500 text-red-200',
-  orange: 'bg-orange-700/50 border-orange-500 text-orange-200',
-  amber:  'bg-amber-700/50 border-amber-500 text-amber-200',
-  purple: 'bg-purple-700/50 border-purple-500 text-purple-200',
-  blue:   'bg-blue-700/50 border-blue-500 text-blue-200',
-  yellow: 'bg-yellow-700/40 border-yellow-500 text-yellow-200',
-  teal:   'bg-teal-700/50 border-teal-500 text-teal-200',
-  pink:   'bg-pink-700/50 border-pink-500 text-pink-200',
-  slate:  'bg-slate-700/60 border-slate-400 text-slate-200',
-}
-
-function Pill({ label, active, onClick, color = 'slate', tip }: {
+function Pill({ label, active, onClick, tip }: {
   label: string; active: boolean; onClick: (e: React.MouseEvent) => void; color?: string; tip?: string
 }) {
   return (
@@ -84,8 +60,10 @@ function Pill({ label, active, onClick, color = 'slate', tip }: {
       title={tip}
       onClick={onClick}
       className={clsx(
-        'px-2.5 py-1 rounded-full text-xs font-medium border transition-all whitespace-nowrap',
-        active ? (ACTIVE_TYPE_MAP[color] ?? ACTIVE_TYPE_MAP.slate) : (TYPE_COLOR_MAP[color] ?? TYPE_COLOR_MAP.slate),
+        'px-2.5 py-1 rounded-md text-xs font-medium border transition-all whitespace-nowrap',
+        active
+          ? 'bg-[#24befa]/10 border-[#24befa]/50 text-[#24befa]'
+          : 'bg-white/[0.03] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]',
       )}
     >
       {label}
@@ -474,10 +452,10 @@ export default function ThreatsPage() {
               key={q.key}
               onClick={() => applyDateQuick(q.key, q.ms)}
               className={clsx(
-                'px-2.5 py-1 rounded-full text-xs font-medium border transition-all',
+                'px-2.5 py-1 rounded-md text-xs font-medium border transition-all',
                 activeDateQuick === q.key
-                  ? 'bg-[#1e1e26] border-[#3b6ef6] text-blue-300'
-                  : 'bg-slate-800/40 border-slate-600/40 text-slate-400 hover:bg-slate-800/60'
+                  ? 'bg-[#24befa]/10 border-[#24befa]/50 text-[#24befa]'
+                  : 'bg-white/[0.03] border-white/[0.08] text-slate-400 hover:text-slate-200 hover:bg-white/[0.06]'
               )}
             >
               Last {q.label}
@@ -647,10 +625,10 @@ export default function ThreatsPage() {
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] flex-shrink-0">
             <div className="flex items-center gap-2">
-              <ClipboardList size={16} className="text-[#3b6ef6]" />
+              <ClipboardList size={16} className="text-[#24befa]" />
               <span className="font-semibold text-white text-sm">Himaya Analysis — Audit Trail</span>
               {auditItems.length > 0 && (
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#3b6ef6]/20 text-[#3b6ef6] border border-[#3b6ef6]/30">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#24befa]/20 text-[#24befa] border border-[#24befa]/30">
                   {auditItems.length}{auditItems.length >= 500 ? '+' : ''}
                 </span>
               )}
@@ -728,7 +706,7 @@ export default function ThreatsPage() {
                         <div className="space-y-1 mb-2">
                           {item.key_evidence.map((ev: string, i: number) => (
                             <div key={i} className="flex items-start gap-1.5 text-[10px] text-slate-400">
-                              <span className="text-[#3b6ef6] mt-0.5 flex-shrink-0">·</span>
+                              <span className="text-[#24befa] mt-0.5 flex-shrink-0">·</span>
                               <span>{ev}</span>
                             </div>
                           ))}

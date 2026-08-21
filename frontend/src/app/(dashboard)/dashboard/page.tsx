@@ -53,7 +53,7 @@ function ThreatTypeBreakdown({ data, loading }: { data: Record<string, number>; 
         <div className="space-y-2.5">
           {sorted.map(([type, count]) => {
             const pct = total > 0 ? Math.round((count / total) * 100) : 0
-            const color = COLOR_MAP[type] ?? '#3b6ef6'
+            const color = COLOR_MAP[type] ?? '#24befa'
             return (
               <div key={type}>
                 <div className="flex items-center justify-between text-[12px] mb-1">
@@ -90,7 +90,7 @@ interface RuleUsageData {
 }
 
 const ACTION_COLOR: Record<string, string> = {
-  QUARANTINE: '#3b6ef6',
+  QUARANTINE: '#24befa',
   BLOCK_DELETE: '#f87171',
   DELIVER_WITH_BANNER: '#f59e0b',
   HOLD_FOR_REVIEW: '#a855f7',
@@ -125,7 +125,7 @@ function RuleUsagePanel() {
     <div className="bg-[#141417] border border-white/[0.07] rounded-xl p-5 h-full">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-[13px] font-semibold text-white flex items-center gap-2">
-          <BookOpen size={14} className="text-[#3b6ef6]" /> Rule Usage & Top Hit Policies
+          <BookOpen size={14} className="text-[#24befa]" /> Rule Usage & Top Hit Policies
         </h3>
         <div className="flex items-center gap-2">
           {lastUpdated && (
@@ -136,7 +136,7 @@ function RuleUsagePanel() {
           )}
           <button
             onClick={() => router.push('/policies')}
-            className="flex items-center gap-1 text-[10px] text-[#3b6ef6] hover:text-blue-300 transition-colors"
+            className="flex items-center gap-1 text-[10px] text-[#24befa] hover:text-blue-300 transition-colors"
           >
             View Rules <ArrowRight size={10} />
           </button>
@@ -153,7 +153,7 @@ function RuleUsagePanel() {
         <div>
           <div className="flex gap-4 mb-3">
             <div className="text-center">
-              <div className="text-xl font-bold text-[#3b6ef6]">{data?.active_policies ?? 0}</div>
+              <div className="text-xl font-bold text-[#24befa]">{data?.active_policies ?? 0}</div>
               <div className="text-[10px] text-slate-500">Active Rules</div>
             </div>
             <div className="text-center">
@@ -168,7 +168,7 @@ function RuleUsagePanel() {
           {/* Summary row */}
           <div className="flex flex-wrap gap-3 mb-3">
             <div className="flex items-center gap-1.5">
-              <Target size={11} className="text-[#3b6ef6]" />
+              <Target size={11} className="text-[#24befa]" />
               <span className="text-[11px] text-slate-400">
                 <span className="font-bold text-white">{data.active_policies}</span> active rules
               </span>
@@ -289,7 +289,7 @@ function RiskScoreTile() {
               <ul className="space-y-1">
                 {data.key_factors.map((f, i) => (
                   <li key={i} className="flex items-start gap-1.5 text-[11px] text-slate-400">
-                    <span className="text-[#3b6ef6] mt-0.5">·</span> {f}
+                    <span className="text-[#24befa] mt-0.5">·</span> {f}
                   </li>
                 ))}
               </ul>
@@ -314,7 +314,7 @@ function SyncIndicator({ lastSync, syncing }: { lastSync: Date | null; syncing: 
   const timeStr = lastSync.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   return (
     <div className="flex items-center gap-1.5 text-[11px] text-slate-500">
-      <RefreshCw size={11} className={syncing ? 'animate-spin text-[#3b6ef6]' : 'text-slate-600'} />
+      <RefreshCw size={11} className={syncing ? 'animate-spin text-[#24befa]' : 'text-slate-600'} />
       {syncing ? 'Syncing…' : `Last sync: ${timeStr}`}
     </div>
   )

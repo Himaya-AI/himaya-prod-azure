@@ -18,7 +18,7 @@ export default function AuthShell({ children, subtitle }: Props) {
             flex items-center justify-center
             bg-gradient-to-br from-[#1a1f3c] to-[#0d1224]
             rounded-2xl px-8 py-4 mb-3
-            shadow-lg border border-[#3b6ef6]/20
+            shadow-lg border border-[#24befa]/20
           ">
             <Image
               src="/himaya-logo.png"

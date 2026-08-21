@@ -29,8 +29,8 @@ export default function TrendChart({ data, loading }: Props) {
         <div className="h-48 animate-pulse bg-white/[0.04] rounded" />
       ) : !hasData ? (
         <div className="h-[220px] flex flex-col items-center justify-center gap-3 text-center">
-          <div className="w-12 h-12 rounded-full bg-[#3b6ef6]/10 flex items-center justify-center">
-            <TrendingUp size={22} className="text-[#3b6ef6]/40" />
+          <div className="w-12 h-12 rounded-full bg-[#24befa]/10 flex items-center justify-center">
+            <TrendingUp size={22} className="text-[#24befa]/40" />
           </div>
           <div>
             <p className="text-[13px] font-medium text-slate-400">No trend data yet</p>

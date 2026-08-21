@@ -73,7 +73,7 @@ export default function ThreatFeed() {
         </div>
         <button
           onClick={() => router.push('/threats')}
-          className="flex items-center gap-1 text-[10px] text-[#3b6ef6] hover:text-blue-300 transition-colors"
+          className="flex items-center gap-1 text-[10px] text-[#24befa] hover:text-blue-300 transition-colors"
         >
           View All <ArrowRight size={10} />
         </button>

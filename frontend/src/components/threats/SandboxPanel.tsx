@@ -279,7 +279,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
           <button
             onClick={() => setActiveTab('interactive')}
             className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
-              activeTab === 'interactive' ? 'bg-[#3b6ef6]/20 text-[#3b6ef6] border border-[#3b6ef6]/30' : 'text-slate-400 hover:text-slate-200')}
+              activeTab === 'interactive' ? 'bg-[#24befa]/20 text-[#24befa] border border-[#24befa]/30' : 'text-slate-400 hover:text-slate-200')}
           >
             <Monitor size={13} /> Live Session
           </button>
@@ -390,7 +390,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
                 <button
                   onClick={launchSession}
                   disabled={sessionLoading}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium bg-[#3b6ef6]/20 hover:bg-[#3b6ef6]/30 text-[#3b6ef6] border border-[#3b6ef6]/30 transition-colors disabled:opacity-50"
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-medium bg-[#24befa]/20 hover:bg-[#24befa]/30 text-[#24befa] border border-[#24befa]/30 transition-colors disabled:opacity-50"
                 >
                   {sessionLoading ? <Loader2 size={14} className="animate-spin" /> : <Monitor size={14} />}
                   Launch Interactive Session
@@ -512,7 +512,7 @@ export default function SandboxPanel({ threatId, targetUrl }: Props) {
                 <p className="text-xs text-slate-500 mb-3">Azure sandbox container destroyed. Activity logs saved.</p>
                 <button
                   onClick={() => setSession(null)}
-                  className="px-4 py-1.5 rounded text-xs bg-[#3b6ef6]/20 text-[#3b6ef6] border border-[#3b6ef6]/30 hover:bg-[#3b6ef6]/30 transition-colors"
+                  className="px-4 py-1.5 rounded text-xs bg-[#24befa]/20 text-[#24befa] border border-[#24befa]/30 hover:bg-[#24befa]/30 transition-colors"
                 >
                   Launch New Session
                 </button>

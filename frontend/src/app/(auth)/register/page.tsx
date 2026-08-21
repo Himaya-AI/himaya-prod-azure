@@ -15,13 +15,13 @@ export default function RegisterPage() {
         </p>
         <a
           href="mailto:sales@himaya.ai?subject=Himaya%20Onboarding%20Request"
-          className="inline-block rounded-lg bg-[#3b6ef6] px-8 py-3 text-sm font-semibold text-white hover:bg-[#2f5ad9] transition-colors"
+          className="inline-block rounded-lg bg-[#0ea5e9] px-8 py-3 text-sm font-semibold text-white hover:bg-[#2f5ad9] transition-colors"
         >
           Contact sales@himaya.ai
         </a>
         <p className="mt-8 text-xs text-[#52525b]">
           Already have an account?{' '}
-          <Link href="/login" className="text-[#3b6ef6] hover:underline">
+          <Link href="/login" className="text-[#24befa] hover:underline">
             Sign in
           </Link>
         </p>

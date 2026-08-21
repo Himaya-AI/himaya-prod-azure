@@ -90,7 +90,7 @@ export default function ThreatTable({ threats, selected, onSelect, onSelectAll, 
                 value={t.status || 'new'}
                 onChange={e => changeStatus(t.id, e.target.value, e as any)}
                 disabled={updatingStatus === t.id}
-                className="bg-[#0f1923] text-[11px] border border-white/[0.09] rounded px-1.5 py-0.5 text-slate-300 cursor-pointer focus:outline-none hover:border-[#3b6ef6]/50"
+                className="bg-[#0f1923] text-[11px] border border-white/[0.09] rounded px-1.5 py-0.5 text-slate-300 cursor-pointer focus:outline-none hover:border-[#24befa]/50"
                 title="Change investigation status"
               >
                 <option value="new">New</option>

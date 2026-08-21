@@ -44,7 +44,7 @@ function EmailGroupsPanel() {
         className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Mail size={14} className="text-[#3b6ef6]" />
+          <Mail size={14} className="text-[#24befa]" />
           <span className="text-[13px] font-semibold text-white">Email Groups & Distribution Lists</span>
           {!loading && (
             <span className="text-[11px] text-slate-500">· {groups.length} group{groups.length !== 1 ? 's' : ''}</span>
@@ -89,8 +89,8 @@ function EmailGroupsPanel() {
                     >
                       <td className="px-5 py-3">
                         <div className="flex items-center gap-2">
-                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${g.is_shared_mailbox ? 'bg-amber-500/10' : 'bg-[#3b6ef6]/10'}`}>
-                            <Users size={12} className={g.is_shared_mailbox ? 'text-amber-400' : 'text-[#3b6ef6]'} />
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${g.is_shared_mailbox ? 'bg-amber-500/10' : 'bg-[#24befa]/10'}`}>
+                            <Users size={12} className={g.is_shared_mailbox ? 'text-amber-400' : 'text-[#24befa]'} />
                           </div>
                           <div className="flex flex-col">
                             <div className="flex items-center gap-1.5">
@@ -358,7 +358,7 @@ export default function PeoplePage() {
             placeholder="Search by name or email…"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-[13px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-[#3b6ef6]/50 transition-colors"
+            className="w-full pl-9 pr-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-[13px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-[#24befa]/50 transition-colors"
           />
         </div>
         <button

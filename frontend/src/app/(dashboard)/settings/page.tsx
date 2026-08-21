@@ -278,7 +278,7 @@ export default function SettingsPage() {
             onClick={() => setTab(tabName)}
             className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-all ${
               tab === tabName
-                ? 'border-[#3b6ef6] text-white'
+                ? 'border-[#24befa] text-white'
                 : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
             }`}
           >
@@ -315,7 +315,7 @@ export default function SettingsPage() {
                     onClick={() => setLang(l as 'en' | 'ar')}
                     className={`px-4 py-2 rounded-lg text-[13px] font-medium transition-all ${
                       lang === l
-                        ? 'bg-[#3b6ef6] text-white'
+                        ? 'bg-[#0ea5e9] text-white'
                         : 'bg-[#1e1e24] text-[#71717a] border border-white/[0.08] hover:text-[#a1a1aa]'
                     }`}
                   >
@@ -336,7 +336,7 @@ export default function SettingsPage() {
                   onClick={() => setTheme('dark')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
                     theme === 'dark'
-                      ? 'bg-[#3b6ef6] text-white'
+                      ? 'bg-[#0ea5e9] text-white'
                       : 'text-[#71717a] hover:text-[#a1a1aa]'
                   }`}
                 >
@@ -346,7 +346,7 @@ export default function SettingsPage() {
                   onClick={() => setTheme('light')}
                   className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-[12px] font-medium transition-all ${
                     theme === 'light'
-                      ? 'bg-[#3b6ef6] text-white'
+                      ? 'bg-[#0ea5e9] text-white'
                       : 'text-[#71717a] hover:text-[#a1a1aa]'
                   }`}
                 >
@@ -374,7 +374,7 @@ export default function SettingsPage() {
       {tab === 'Users' && (
         <div className="space-y-4">
           {/* Info note */}
-          <div className="flex items-start gap-3 px-4 py-3 bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl text-[12px] text-[#93b4fd]">
+          <div className="flex items-start gap-3 px-4 py-3 bg-[#24befa]/[0.06] border border-[#24befa]/20 rounded-xl text-[12px] text-[#93b4fd]">
             <Info size={13} className="mt-0.5 flex-shrink-0" />
             <span>This tab shows <strong>portal admin accounts</strong> only — people who can log into Himaya. Monitored employee mailboxes are managed in the <strong>People</strong> tab.</span>
           </div>
@@ -419,7 +419,7 @@ export default function SettingsPage() {
                             value={u.role}
                             disabled={roleUpdating === u.id}
                             onChange={e => updateUserRole(u.id, e.target.value)}
-                            className="text-[12px] bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] rounded-md px-2 py-1 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#3b6ef6] disabled:opacity-50"
+                            className="text-[12px] bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] rounded-md px-2 py-1 cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#24befa] disabled:opacity-50"
                           >
                             <option value="admin">admin</option>
                             <option value="analyst">analyst</option>
@@ -477,7 +477,7 @@ export default function SettingsPage() {
                   <select
                     value={inviteRole}
                     onChange={e => setInviteRole(e.target.value)}
-                    className="w-full text-[13px] bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+                    className="w-full text-[13px] bg-[var(--card)] border border-[var(--border)] text-[var(--foreground)] rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-[#24befa]"
                   >
                     <option value="analyst">Analyst — can view threats, run reports, receive digests</option>
                     <option value="admin">Admin — full access + manage users + configure integrations</option>
@@ -522,7 +522,7 @@ export default function SettingsPage() {
       {/* Alerts */}
       {tab === 'Alerts' && (
         <div className="max-w-2xl space-y-4">
-          <div className="flex items-start gap-3 px-4 py-3 bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl text-[12px] text-[#93b4fd]">
+          <div className="flex items-start gap-3 px-4 py-3 bg-[#24befa]/[0.06] border border-[#24befa]/20 rounded-xl text-[12px] text-[#93b4fd]">
             <Info size={13} className="mt-0.5 flex-shrink-0" />
             <span>Alert emails are sent from <strong>noreply@notify.himaya.ai</strong> with Himaya branding. Make sure your inbox isn't filtering them. Changes save automatically.</span>
           </div>
@@ -550,7 +550,7 @@ export default function SettingsPage() {
                   </div>
                   <button
                     onClick={() => toggleAlert(key, !alertPrefs[key])}
-                    className={`relative inline-flex h-5 w-9 rounded-full transition-colors flex-shrink-0 ${alertPrefs[key] ? 'bg-[#3b6ef6]' : 'bg-[#3f3f46]'}`}
+                    className={`relative inline-flex h-5 w-9 rounded-full transition-colors flex-shrink-0 ${alertPrefs[key] ? 'bg-[#0ea5e9]' : 'bg-[#3f3f46]'}`}
                   >
                     <span className={`inline-block w-4 h-4 m-0.5 bg-white rounded-full transition-transform ${alertPrefs[key] ? 'translate-x-4' : 'translate-x-0'}`} />
                   </button>
@@ -596,7 +596,7 @@ export default function SettingsPage() {
           {/* Session Timeout */}
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
             <div className="flex items-center gap-2">
-              <Clock size={14} className="text-[#3b6ef6]" />
+              <Clock size={14} className="text-[#24befa]" />
               <div className="text-[11px] text-[var(--muted)] uppercase tracking-wide font-semibold">Session</div>
               {securitySaveSuccess && (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-400 ml-auto">
@@ -616,7 +616,7 @@ export default function SettingsPage() {
                   value={securitySettings.session_timeout_minutes}
                   disabled={!isAdmin || savingSecurity}
                   onChange={e => saveSecuritySettings({ session_timeout_minutes: Number(e.target.value) })}
-                  className="bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] text-[13px] rounded-lg px-3 py-2 outline-none focus:border-[#3b6ef6]"
+                  className="bg-[var(--background)] border border-[var(--border)] text-[var(--foreground)] text-[13px] rounded-lg px-3 py-2 outline-none focus:border-[#24befa]"
                 >
                   <option value={30}>30 minutes</option>
                   <option value={60}>1 hour</option>
@@ -635,7 +635,7 @@ export default function SettingsPage() {
           {/* Pointer to the alert toggles in the Alerts tab */}
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5">
             <div className="flex items-center gap-2 mb-2">
-              <Bell size={14} className="text-[#3b6ef6]" />
+              <Bell size={14} className="text-[#24befa]" />
               <div className="text-[11px] text-[var(--muted)] uppercase tracking-wide font-semibold">Workspace Security Alerts</div>
             </div>
             <p className="text-[12px] text-[var(--muted)] mb-3">

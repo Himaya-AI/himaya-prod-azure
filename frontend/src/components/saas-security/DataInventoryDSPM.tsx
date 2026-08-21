@@ -482,7 +482,7 @@ export default function DataInventoryDSPM() {
             onClick={() => setSubTab(t)}
             className={`text-[12px] px-3 py-1.5 -mb-px border-b-2 ${
               subTab === t
-                ? 'border-[#3b6ef6] text-zinc-100'
+                ? 'border-[#24befa] text-zinc-100'
                 : 'border-transparent text-zinc-500 hover:text-zinc-300'
             }`}
           >

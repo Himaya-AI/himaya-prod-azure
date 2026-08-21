@@ -42,7 +42,7 @@ export default function ThreatMap() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2 flex-wrap">
-          <Globe size={15} className="text-[#3b6ef6]" />
+          <Globe size={15} className="text-[#24befa]" />
           <h3 className="text-[13px] font-semibold text-white">
             Potential Threat Ingress Locations
           </h3>

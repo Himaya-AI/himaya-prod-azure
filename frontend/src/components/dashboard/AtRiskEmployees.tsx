@@ -44,7 +44,7 @@ export function TopTargetedGroups() {
 
   const typeBadge = (gt: string) => {
     const label = gt === 'shared' ? 'SHARED' : gt === 'dl' ? 'DL' : 'GROUP'
-    const color = gt === 'shared' ? '#0ea5e9' : gt === 'dl' ? '#a855f7' : '#3b6ef6'
+    const color = gt === 'shared' ? '#0ea5e9' : gt === 'dl' ? '#a855f7' : '#24befa'
     return (
       <span
         className="text-[9px] font-bold px-1.5 py-0.5 rounded"
@@ -61,7 +61,7 @@ export function TopTargetedGroups() {
     <div className="bg-[#141417] border border-white/[0.07] rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[13px] font-semibold text-white flex items-center gap-2">
-          <Users size={13} className="text-[#3b6ef6]" />
+          <Users size={13} className="text-[#24befa]" />
           Top Targeted Groups &amp; Shared Inboxes
         </h3>
         <div className="flex items-center gap-2">
@@ -78,7 +78,7 @@ export function TopTargetedGroups() {
           )}
           <button
             onClick={() => router.push('/people')}
-            className="flex items-center gap-1 text-[10px] text-[#3b6ef6] hover:text-blue-300 transition-colors"
+            className="flex items-center gap-1 text-[10px] text-[#24befa] hover:text-blue-300 transition-colors"
           >
             View People <ArrowRight size={10} />
           </button>
@@ -221,7 +221,7 @@ export default function AtRiskEmployees({ employees: propEmployees, loading: pro
             )}
             <button
               onClick={() => router.push('/people')}
-              className="flex items-center gap-1 text-[10px] text-[#3b6ef6] hover:text-blue-300 transition-colors"
+              className="flex items-center gap-1 text-[10px] text-[#24befa] hover:text-blue-300 transition-colors"
             >
               View Inboxes <ArrowRight size={10} />
             </button>

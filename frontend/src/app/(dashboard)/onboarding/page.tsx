@@ -67,7 +67,7 @@ function StatCard({ label, value, sub, color, icon }: {
 
 // ── Progress Bar ───────────────────────────────────────────────────────────────
 function ProgressBar({ pct, label }: { pct: number; label: string }) {
-  const color = pct >= 100 ? '#4ade80' : pct > 0 ? '#3b6ef6' : '#3f3f46'
+  const color = pct >= 100 ? '#4ade80' : pct > 0 ? '#24befa' : '#3f3f46'
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-[12px]">
@@ -174,8 +174,8 @@ function ProviderCard({
         <div className="px-6 pb-5 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-[#0e0e12] border border-white/[0.07] rounded-xl p-3 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-[#3b6ef6]/10 flex items-center justify-center flex-shrink-0">
-                <Users size={15} className="text-[#3b6ef6]" />
+              <div className="w-8 h-8 rounded-lg bg-[#24befa]/10 flex items-center justify-center flex-shrink-0">
+                <Users size={15} className="text-[#24befa]" />
               </div>
               <div>
                 <p className="text-[11px] text-slate-500">Mailboxes Monitored</p>
@@ -215,7 +215,7 @@ function ProviderCard({
                   <ol className="space-y-3">
                     {section.steps.map((step, i) => (
                       <li key={i} className="flex gap-3">
-                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#3b6ef6]/20 text-[#93b4fd] text-[10px] font-bold flex items-center justify-center mt-0.5">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-[#24befa]/20 text-[#93b4fd] text-[10px] font-bold flex items-center justify-center mt-0.5">
                           {i + 1}
                         </span>
                         <div className="min-w-0">
@@ -247,7 +247,7 @@ function ProviderCard({
       {!status.connected && (
         <div className="px-6 pb-6 space-y-4 border-t border-white/[0.04] pt-4">
           {/* Admin notice */}
-          <div className="flex items-start gap-3 px-4 py-3 bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl">
+          <div className="flex items-start gap-3 px-4 py-3 bg-[#24befa]/[0.06] border border-[#24befa]/20 rounded-xl">
             <Info size={14} className="text-[#93b4fd] mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-[12px] font-semibold text-[#93b4fd]">Admin authorization required</p>
@@ -261,7 +261,7 @@ function ProviderCard({
             <div className="space-y-2">
               {permissions.map(p => (
                 <div key={p.scope} className="flex items-start gap-3">
-                  <ShieldCheck size={13} className="text-[#3b6ef6] mt-0.5 flex-shrink-0" />
+                  <ShieldCheck size={13} className="text-[#24befa] mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-[12px] text-slate-300 font-medium">{p.label}</p>
                     <p className="text-[11px] text-slate-500">{p.reason}</p>
@@ -348,7 +348,7 @@ const APPS_SCRIPT_MANIFEST = `{
     "name": "Himaya Phish Reporter",
     "logoUrl": "https://app.himaya.ai/himaya-logo.png",
     "primaryColor": "#26262e",
-    "secondaryColor": "#3b6ef6",
+    "secondaryColor": "#24befa",
     "contextualTriggers": [{ "unconditional": {}, "onTriggerFunction": "onGmailMessageOpen" }]
   }
 }`
@@ -493,7 +493,7 @@ function PhishReportTab() {
       {/* Header */}
       <div>
         <div className="flex items-center gap-2 mb-1">
-          <Fish size={16} className="text-[#3b6ef6]" />
+          <Fish size={16} className="text-[#24befa]" />
           <h3 className="text-[14px] font-bold text-[var(--foreground)]">Employee Phish Report Add-on</h3>
         </div>
         <p className="text-[12px] text-[var(--muted)]">
@@ -541,21 +541,21 @@ function PhishReportTab() {
         {/* Gmail Setup */}
         <div className="bg-[var(--background)] border border-[var(--border)] rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <Mail size={14} className="text-[#3b6ef6] flex-shrink-0" />
+            <Mail size={14} className="text-[#24befa] flex-shrink-0" />
             <h4 className="text-[13px] font-bold text-[var(--foreground)]">Gmail Add-on Setup</h4>
           </div>
-          <div className="bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 rounded-lg px-3 py-2 mb-2">
-            <p className="text-[11px] text-[#3b6ef6] font-medium leading-relaxed">
+          <div className="bg-[#24befa]/10 border border-[#24befa]/20 rounded-lg px-3 py-2 mb-2">
+            <p className="text-[11px] text-[#24befa] font-medium leading-relaxed">
               The Himaya Phish Reporter add-on is published by <strong>Himaya Technologies</strong> from a single shared GCP project.
               Your org key (above) ties each report to your tenant. Install it once from your Google Workspace Admin console.
             </p>
           </div>
           <ol className="space-y-2 text-[11px] text-[var(--muted)]">
-            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">1.</span><span>Sign in to your <strong>Google Workspace Admin Console</strong> (<a href="https://admin.google.com" target="_blank" rel="noreferrer" className="text-[#3b6ef6] hover:underline">admin.google.com</a>) as a super admin</span></li>
-            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">2.</span><span>Go to <strong>Apps → Google Workspace Marketplace apps → Add app to domain install list</strong></span></li>
-            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">3.</span><span>Search for <strong>&quot;Himaya Phish Reporter&quot;</strong> by Himaya Technologies, click Install</span></li>
-            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">4.</span><span>Select the OUs or users to deploy to, then click <strong>Finish</strong></span></li>
-            <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">5.</span><span>Employees will see the Himaya panel the next time they open an email in Gmail</span></li>
+            <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">1.</span><span>Sign in to your <strong>Google Workspace Admin Console</strong> (<a href="https://admin.google.com" target="_blank" rel="noreferrer" className="text-[#24befa] hover:underline">admin.google.com</a>) as a super admin</span></li>
+            <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">2.</span><span>Go to <strong>Apps → Google Workspace Marketplace apps → Add app to domain install list</strong></span></li>
+            <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">3.</span><span>Search for <strong>&quot;Himaya Phish Reporter&quot;</strong> by Himaya Technologies, click Install</span></li>
+            <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">4.</span><span>Select the OUs or users to deploy to, then click <strong>Finish</strong></span></li>
+            <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">5.</span><span>Employees will see the Himaya panel the next time they open an email in Gmail</span></li>
           </ol>
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
             <p className="text-[11px] text-amber-400 leading-relaxed">
@@ -595,17 +595,17 @@ function PhishReportTab() {
         {/* Outlook Setup */}
         <div className="bg-[var(--background)] border border-[var(--border)] rounded-xl p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <Inbox size={14} className="text-[#3b6ef6] flex-shrink-0" />
+            <Inbox size={14} className="text-[#24befa] flex-shrink-0" />
             <h4 className="text-[13px] font-bold text-[var(--foreground)]">Outlook Add-in Setup</h4>
           </div>
 
           {/* URL method */}
           <div className="bg-[var(--card)] border border-[var(--border)] rounded-lg p-3 space-y-2">
             <ol className="space-y-1.5 text-[11px] text-[var(--muted)]">
-              <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">1.</span><span>Copy your manifest URL below</span></li>
-              <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">2.</span><span>Go to <strong className="text-[var(--foreground)]">Microsoft 365 Admin Center</strong> → Settings → Integrated apps → Upload custom app</span></li>
-              <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">3.</span><span>Choose <strong className="text-[var(--foreground)]">&quot;Provide link to manifest file&quot;</strong> and paste the URL</span></li>
-              <li className="flex gap-2"><span className="text-[#3b6ef6] font-bold flex-shrink-0">4.</span><span>Assign to users or deploy org-wide</span></li>
+              <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">1.</span><span>Copy your manifest URL below</span></li>
+              <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">2.</span><span>Go to <strong className="text-[var(--foreground)]">Microsoft 365 Admin Center</strong> → Settings → Integrated apps → Upload custom app</span></li>
+              <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">3.</span><span>Choose <strong className="text-[var(--foreground)]">&quot;Provide link to manifest file&quot;</strong> and paste the URL</span></li>
+              <li className="flex gap-2"><span className="text-[#24befa] font-bold flex-shrink-0">4.</span><span>Assign to users or deploy org-wide</span></li>
             </ol>
             {phishKey ? (
               <div className="flex items-center gap-2 mt-2">
@@ -614,7 +614,7 @@ function PhishReportTab() {
                 </code>
                 <button
                   onClick={() => copyText(`https://app.himaya.ai/api/phish-report/manifest.xml?key=${phishKey}`, setCopiedManifest)}
-                  className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2.5 py-1.5 bg-[#3b6ef6] text-white rounded hover:bg-[#2d5de0] transition-colors"
+                  className="flex-shrink-0 flex items-center gap-1 text-[11px] px-2.5 py-1.5 bg-[#0ea5e9] text-white rounded hover:bg-[#2d5de0] transition-colors"
                 >
                   {copiedManifest ? '✓ Copied' : 'Copy URL'}
                 </button>
@@ -639,7 +639,7 @@ function PhishReportTab() {
             { Icon: Brain, label: 'All reports train the AI model to get smarter over time' },
           ].map(({ Icon, label }, i) => (
             <div key={i} className="bg-[var(--card)] border border-[var(--border)] rounded-lg p-3 text-center">
-              <div className="flex justify-center mb-2"><Icon size={16} className="text-[#3b6ef6]" /></div>
+              <div className="flex justify-center mb-2"><Icon size={16} className="text-[#24befa]" /></div>
               <p className="text-[10px] text-[var(--muted)] leading-relaxed">{label}</p>
             </div>
           ))}
@@ -825,7 +825,7 @@ export default function OnboardingPage() {
         <div className="bg-[#141417] border border-white/[0.07] rounded-xl p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Activity size={14} className="text-[#3b6ef6]" />
+              <Activity size={14} className="text-[#24befa]" />
               <span className="text-[13px] font-semibold text-white">Baseline Scan</span>
             </div>
             {mailboxCount != null && mailboxCount > 0 && (
@@ -974,7 +974,7 @@ export default function OnboardingPage() {
             <button key={t} onClick={() => setIntTab(t as any)}
               className={`flex items-center gap-1.5 px-5 py-3 text-[12px] font-semibold border-b-2 transition-colors ${
                 intTab === t
-                  ? 'border-[#3b6ef6] text-[#3b6ef6]'
+                  ? 'border-[#24befa] text-[#24befa]'
                   : 'border-transparent text-[var(--muted)] hover:text-[var(--foreground)]'
               }`}>
               <Icon size={12} />
@@ -1106,12 +1106,12 @@ export default function OnboardingPage() {
                                 placeholder="Search groups…"
                                 value={scopeSearch[prov] || ''}
                                 onChange={e => setScopeSearch(s => ({ ...s, [prov]: e.target.value }))}
-                                className="flex-1 text-[11px] bg-[var(--background)] border border-[var(--border)] rounded-lg px-2.5 py-1.5 text-[var(--foreground)] placeholder:text-[var(--muted)] outline-none focus:border-[#3b6ef6]"
+                                className="flex-1 text-[11px] bg-[var(--background)] border border-[var(--border)] rounded-lg px-2.5 py-1.5 text-[var(--foreground)] placeholder:text-[var(--muted)] outline-none focus:border-[#24befa]"
                               />
                               <button
                                 onClick={() => searchScopeGroups(prov, scopeSearch[prov] || '')}
                                 disabled={scopeLoading[prov]}
-                                className="text-[11px] px-3 py-1.5 bg-[#3b6ef6] text-white rounded-lg font-semibold disabled:opacity-50"
+                                className="text-[11px] px-3 py-1.5 bg-[#0ea5e9] text-white rounded-lg font-semibold disabled:opacity-50"
                               >
                                 {scopeLoading[prov] ? '…' : 'Search'}
                               </button>
@@ -1123,9 +1123,9 @@ export default function OnboardingPage() {
                                   <button
                                     key={g.id}
                                     onClick={() => setScopeGroup(prov, { id: g.id, name: g.name || g.email })}
-                                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#3b6ef6]/10 text-left border-b border-[var(--border)] last:border-0 transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[#24befa]/10 text-left border-b border-[var(--border)] last:border-0 transition-colors"
                                   >
-                                    <Mail size={11} className="text-[#3b6ef6] flex-shrink-0" />
+                                    <Mail size={11} className="text-[#24befa] flex-shrink-0" />
                                     <div className="min-w-0">
                                       <p className="text-[11px] font-semibold text-[var(--foreground)] truncate">{g.name}</p>
                                       {g.email && <p className="text-[10px] text-[var(--muted)] truncate">{g.email}</p>}
@@ -1153,7 +1153,7 @@ export default function OnboardingPage() {
                           <div key={prov} className="col-span-3 grid grid-cols-3 gap-3">
                             <div className="bg-[var(--background)] rounded-lg p-3 border border-[var(--border)]">
                               <p className="text-[10px] text-[var(--muted)]">{prov === 'google' ? 'Google' : 'M365'} Groups</p>
-                              <p className="text-[18px] font-bold text-[#3b6ef6] mt-0.5">{(c.groups_count ?? 0).toLocaleString()}</p>
+                              <p className="text-[18px] font-bold text-[#24befa] mt-0.5">{(c.groups_count ?? 0).toLocaleString()}</p>
                             </div>
                             <div className="bg-[var(--background)] rounded-lg p-3 border border-[var(--border)]">
                               <p className="text-[10px] text-[var(--muted)]">{prov === 'google' ? 'Google' : 'M365'} Aliases</p>
@@ -1195,7 +1195,7 @@ export default function OnboardingPage() {
                 })}
                 <div className="bg-[var(--background)] border border-[var(--border)] rounded-xl p-3">
                   <p className="text-[10px] text-[var(--muted)]">Mailboxes Monitored</p>
-                  <p className="text-[18px] font-bold text-[#3b6ef6] mt-0.5">{(syncHistory.monitored_mailboxes ?? 0).toLocaleString()}</p>
+                  <p className="text-[18px] font-bold text-[#24befa] mt-0.5">{(syncHistory.monitored_mailboxes ?? 0).toLocaleString()}</p>
                   <p className="text-[10px] text-[var(--muted)] mt-0.5">Auto-enrolled</p>
                 </div>
                 <div className="bg-[var(--background)] border border-[var(--border)] rounded-xl p-3">
@@ -1228,7 +1228,7 @@ export default function OnboardingPage() {
                         </span>
                       </div>
                       <div className="h-1.5 bg-[var(--border)] rounded-full overflow-hidden">
-                        <div className="h-full bg-[#3b6ef6] rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
+                        <div className="h-full bg-[#0ea5e9] rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%` }} />
                       </div>
                       <div className="flex items-center gap-4 text-[11px] text-[var(--muted)]">
                         <span><strong className="text-[var(--foreground)]">{(pd?.emails_processed ?? 0).toLocaleString()}</strong> emails processed</span>

@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   ShieldAlert, RefreshCw, X, AlertTriangle, CheckCircle,
-  Ban, Flag, ChevronLeft, ChevronRight, Shield
+  Ban, Flag, ChevronLeft, ChevronRight, Shield, MailWarning
 } from 'lucide-react'
 import api from '@/lib/api'
 import SandboxPanel from '@/components/threats/SandboxPanel'
@@ -157,7 +157,7 @@ function DetailPanel({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.07] flex-shrink-0">
           <div className="flex items-center gap-2">
-            <ShieldAlert size={18} className="text-[#3b6ef6]" />
+            <ShieldAlert size={18} className="text-[#24befa]" />
             <span className="font-semibold text-white text-sm">Quarantine Detail</span>
           </div>
           <button onClick={onClose} className="text-[#71717a] hover:text-white transition-colors">
@@ -413,7 +413,7 @@ export default function QuarantinePage() {
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-4 bg-[#141417] border border-white/[0.07] rounded-xl overflow-hidden divide-x divide-y lg:divide-y-0 divide-white/[0.06]">
-          <StatCard label="Total Quarantined" value={stats.total_quarantined} icon={ShieldAlert} dot="bg-[#3b6ef6]" />
+          <StatCard label="Total Quarantined" value={stats.total_quarantined} icon={ShieldAlert} dot="bg-[#0ea5e9]" />
           <StatCard label="Released Today" value={stats.released_today} icon={CheckCircle} dot="bg-emerald-400" />
           <StatCard label="False Positives" value={stats.false_positives} icon={Flag} />
           <StatCard label="High-Risk Blocked" value={stats.high_risk_blocked} icon={Ban} dot="bg-[#f87171]" />
@@ -431,25 +431,25 @@ export default function QuarantinePage() {
             value={filters[key]}
             onChange={e => { setFilters(f => ({ ...f, [key]: e.target.value })); setPage(1) }}
             placeholder={placeholder}
-            className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] placeholder-[#52525b] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+            className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] placeholder-[#52525b] focus:outline-none focus:ring-1 focus:ring-[#24befa]"
           />
         ))}
         <input
           type="date"
           value={filters.date_from}
           onChange={e => { setFilters(f => ({ ...f, date_from: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#24befa]"
         />
         <input
           type="date"
           value={filters.date_to}
           onChange={e => { setFilters(f => ({ ...f, date_to: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#24befa]"
         />
         <select
           value={filters.status}
           onChange={e => { setFilters(f => ({ ...f, status: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#24befa]"
         >
           <option value="unresolved">Unresolved</option>
           <option value="all">All Statuses</option>
@@ -460,7 +460,7 @@ export default function QuarantinePage() {
         <select
           value={filters.threat_type}
           onChange={e => { setFilters(f => ({ ...f, threat_type: e.target.value })); setPage(1) }}
-          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#3b6ef6]"
+          className="px-3 py-2 bg-[#141417] border border-white/[0.07] rounded-lg text-sm text-[#e4e4e7] focus:outline-none focus:ring-1 focus:ring-[#24befa]"
         >
           {THREAT_TYPES.map(t => <option key={t} value={t}>{t === 'all' ? 'All Types' : t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</option>)}
         </select>
@@ -478,8 +478,8 @@ export default function QuarantinePage() {
           <div className="text-center text-[#a1a1aa] py-16 text-sm">Loading…</div>
         ) : items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-            <div className="w-16 h-16 rounded-full bg-[#3b6ef6]/10 flex items-center justify-center">
-              <Shield size={28} className="text-[#3b6ef6]/50" />
+            <div className="w-16 h-16 rounded-full bg-[#24befa]/10 flex items-center justify-center">
+              <Shield size={28} className="text-[#24befa]/50" />
             </div>
             <div>
               <p className="text-white font-medium">No quarantined emails</p>
@@ -518,25 +518,27 @@ export default function QuarantinePage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap" onClick={e => e.stopPropagation()}>
-                      <div className="flex gap-1 flex-nowrap items-center">
+                      <div className="flex gap-0.5 flex-nowrap items-center">
                         <button
                           onClick={() => handleAction(item.id, 'release')}
-                          className="px-2 py-1 text-xs rounded bg-green-500/20 text-green-400 hover:bg-green-500/30 transition-colors"
-                        >Release</button>
+                          title="Release to inbox"
+                          className="p-1.5 rounded-md text-slate-500 hover:text-emerald-400 hover:bg-white/[0.05] transition-colors"
+                        ><CheckCircle size={14} /></button>
                         <button
                           onClick={() => handleAction(item.id, 'block-permanently')}
-                          className="px-2 py-1 text-xs rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-                          title="Move to Trash"
-                        >Block</button>
+                          title="Block — move to Trash"
+                          className="p-1.5 rounded-md text-slate-500 hover:text-red-400 hover:bg-white/[0.05] transition-colors"
+                        ><Ban size={14} /></button>
                         <button
                           onClick={() => handleAction(item.id, 'mark-as-spam')}
-                          className="px-2 py-1 text-xs rounded bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 transition-colors"
-                        >Spam</button>
+                          title="Mark as spam"
+                          className="p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-white/[0.05] transition-colors"
+                        ><MailWarning size={14} /></button>
                         <button
                           onClick={() => handleAction(item.id, 'report-fp')}
-                          className="px-2 py-1 text-xs rounded bg-slate-500/20 text-slate-400 hover:bg-slate-500/30 transition-colors"
-                          title="Tunes future analysis"
-                        >FP</button>
+                          title="Report false positive — tunes future analysis"
+                          className="p-1.5 rounded-md text-slate-500 hover:text-[#24befa] hover:bg-white/[0.05] transition-colors"
+                        ><Flag size={14} /></button>
                       </div>
                     </td>
                   </tr>

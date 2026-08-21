@@ -223,7 +223,7 @@ export default function FalconAgent() {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-[#3b6ef6] to-[#6366f1] hover:from-[#2d5fe0] hover:to-[#4f46e5] text-white rounded-full shadow-lg shadow-[#3b6ef6]/25 transition-all duration-200 hover:scale-105 group"
+        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-[#24befa] to-[#6366f1] hover:from-[#0b96d6] hover:to-[#4f46e5] text-white rounded-full shadow-lg shadow-[#24befa]/25 transition-all duration-200 hover:scale-105 group"
       >
         <div className="relative">
           <Bot size={20} />
@@ -248,17 +248,17 @@ export default function FalconAgent() {
           onClick={() => setIsMinimized(false)}
           className="flex items-center gap-2 px-4 py-3 bg-[#141417] border border-[var(--border)] rounded-xl shadow-2xl hover:bg-[#1a1a1f] transition-colors"
         >
-          <Bot size={18} className="text-[#3b6ef6]" />
+          <Bot size={18} className="text-[#24befa]" />
           <span className="font-medium text-[13px] text-[var(--foreground)]">Falcon Agent</span>
           <Maximize2 size={14} className="text-[var(--muted)]" />
         </button>
       ) : (
         <div className="bg-[#0f0f12] border border-[var(--border)] rounded-2xl shadow-2xl flex flex-col h-full overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-gradient-to-r from-[#3b6ef6]/10 to-[#6366f1]/10">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-gradient-to-r from-[#24befa]/10 to-[#6366f1]/10">
             <div className="flex items-center gap-2">
               <div className="relative">
-                <Bot size={20} className="text-[#3b6ef6]" />
+                <Bot size={20} className="text-[#24befa]" />
                 <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-emerald-400 rounded-full" />
               </div>
               <div>
@@ -294,13 +294,13 @@ export default function FalconAgent() {
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
                     message.role === 'user'
-                      ? 'bg-[#3b6ef6] text-white'
+                      ? 'bg-[#0ea5e9] text-white'
                       : 'bg-[#1a1a1f] border border-[var(--border)] text-[var(--foreground)]'
                   }`}
                 >
                   {message.isStreaming ? (
                     <div className="flex items-center gap-2">
-                      <Loader2 size={14} className="animate-spin text-[#3b6ef6]" />
+                      <Loader2 size={14} className="animate-spin text-[#24befa]" />
                       <span className="text-[12px] text-[var(--muted)]">Thinking...</span>
                     </div>
                   ) : (
@@ -314,7 +314,7 @@ export default function FalconAgent() {
                             <button
                               key={idx}
                               onClick={() => handleActionClick(action)}
-                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#3b6ef6]/10 hover:bg-[#3b6ef6]/20 border border-[#3b6ef6]/30 rounded-lg text-[11px] font-medium text-[#3b6ef6] transition-colors"
+                              className="flex items-center gap-1.5 px-3 py-1.5 bg-[#24befa]/10 hover:bg-[#24befa]/20 border border-[#24befa]/30 rounded-lg text-[11px] font-medium text-[#24befa] transition-colors"
                             >
                               {action.type === 'report' && <Download size={12} />}
                               {action.type === 'policy' && <Shield size={12} />}
@@ -342,7 +342,7 @@ export default function FalconAgent() {
                     onClick={() => handleSuggestedPrompt(prompt.prompt)}
                     className="flex items-center gap-2 p-2 bg-[#1a1a1f] hover:bg-[#242428] border border-[var(--border)] rounded-lg text-left transition-colors group"
                   >
-                    <prompt.icon size={14} className="text-[var(--muted)] group-hover:text-[#3b6ef6] transition-colors flex-shrink-0" />
+                    <prompt.icon size={14} className="text-[var(--muted)] group-hover:text-[#24befa] transition-colors flex-shrink-0" />
                     <span className="text-[11px] text-[var(--muted)] group-hover:text-[var(--foreground)] transition-colors line-clamp-2">
                       {prompt.label}
                     </span>
@@ -361,13 +361,13 @@ export default function FalconAgent() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about your security environment..."
-                className="flex-1 bg-[#1a1a1f] border border-[var(--border)] rounded-xl px-4 py-2.5 text-[13px] text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:border-[#3b6ef6]/50 focus:ring-1 focus:ring-[#3b6ef6]/25"
+                className="flex-1 bg-[#1a1a1f] border border-[var(--border)] rounded-xl px-4 py-2.5 text-[13px] text-[var(--foreground)] placeholder-[var(--muted)] focus:outline-none focus:border-[#24befa]/50 focus:ring-1 focus:ring-[#24befa]/25"
                 disabled={isLoading}
               />
               <button
                 type="submit"
                 disabled={!input.trim() || isLoading}
-                className="p-2.5 bg-[#3b6ef6] hover:bg-[#2d5fe0] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+                className="p-2.5 bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
               >
                 {isLoading ? (
                   <Loader2 size={16} className="animate-spin" />

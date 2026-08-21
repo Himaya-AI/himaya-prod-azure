@@ -141,7 +141,7 @@ function AppsTab({ apps, loading, onRevoke, revoking }: {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-start gap-3 px-4 py-3 bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl text-[12px] text-[#93b4fd]">
+      <div className="flex items-start gap-3 px-4 py-3 bg-[#24befa]/[0.06] border border-[#24befa]/20 rounded-xl text-[12px] text-[#93b4fd]">
         <Info size={13} className="mt-0.5 flex-shrink-0" />
         <span>These are third-party apps with OAuth access to your organization's mailboxes. High-risk apps have permissions that could be used to read, send, or delete email at scale.</span>
       </div>
@@ -745,7 +745,7 @@ export default function PosturePage() {
               key={key}
               onClick={() => setTab(key)}
               className={`flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium border-b-2 transition-all ${
-                tab === key ? 'border-[#3b6ef6] text-white' : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
+                tab === key ? 'border-[#24befa] text-white' : 'border-transparent text-[#71717a] hover:text-[#a1a1aa]'
               }`}
             >
               {icon}

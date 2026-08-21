@@ -352,8 +352,8 @@ export default function DataSovereigntyPage() {
   if (!enterprise) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-[#3b6ef6]/15 border border-[#3b6ef6]/25 flex items-center justify-center mb-4">
-          <Lock size={26} className="text-[#3b6ef6]" />
+        <div className="w-14 h-14 rounded-2xl bg-[#24befa]/15 border border-[#24befa]/25 flex items-center justify-center mb-4">
+          <Lock size={26} className="text-[#24befa]" />
         </div>
         <h1 className="text-[20px] font-semibold text-[var(--foreground)] mb-2">Data Sovereignty</h1>
         <p className="text-[13px] text-[var(--muted)] max-w-md">
@@ -372,8 +372,8 @@ export default function DataSovereigntyPage() {
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#3b6ef6]/25 to-[#3b6ef6]/5 border border-[#3b6ef6]/25 flex items-center justify-center shadow-lg shadow-[#3b6ef6]/10">
-            <Globe2 size={24} className="text-[#3b6ef6]" />
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#24befa]/25 to-[#24befa]/5 border border-[#24befa]/25 flex items-center justify-center shadow-lg shadow-[#24befa]/10">
+            <Globe2 size={24} className="text-[#24befa]" />
           </div>
           <div>
             <h1 className="text-[20px] font-semibold text-[var(--foreground)]">Data Sovereignty</h1>
@@ -403,7 +403,7 @@ export default function DataSovereigntyPage() {
             key={t.id}
             onClick={() => setTab(t.id)}
             className={`flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium border-b-2 transition-colors ${
-              tab === t.id ? 'border-[#3b6ef6] text-[#3b6ef6]' : 'border-transparent text-[var(--muted)] hover:text-[var(--foreground)]'
+              tab === t.id ? 'border-[#24befa] text-[#24befa]' : 'border-transparent text-[var(--muted)] hover:text-[var(--foreground)]'
             }`}
           >
             {t.icon}{t.label}
@@ -425,15 +425,15 @@ export default function DataSovereigntyPage() {
             <div className="space-y-6">
               {/* Stat cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <StatCard icon={<Scale size={14} className="text-[#3b6ef6]" />} label="Active Policies" value={overview.total_policies} />
+                <StatCard icon={<Scale size={14} className="text-[#24befa]" />} label="Active Policies" value={overview.total_policies} />
                 <StatCard icon={<ShieldAlert size={14} className="text-red-400" />} label="Open Violations" value={overview.total_violations} color={overview.total_violations > 0 ? 'text-red-400' : 'text-emerald-400'} />
                 <StatCard icon={<Layers size={14} className="text-purple-400" />} label="Jurisdictions" value={overview.by_jurisdiction.length} />
                 <StatCard icon={<Globe2 size={14} className="text-emerald-400" />} label="Packs Available" value={overview.packs_available} />
               </div>
 
               {overview.total_policies === 0 && (
-                <div className="bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl p-5 flex items-start gap-3">
-                  <Info size={18} className="text-[#3b6ef6] flex-shrink-0 mt-0.5" />
+                <div className="bg-[#24befa]/[0.06] border border-[#24befa]/20 rounded-xl p-5 flex items-start gap-3">
+                  <Info size={18} className="text-[#24befa] flex-shrink-0 mt-0.5" />
                   <div className="text-[13px] text-[var(--foreground)]">
                     No sovereignty policies yet. Click <span className="font-semibold">Seed Jurisdiction Packs</span> to
                     load prebuilt borders for {overview.packs_available}+ regimes — KSA (PDPL/NCA), UAE, EU (GDPR), UK, US, Qatar, Bahrain, India (DPDP), China (PIPL), Brazil (LGPD) and more — or <span className="font-semibold">Build Policy</span> for a custom border, then <span className="font-semibold">Run Sovereignty Scan</span>.
@@ -445,7 +445,7 @@ export default function DataSovereigntyPage() {
               {overview.by_jurisdiction.length > 0 && (
                 <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
                   <h3 className="text-[13px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-                    <Scale size={14} className="text-[#3b6ef6]" /> Posture by Jurisdiction
+                    <Scale size={14} className="text-[#24befa]" /> Posture by Jurisdiction
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {overview.by_jurisdiction.map(j => (
@@ -540,7 +540,7 @@ export default function DataSovereigntyPage() {
                               <button
                                 onClick={() => enforceViolation(v)}
                                 disabled={enforcingId === v.id}
-                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-[#3b6ef6]/30 text-[#3b6ef6] hover:bg-[#3b6ef6]/10 disabled:opacity-50"
+                                className="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-lg border border-[#24befa]/30 text-[#24befa] hover:bg-[#24befa]/10 disabled:opacity-50"
                               >
                                 {enforcingId === v.id ? <RefreshCw size={12} className="animate-spin" /> : <Zap size={12} />}
                                 Enforce
@@ -576,7 +576,7 @@ export default function DataSovereigntyPage() {
 
               {policies.length === 0 ? (
                 <div className="bg-[#13131a] border border-white/[0.06] rounded-xl text-center py-16">
-                  <Scale size={32} className="mx-auto text-[#3b6ef6]/40 mb-2" />
+                  <Scale size={32} className="mx-auto text-[#24befa]/40 mb-2" />
                   <div className="text-[13px] text-[var(--muted)]">No policies. Seed jurisdiction packs or add one from a pack.</div>
                 </div>
               ) : (
@@ -626,7 +626,7 @@ export default function DataSovereigntyPage() {
             <div className="space-y-4">
               {classSummary && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <StatCard icon={<Database size={14} className="text-[#3b6ef6]" />} label="Classified Columns" value={classSummary.total_columns} />
+                  <StatCard icon={<Database size={14} className="text-[#24befa]" />} label="Classified Columns" value={classSummary.total_columns} />
                   <StatCard icon={<Server size={14} className="text-purple-400" />} label="Sources" value={classSummary.by_source.length} />
                   <StatCard icon={<Fingerprint size={14} className="text-amber-400" />} label="PII Columns" value={classSummary.by_data_class.find(d => d.data_class === 'pii')?.columns ?? 0} />
                   <StatCard icon={<ShieldAlert size={14} className="text-red-400" />} label="Sensitive Classes" value={classSummary.by_data_class.length} />
@@ -635,7 +635,7 @@ export default function DataSovereigntyPage() {
               <div className="bg-[#13131a] border border-white/[0.06] rounded-xl overflow-hidden">
                 {classifications.length === 0 ? (
                   <div className="text-center py-16">
-                    <Database size={32} className="mx-auto text-[#3b6ef6]/40 mb-2" />
+                    <Database size={32} className="mx-auto text-[#24befa]/40 mb-2" />
                     <div className="text-[13px] text-[var(--muted)]">No classified columns yet. Connect Snowflake/SAP and run a scan — column-level PII is classified automatically.</div>
                   </div>
                 ) : (
@@ -656,7 +656,7 @@ export default function DataSovereigntyPage() {
                         {classifications.map((c, i) => (
                           <Tr key={i}>
                             <Td><span className={`text-[11px] font-semibold ${providerColor(c.source)}`}>{c.source.toUpperCase()}</span></Td>
-                            <Td><span className="text-[11px] font-mono text-[var(--foreground)] max-w-[300px] block truncate" title={c.lineage.path}>{c.lineage.database}.{c.lineage.schema}.{c.lineage.table}.<span className="text-[#3b6ef6]">{c.lineage.column}</span></span></Td>
+                            <Td><span className="text-[11px] font-mono text-[var(--foreground)] max-w-[300px] block truncate" title={c.lineage.path}>{c.lineage.database}.{c.lineage.schema}.{c.lineage.table}.<span className="text-[#24befa]">{c.lineage.column}</span></span></Td>
                             <Td><span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300">{c.data_class}</span></Td>
                             <Td><span className="text-[11px] text-[var(--muted)]">{c.category}</span></Td>
                             <Td><ConfidenceBar value={c.confidence} detector={c.detector} /></Td>
@@ -688,7 +688,7 @@ export default function DataSovereigntyPage() {
               <div className="bg-[#13131a] border border-white/[0.06] rounded-xl overflow-hidden">
                 {dsars.length === 0 ? (
                   <div className="text-center py-16">
-                    <UserSearch size={32} className="mx-auto text-[#3b6ef6]/40 mb-2" />
+                    <UserSearch size={32} className="mx-auto text-[#24befa]/40 mb-2" />
                     <div className="text-[13px] text-[var(--muted)]">No DSARs yet. Create one to generate a subject data map.</div>
                   </div>
                 ) : (
@@ -706,7 +706,7 @@ export default function DataSovereigntyPage() {
                             <Td><span className="text-[12px] text-[var(--foreground)]">{d.summary?.total_matches ?? 0}</span></Td>
                             <Td><span className="text-[10px] text-[var(--muted)]">{(d.summary?.systems || []).join(', ') || '—'}</span></Td>
                             <Td><span className="text-[10px] text-[var(--muted)]">{fmtDate(d.due_at)}</span></Td>
-                            <Td><button onClick={() => openDsar(d.id)} className="text-[11px] text-[#3b6ef6] hover:underline">View map</button></Td>
+                            <Td><button onClick={() => openDsar(d.id)} className="text-[11px] text-[#24befa] hover:underline">View map</button></Td>
                           </Tr>
                         ))}
                       </Tbody>
@@ -722,7 +722,7 @@ export default function DataSovereigntyPage() {
             <div className="bg-[#13131a] border border-white/[0.06] rounded-xl overflow-hidden">
               {actions.length === 0 ? (
                 <div className="text-center py-16">
-                  <ClipboardCheck size={32} className="mx-auto text-[#3b6ef6]/40 mb-2" />
+                  <ClipboardCheck size={32} className="mx-auto text-[#24befa]/40 mb-2" />
                   <div className="text-[13px] text-[var(--muted)]">No enforcement actions yet. Enforce a violation to build an auditable trail.</div>
                 </div>
               ) : (
@@ -773,7 +773,7 @@ export default function DataSovereigntyPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowPolicyBuilder(false)}>
           <div className="bg-[#13131a] border border-white/[0.1] rounded-2xl max-w-xl w-full max-h-[88vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5 border-b border-white/[0.06] sticky top-0 bg-[#13131a] z-10">
-              <h3 className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-2"><Scale size={16} className="text-[#3b6ef6]" /> Build Custom Policy</h3>
+              <h3 className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-2"><Scale size={16} className="text-[#24befa]" /> Build Custom Policy</h3>
               <button onClick={() => setShowPolicyBuilder(false)} className="text-[var(--muted)] hover:text-[var(--foreground)]"><X size={18} /></button>
             </div>
             <div className="p-5 space-y-4">
@@ -818,7 +818,7 @@ export default function DataSovereigntyPage() {
                 <label className="text-[11px] text-[var(--muted)] uppercase tracking-wide">Allowed regions / countries</label>
                 <div className="flex flex-wrap gap-1.5 mt-1.5">
                   {policyForm.allowed_regions.map(r => (
-                    <span key={r} className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-[#3b6ef6]/10 border border-[#3b6ef6]/25 text-[#3b6ef6]">
+                    <span key={r} className="inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-lg bg-[#24befa]/10 border border-[#24befa]/25 text-[#24befa]">
                       {r}
                       <button onClick={() => setPolicyForm(f => ({ ...f, allowed_regions: f.allowed_regions.filter(x => x !== r) }))} className="hover:text-red-400"><X size={11} /></button>
                     </span>
@@ -834,7 +834,7 @@ export default function DataSovereigntyPage() {
                 {regionSuggestions.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-2">
                     {regionSuggestions.filter(r => !policyForm.allowed_regions.includes(r)).slice(0, 18).map(r => (
-                      <button key={r} onClick={() => addRegion(r)} className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.03] border border-white/[0.06] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#3b6ef6]/30">+ {r}</button>
+                      <button key={r} onClick={() => addRegion(r)} className="text-[9px] px-1.5 py-0.5 rounded bg-white/[0.03] border border-white/[0.06] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[#24befa]/30">+ {r}</button>
                     ))}
                   </div>
                 )}
@@ -863,7 +863,7 @@ export default function DataSovereigntyPage() {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowDsarModal(false)}>
           <div className="bg-[#13131a] border border-white/[0.1] rounded-2xl max-w-lg w-full" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
-              <h3 className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-2"><UserSearch size={16} className="text-[#3b6ef6]" /> New Data Subject Request</h3>
+              <h3 className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-2"><UserSearch size={16} className="text-[#24befa]" /> New Data Subject Request</h3>
               <button onClick={() => setShowDsarModal(false)} className="text-[var(--muted)] hover:text-[var(--foreground)]"><X size={18} /></button>
             </div>
             <div className="p-5 space-y-3">
@@ -1028,7 +1028,7 @@ function BreakdownCard({ title, icon, rows }: { title: string; icon: React.React
                 <span className="text-[var(--muted)]">{r.value}</span>
               </div>
               <div className="h-1.5 bg-white/[0.05] rounded-full overflow-hidden">
-                <div className="h-full rounded-full bg-[#3b6ef6]" style={{ width: `${(r.value / max) * 100}%` }} />
+                <div className="h-full rounded-full bg-[#0ea5e9]" style={{ width: `${(r.value / max) * 100}%` }} />
               </div>
             </div>
           ))}

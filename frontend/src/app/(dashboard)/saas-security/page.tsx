@@ -929,7 +929,7 @@ function SecurityFunnelView({ data }: { data: FunnelData }) {
   // in the panel when most counts were 0). Keep at least the first stage
   // so the panel doesn't collapse entirely.
   const allStages = [
-    { key: 'total_resources', label: 'Resources', shortLabel: 'Resources', value: data.total_resources, fill: '#3b6ef6', textColor: 'text-blue-400', icon: <Server size={14} />, description: 'All monitored resources across cloud and SaaS' },
+    { key: 'total_resources', label: 'Resources', shortLabel: 'Resources', value: data.total_resources, fill: '#24befa', textColor: 'text-blue-400', icon: <Server size={14} />, description: 'All monitored resources across cloud and SaaS' },
     { key: 'misconfigs', label: 'Misconfigurations', shortLabel: 'Misconfigs', value: data.misconfigs, fill: '#f59e0b', textColor: 'text-amber-400', icon: <AlertTriangle size={14} />, description: 'Resources with security misconfigurations' },
     { key: 'exposures', label: 'Exposed Assets', shortLabel: 'Exposed', value: data.exposures, fill: '#f97316', textColor: 'text-orange-400', icon: <Globe size={14} />, description: 'Assets accessible from internet or externally' },
     { key: 'exploitable', label: 'Exploitable', shortLabel: 'Exploitable', value: data.exploitable, fill: '#ef4444', textColor: 'text-red-400', icon: <Target size={14} />, description: 'Critical findings attackers can actively exploit' },
@@ -942,7 +942,7 @@ function SecurityFunnelView({ data }: { data: FunnelData }) {
     <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-[14px] font-semibold text-[var(--foreground)] flex items-center gap-2">
-          <Layers size={16} className="text-[#3b6ef6]" />
+          <Layers size={16} className="text-[#24befa]" />
           Security Exposure Funnel
         </h3>
         
@@ -1223,7 +1223,7 @@ function DataResidencySummary() {
   if (!data) return null
 
   const regionColors: Record<string, string> = {
-    'North America': '#3b6ef6',
+    'North America': '#24befa',
     'Europe': '#10b981',
     'Asia Pacific': '#f59e0b',
     'Middle East': '#ef4444',
@@ -1288,7 +1288,7 @@ function DataResidencySummary() {
         {/* Primary Region Card */}
         <div className="lg:col-span-1 bg-[#13131a] border border-white/[0.06] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-3">
-            <Globe size={16} className="text-[#3b6ef6]" />
+            <Globe size={16} className="text-[#24befa]" />
             <span className="text-[10px] text-[var(--muted)] uppercase">Primary Region</span>
           </div>
           <div className="text-[15px] font-semibold text-[var(--foreground)] mb-2">
@@ -1308,7 +1308,7 @@ function DataResidencySummary() {
         {/* Sign-ins */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
-            <Activity size={13} className="text-[#3b6ef6]" />
+            <Activity size={13} className="text-[#24befa]" />
             <span className="text-[10px] text-[var(--muted)] uppercase">Sign-ins</span>
           </div>
           <div className="text-xl font-bold text-[var(--foreground)]">{totalSignIns.toLocaleString()}</div>
@@ -1355,7 +1355,7 @@ function DataResidencySummary() {
         {/* Region Distribution */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-4">
           <h3 className="text-[12px] font-semibold text-[var(--foreground)] mb-3 flex items-center gap-2">
-            <BarChart3 size={12} className="text-[#3b6ef6]" />
+            <BarChart3 size={12} className="text-[#24befa]" />
             Activity by Region
           </h3>
           {Object.entries(regionSummaryWithCloud).filter(([, v]) => v > 0).length === 0 ? (
@@ -1615,7 +1615,7 @@ function WorkspaceOverviewTab() {
         <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
-              <Layers size={18} className="text-[#3b6ef6]" />
+              <Layers size={18} className="text-[#24befa]" />
             </div>
             {displayStats.connected_apps > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-semibold text-emerald-400">active</span>
@@ -1748,7 +1748,7 @@ function WorkspaceOverviewTab() {
         {/* Data Classification Distribution */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
           <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-            <Database size={15} className="text-[#3b6ef6]" />
+            <Database size={15} className="text-[#24befa]" />
             Data Classification
           </h3>
           {displayStats.data_by_classification.length > 0 ? (() => {
@@ -1821,7 +1821,7 @@ function WorkspaceOverviewTab() {
         {/* Alert Types Distribution */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
           <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-            <ShieldAlert size={15} className="text-[#3b6ef6]" />
+            <ShieldAlert size={15} className="text-[#24befa]" />
             Alerts by Type
           </h3>
           {displayStats.alerts_by_type.length > 0 ? (
@@ -1924,7 +1924,7 @@ function WorkspaceOverviewTab() {
               <div className="text-[11px] text-[#71717a] mb-2">Data Regions</div>
               <div className="flex flex-wrap gap-2">
                 {displayStats.cloud_stats.data_regions.slice(0, 10).map((r, i) => (
-                  <span key={i} className="px-2 py-1 rounded-full bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 text-[10px] text-[#3b6ef6]">
+                  <span key={i} className="px-2 py-1 rounded-full bg-[#24befa]/10 border border-[#24befa]/20 text-[10px] text-[#24befa]">
                     {r.provider.toUpperCase()}: {r.region}
                   </span>
                 ))}
@@ -2353,7 +2353,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                   type="text"
                   value={awsFormData.name}
                   onChange={e => setAwsFormData(d => ({ ...d, name: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="My AWS Account"
                 />
               </div>
@@ -2363,7 +2363,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                   type="text"
                   value={awsFormData.access_key_id}
                   onChange={e => setAwsFormData(d => ({ ...d, access_key_id: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="AKIAIOSFODNN7EXAMPLE"
                   required
                 />
@@ -2374,7 +2374,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                   type="password"
                   value={awsFormData.secret_access_key}
                   onChange={e => setAwsFormData(d => ({ ...d, secret_access_key: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
                   required
                 />
@@ -2384,7 +2384,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                 <select
                   value={awsFormData.default_region}
                   onChange={e => setAwsFormData(d => ({ ...d, default_region: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                 >
                   {awsRegions.map(r => <option key={r} value={r}>{r}</option>)}
                 </select>
@@ -2404,7 +2404,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                       }))}
                       className={`px-2 py-1 text-[10px] rounded border transition-colors ${
                         awsFormData.scan_regions.includes(r)
-                          ? 'bg-[#3b6ef6]/20 border-[#3b6ef6]/40 text-[#3b6ef6]'
+                          ? 'bg-[#24befa]/20 border-[#24befa]/40 text-[#24befa]'
                           : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--foreground)]'
                       }`}
                     >
@@ -2451,7 +2451,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                   type="text"
                   value={gcpFormData.name}
                   onChange={e => setGcpFormData(d => ({ ...d, name: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="My GCP Project"
                 />
               </div>
@@ -2461,7 +2461,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                   type="text"
                   value={gcpFormData.project_id}
                   onChange={e => setGcpFormData(d => ({ ...d, project_id: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="my-project-123456"
                   required
                 />
@@ -2471,7 +2471,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
                 <textarea
                   value={gcpFormData.service_account_json}
                   onChange={e => setGcpFormData(d => ({ ...d, service_account_json: e.target.value }))}
-                  className="w-full px-3 py-2 text-[11px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6] h-32"
+                  className="w-full px-3 py-2 text-[11px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa] h-32"
                   placeholder='{"type": "service_account", ...}'
                   required
                 />
@@ -2539,7 +2539,7 @@ function CloudInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boole
               <div className="space-y-3">
                 <h4 className="font-semibold text-[var(--foreground)]">Steps:</h4>
                 <ol className="list-decimal list-inside space-y-2 pl-2">
-                  <li>Go to <span className="text-[#3b6ef6]">IAM & Admin → Service Accounts</span></li>
+                  <li>Go to <span className="text-[#24befa]">IAM & Admin → Service Accounts</span></li>
                   <li>Create service account named <code className="bg-[var(--background)] px-1 rounded">helios-scanner</code></li>
                   <li>Grant these roles:
                     <ul className="list-disc list-inside ml-4 mt-1">
@@ -2769,7 +2769,7 @@ function AIInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boolean 
                   type="text"
                   value={formData.name}
                   onChange={e => setFormData(d => ({ ...d, name: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="Production Workspace"
                 />
               </div>
@@ -2779,7 +2779,7 @@ function AIInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boolean 
                   type="url"
                   value={formData.workspace_url}
                   onChange={e => setFormData(d => ({ ...d, workspace_url: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="https://adb-1234567890.12.azuredatabricks.net"
                   required
                 />
@@ -2790,7 +2790,7 @@ function AIInfrastructureSection({ alwaysShow = false }: { alwaysShow?: boolean 
                   type="password"
                   value={formData.access_token}
                   onChange={e => setFormData(d => ({ ...d, access_token: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="dapi..."
                   required
                 />
@@ -3538,7 +3538,7 @@ function FinancialPlatformsSection({ alwaysShow = false }: { alwaysShow?: boolea
                     type="text"
                     value={formData.name}
                     onChange={e => setFormData(d => ({ ...d, name: e.target.value }))}
-                    className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                    className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                     placeholder="Production"
                   />
                 </div>
@@ -3548,7 +3548,7 @@ function FinancialPlatformsSection({ alwaysShow = false }: { alwaysShow?: boolea
                     type="text"
                     value={formData.system_id}
                     onChange={e => setFormData(d => ({ ...d, system_id: e.target.value.toUpperCase() }))}
-                    className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                    className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                     placeholder="PRD"
                     maxLength={3}
                   />
@@ -3560,7 +3560,7 @@ function FinancialPlatformsSection({ alwaysShow = false }: { alwaysShow?: boolea
                   type="text"
                   value={formData.host}
                   onChange={e => setFormData(d => ({ ...d, host: e.target.value }))}
-                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                  className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                   placeholder="sap-prd.company.com"
                   required
                 />
@@ -3572,7 +3572,7 @@ function FinancialPlatformsSection({ alwaysShow = false }: { alwaysShow?: boolea
                     type="text"
                     value={formData.client}
                     onChange={e => setFormData(d => ({ ...d, client: e.target.value }))}
-                    className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                    className="w-full px-3 py-2 text-[13px] font-mono bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                     placeholder="100"
                     maxLength={3}
                   />
@@ -3583,7 +3583,7 @@ function FinancialPlatformsSection({ alwaysShow = false }: { alwaysShow?: boolea
                     type="text"
                     value={formData.username}
                     onChange={e => setFormData(d => ({ ...d, username: e.target.value }))}
-                    className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                    className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                     placeholder="HELIOS_SVC"
                     required
                   />
@@ -3594,7 +3594,7 @@ function FinancialPlatformsSection({ alwaysShow = false }: { alwaysShow?: boolea
                     type="password"
                     value={formData.password}
                     onChange={e => setFormData(d => ({ ...d, password: e.target.value }))}
-                    className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#3b6ef6]"
+                    className="w-full px-3 py-2 text-[13px] bg-[var(--background)] border border-[var(--border)] rounded-lg focus:outline-none focus:border-[#24befa]"
                     placeholder="••••••••"
                     required
                   />
@@ -3679,7 +3679,7 @@ function RemediationStepItem({ index, text }: { index: number; text: string }) {
   const title = titleMatch ? titleMatch[1].trim() : null
   const body = titleMatch ? titleMatch[2].trim() : text
   return (
-    <li className="flex gap-3 bg-[#0e0e14] border border-[#1e1e24] rounded-lg p-3 hover:border-[#3b6ef6]/30 transition-colors">
+    <li className="flex gap-3 bg-[#0e0e14] border border-[#1e1e24] rounded-lg p-3 hover:border-[#24befa]/30 transition-colors">
       <span className="flex-shrink-0 w-6 h-6 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-[11px] font-bold text-emerald-400">
         {index}
       </span>
@@ -3780,12 +3780,12 @@ function AIRemediationPanel({
           <ShieldCheck size={13} className="text-emerald-400" />
           <span className="text-[12px] font-semibold text-emerald-400">Remediation Actions</span>
           {data?.ai_powered && (
-            <span className="text-[10px] bg-[#3b6ef6]/10 text-[#3b6ef6] border border-[#3b6ef6]/30 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+            <span className="text-[10px] bg-[#24befa]/10 text-[#24befa] border border-[#24befa]/30 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
               <Sparkles size={9} /> AI-generated
             </span>
           )}
           {data && !data.ai_powered && (
-            <span className="text-[10px] bg-[#3b6ef6]/10 text-[#3b6ef6] border border-[#3b6ef6]/20 px-1.5 py-0.5 rounded">
+            <span className="text-[10px] bg-[#24befa]/10 text-[#24befa] border border-[#24befa]/20 px-1.5 py-0.5 rounded">
               Classification Engine
             </span>
           )}
@@ -3957,14 +3957,14 @@ function AIResourceRiskPanel({ itemId }: { itemId: string }) {
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="text-[11px] font-semibold text-[#3b6ef6] uppercase tracking-wide">Risk Analysis</div>
+          <div className="text-[11px] font-semibold text-[#24befa] uppercase tracking-wide">Risk Analysis</div>
           {data?.ai_powered && (
-            <span className="text-[9px] bg-[#3b6ef6]/10 text-[#3b6ef6] border border-[#3b6ef6]/30 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+            <span className="text-[9px] bg-[#24befa]/10 text-[#24befa] border border-[#24befa]/30 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
               <Sparkles size={8} /> AI-generated
             </span>
           )}
           {data && !data.ai_powered && (
-            <span className="text-[9px] bg-[#3b6ef6]/10 text-[#3b6ef6] border border-[#3b6ef6]/20 px-1.5 py-0.5 rounded">
+            <span className="text-[9px] bg-[#24befa]/10 text-[#24befa] border border-[#24befa]/20 px-1.5 py-0.5 rounded">
               Classification Engine
             </span>
           )}
@@ -4096,7 +4096,7 @@ function AlertDetailPanel({
               <div className="flex items-center gap-2">
                 <span className="text-[13px] text-[#e4e4e7]">{alert.resource_name}</span>
                 {alert.resource_url && (
-                  <a href={alert.resource_url} target="_blank" rel="noreferrer" className="text-[#3b6ef6] hover:underline">
+                  <a href={alert.resource_url} target="_blank" rel="noreferrer" className="text-[#24befa] hover:underline">
                     <ExternalLink size={12} />
                   </a>
                 )}
@@ -4107,7 +4107,7 @@ function AlertDetailPanel({
 
           {/* Classification */}
           <div className="bg-[#111114] border border-[#1e1e24] rounded-xl p-4 space-y-2">
-            <div className="text-[12px] font-semibold text-[#3b6ef6] flex items-center gap-1">
+            <div className="text-[12px] font-semibold text-[#24befa] flex items-center gap-1">
               <Database size={13} /> Data Classification
             </div>
             {clsT ? (
@@ -4142,7 +4142,7 @@ function AlertDetailPanel({
           {/* Posture */}
           {pos && (
             <div className="bg-[#111114] border border-[#1e1e24] rounded-xl p-4 space-y-2">
-              <div className="text-[12px] font-semibold text-[#3b6ef6] flex items-center gap-1">
+              <div className="text-[12px] font-semibold text-[#24befa] flex items-center gap-1">
                 <ShieldCheck size={13} /> Posture Analysis
               </div>
               <div className="space-y-1 text-[12px]">
@@ -4156,7 +4156,7 @@ function AlertDetailPanel({
                     <ul className="space-y-0.5">
                       {pos.findings.map((f: string, i: number) => (
                         <li key={i} className="text-[11px] text-[#a1a1aa] flex gap-1">
-                          <span className="text-[#3b6ef6] mt-0.5">›</span> {f}
+                          <span className="text-[#24befa] mt-0.5">›</span> {f}
                         </li>
                       ))}
                     </ul>
@@ -4230,7 +4230,7 @@ function AlertsTab({
         <select
           value={filterSev}
           onChange={e => { setFilterSev(e.target.value); setPage(1) }}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Severities</option>
           <option value="critical">Critical</option>
@@ -4241,7 +4241,7 @@ function AlertsTab({
         <select
           value={filterStatus}
           onChange={e => { setFilterStatus(e.target.value); setPage(1) }}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Statuses</option>
           <option value="open">Open</option>
@@ -4252,7 +4252,7 @@ function AlertsTab({
         <select
           value={filterProvider}
           onChange={e => { setFilterProvider(e.target.value); setPage(1) }}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Providers</option>
           <option value="teams">Teams</option>
@@ -4346,7 +4346,7 @@ function AlertsTab({
         <div className="text-center py-16 text-[#52525b]">Loading alerts…</div>
       ) : alerts.length === 0 ? (
         <div className="text-center py-16 space-y-2">
-          <Cloud size={32} className="mx-auto text-[#3b6ef6]/40" />
+          <Cloud size={32} className="mx-auto text-[#24befa]/40" />
           <div className="text-[#52525b] text-sm">
             {filterSev || filterStatus || filterProvider
               ? 'No alerts match the current filters.'
@@ -4485,7 +4485,7 @@ function DataTab({
             onClick={() => setDspmSubTab(t.id)}
             className={`flex items-center gap-1.5 px-3 py-2 text-[12px] border-b-2 transition-colors ${
               dspmSubTab === t.id
-                ? 'border-[#3b6ef6] text-[var(--foreground)]'
+                ? 'border-[#24befa] text-[var(--foreground)]'
                 : 'border-transparent text-[var(--muted)] hover:text-[var(--foreground)]'
             }`}
           >
@@ -4537,7 +4537,7 @@ function DataTab({
         <select
           value={filterProvider}
           onChange={e => { setFilterProvider(e.target.value); setPage(1) }}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Providers</option>
           <option value="teams">Teams</option>
@@ -4557,7 +4557,7 @@ function DataTab({
         <select
           value={filterItemType}
           onChange={e => { setFilterItemType(e.target.value); setPage(1) }}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Resource Types</option>
           {uniqueItemTypes.map(t => (
@@ -4567,7 +4567,7 @@ function DataTab({
         <select
           value={filterLabel}
           onChange={e => { setFilterLabel(e.target.value); setPage(1) }}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Labels</option>
           <option value="public">Public</option>
@@ -4578,7 +4578,7 @@ function DataTab({
         <select
           value={filterScope}
           onChange={e => { setFilterScope(e.target.value); setPage(1) }}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Scopes</option>
           <option value="public">Public</option>
@@ -4592,7 +4592,7 @@ function DataTab({
         <div className="text-center py-16 text-[#52525b]">Loading data items…</div>
       ) : visibleItems.length === 0 ? (
         <div className="text-center py-16 space-y-2">
-          <Database size={32} className="mx-auto text-[#3b6ef6]/40" />
+          <Database size={32} className="mx-auto text-[#24befa]/40" />
           <div className="text-[#52525b] text-sm">No data items yet. Connect a provider and run a scan.</div>
         </div>
       ) : (
@@ -4638,7 +4638,7 @@ function DataTab({
                             <span className="truncate font-medium">{item.item_name}</span>
                             {item.item_url && (
                               <a href={item.item_url} target="_blank" rel="noreferrer"
-                                className="text-[#3b6ef6] flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                className="text-[#24befa] flex-shrink-0" onClick={e => e.stopPropagation()}>
                                 <ExternalLink size={11} />
                               </a>
                             )}
@@ -4717,13 +4717,13 @@ function DataTab({
                               </div>
                               {/* File Inventory Timeline */}
                               <div className="space-y-3">
-                                <div className="text-[11px] font-semibold text-[#3b6ef6] uppercase tracking-wide">File Inventory</div>
+                                <div className="text-[11px] font-semibold text-[#24befa] uppercase tracking-wide">File Inventory</div>
 
                                 {/* Visual timeline */}
                                 <div className="relative pl-5 border-l-2 border-[#1e1e24] space-y-3">
                                   {item.created_at && (
                                     <div className="relative flex items-start gap-2">
-                                      <div className="absolute -left-[22px] w-3 h-3 rounded-full bg-[#3b6ef6] border-2 border-[#0a0a0f] mt-0.5" />
+                                      <div className="absolute -left-[22px] w-3 h-3 rounded-full bg-[#0ea5e9] border-2 border-[#0a0a0f] mt-0.5" />
                                       <div>
                                         <div className="text-[10px] text-[#52525b] uppercase tracking-wide">Created / First seen</div>
                                         <div className="text-[12px] text-[#a1a1aa]">{fmtDate(item.created_at)}</div>
@@ -4865,7 +4865,7 @@ function DataTab({
                                                 <div className="text-[10px] text-[#52525b] uppercase tracking-wide mb-0.5">Attached Policies</div>
                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                   {attachedPolicies.slice(0, 4).map((p, i) => (
-                                                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 text-[#3b6ef6]">
+                                                    <span key={i} className="text-[10px] px-1.5 py-0.5 rounded bg-[#24befa]/10 border border-[#24befa]/20 text-[#24befa]">
                                                       {p.PolicyName}
                                                     </span>
                                                   ))}
@@ -4978,7 +4978,7 @@ const DSPM_REGION_DLP_COLORS: Record<string, string> = {
   customer_data:  '#f43f5e',  // rose         — customer data
   source_code:    '#8b5cf6',  // violet       — source code / repos
   ml_data:        '#a855f7',  // purple       — ML datasets / models
-  backup:         '#3b6ef6',  // blue         — backups / snapshots
+  backup:         '#24befa',  // blue         — backups / snapshots
   logs:           '#06b6d4',  // cyan         — logs / audit
   config:         '#0ea5e9',  // sky          — config / IaC
   network:        '#22c55e',  // green        — network
@@ -5105,7 +5105,7 @@ const SENSITIVITY_TIER: Record<string, number> = {
 const SENSITIVITY_COLOR: Record<string, string> = {
   highly_confidential: '#ef4444', // red
   confidential:        '#f59e0b', // amber
-  internal:            '#3b6ef6', // blue
+  internal:            '#24befa', // blue
   public:              '#10b981', // green (low-sensitivity, fine to share)
   unknown:             '#3f3f46', // slate
 };
@@ -5443,7 +5443,7 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
           ],
         },
         markerStyle: {
-          initial: { fill: '#3b6ef6', fillOpacity: 0.95, stroke: '#fff', strokeWidth: 2, r: 7 },
+          initial: { fill: '#24befa', fillOpacity: 0.95, stroke: '#fff', strokeWidth: 2, r: 7 },
           hover:   { fillOpacity: 0.85, cursor: 'pointer' },
         },
         markers: markers.map((m, idx) => ({ ...m, style: markerStyles[idx] })),
@@ -5572,7 +5572,7 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
   return (
     <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
       <div className="flex items-center gap-2 mb-3 flex-wrap">
-        <Globe size={14} className="text-[#3b6ef6]" />
+        <Globe size={14} className="text-[#24befa]" />
         <h3 className="text-[13px] font-semibold text-[var(--foreground)]">
           Data Posture by Region
         </h3>
@@ -5588,7 +5588,7 @@ function DataPostureWorldMap({ items }: { items: DataItem[] }) {
               onClick={() => setFillMode(opt.key)}
               className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-colors ${
                 fillMode === opt.key
-                  ? 'bg-[#3b6ef6] text-white'
+                  ? 'bg-[#0ea5e9] text-white'
                   : 'text-[var(--muted)] hover:text-[var(--foreground)]'
               }`}
             >
@@ -5794,7 +5794,7 @@ function DSPMOverview({
       {/* DSPM control matrix */}
       <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-4">
-          <ShieldCheck size={14} className="text-[#3b6ef6]" />
+          <ShieldCheck size={14} className="text-[#24befa]" />
           <h3 className="text-[13px] font-semibold text-[var(--foreground)]">DSPM Controls</h3>
         </div>
         <div className="space-y-2">
@@ -5824,7 +5824,7 @@ function DSPMOverview({
       {Object.keys(byProvider).length > 0 && (
         <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
-            <Database size={14} className="text-[#3b6ef6]" />
+            <Database size={14} className="text-[#24befa]" />
             <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Resources by Provider</h3>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -6076,7 +6076,7 @@ function DataCorrelationGraph({ items }: { items: DataItem[] }) {
   const lines: string[] = []
   lines.push('flowchart LR')
   lines.push('  classDef provider fill:#1a1a22,stroke:#3a3a48,color:#e4e4e7;')
-  lines.push('  classDef owner fill:#1a1f2a,stroke:#3b6ef6,color:#cdd6e8;')
+  lines.push('  classDef owner fill:#1a1f2a,stroke:#24befa,color:#cdd6e8;')
   lines.push('  classDef ownerhi fill:#241320,stroke:#f43f5e,color:#fecdd3;')
   lines.push('  classDef category fill:#1e152a,stroke:#a855f7,color:#e9d5ff;')
   lines.push('  classDef external fill:#2a1a0f,stroke:#fb923c,color:#fed7aa;')
@@ -6141,7 +6141,7 @@ function DataCorrelationGraph({ items }: { items: DataItem[] }) {
   return (
     <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
       <div className="flex items-center gap-2 mb-3">
-        <Network size={14} className="text-[#3b6ef6]" />
+        <Network size={14} className="text-[#24befa]" />
         <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Data Correlation Map</h3>
         <span className="text-[10px] text-[var(--muted)] ml-auto">
           Top {sortedOwners.length} owners · {totalCats} data categories · {totalExternal} external · {totalPublic} public
@@ -6153,7 +6153,7 @@ function DataCorrelationGraph({ items }: { items: DataItem[] }) {
         (PII, PCI, credentials, etc.) and the endpoints where data leaves your tenant.
       </p>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mb-4 text-[10px] text-[var(--muted)]">
-        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#1a1f2a', border: '1px solid #3b6ef6' }} />Owner</span>
+        <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#1a1f2a', border: '1px solid #24befa' }} />Owner</span>
         <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#241320', border: '1px solid #f43f5e' }} />Owner (highly-conf)</span>
         <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: '#1e152a', border: '1px solid #a855f7' }} />Data category</span>
         <span className="flex items-center gap-1"><span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: '#2a1a0f', border: '1px solid #fb923c' }} />External share</span>
@@ -6202,7 +6202,7 @@ function AccessIntelligencePanel() {
   return (
     <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
       <div className="flex items-center gap-2 mb-3">
-        <Users size={14} className="text-[#3b6ef6]" />
+        <Users size={14} className="text-[#24befa]" />
         <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Access Intelligence</h3>
         <span className="text-[10px] text-[var(--muted)] ml-auto">
           {loading ? 'loading…' : `${owners.length} identities ranked`}
@@ -6446,7 +6446,7 @@ function DSPMInsights({
 
       <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
-          <Network size={14} className="text-[#3b6ef6]" />
+          <Network size={14} className="text-[#24befa]" />
           <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Cross-Connector Exposure</h3>
           <span className="text-[10px] text-[var(--muted)] ml-auto">{crossConnector.length} owners</span>
         </div>
@@ -6473,7 +6473,7 @@ function DSPMInsights({
                   <Td>
                     <div className="flex gap-1">
                       {c.providers.map(p => (
-                        <span key={p} className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 text-[#93b4fd]">{p}</span>
+                        <span key={p} className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-[#24befa]/10 border border-[#24befa]/20 text-[#93b4fd]">{p}</span>
                       ))}
                     </div>
                   </Td>
@@ -6519,7 +6519,7 @@ function DSPMInsights({
 
       <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
-          <Users size={14} className="text-[#3b6ef6]" />
+          <Users size={14} className="text-[#24befa]" />
           <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Top Data Stewards</h3>
           <span className="text-[10px] text-[var(--muted)] ml-auto">By risk score</span>
         </div>
@@ -6539,7 +6539,7 @@ function DSPMInsights({
                   <div className="text-[12px] text-[var(--foreground)] truncate w-56 flex-shrink-0">{s.owner}</div>
                   <div className="flex-1 h-3 bg-[#0e0e14] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-[#3b6ef6] to-red-400"
+                      className="h-full bg-gradient-to-r from-[#24befa] to-red-400"
                       style={{ width: `${widthPct}%` }}
                     />
                   </div>
@@ -6555,7 +6555,7 @@ function DSPMInsights({
 
       <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
         <div className="flex items-center gap-2 mb-3">
-          <Layers size={14} className="text-[#3b6ef6]" />
+          <Layers size={14} className="text-[#24befa]" />
           <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Data Classification Flow</h3>
           <span className="text-[10px] text-[var(--muted)] ml-auto">Across all connected providers</span>
         </div>
@@ -6794,7 +6794,7 @@ function PermissionDiffsPanel() {
   return (
     <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
       <div className="flex items-center gap-2 mb-3">
-        <Activity size={14} className="text-[#3b6ef6]" />
+        <Activity size={14} className="text-[#24befa]" />
         <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Permission Changes (last 24h)</h3>
         <span className="text-[10px] text-[var(--muted)] ml-auto">
           {loading ? 'loading…' : `${bySev.critical || 0} critical · ${bySev.high || 0} high · ${bySev.medium || 0} medium`}
@@ -7081,13 +7081,13 @@ function PostureTab({
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search posture checks (name, ID, category, provider)…"
-            className="w-full pl-8 pr-3 py-1.5 bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg outline-none focus:border-[#3b6ef6]"
+            className="w-full pl-8 pr-3 py-1.5 bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg outline-none focus:border-[#24befa]"
           />
         </div>
         <select
           value={providerFilter}
           onChange={e => setProviderFilter(e.target.value)}
-          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+          className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
         >
           <option value="">All Providers</option>
           {availableProviders.map(p => (
@@ -7100,7 +7100,7 @@ function PostureTab({
         <div className="text-center py-16 text-[#52525b]">Loading posture checks…</div>
       ) : Object.keys(filteredChecks).length === 0 ? (
         <div className="text-center py-16 space-y-2">
-          <ShieldCheck size={32} className="mx-auto text-[#3b6ef6]/40" />
+          <ShieldCheck size={32} className="mx-auto text-[#24befa]/40" />
           <div className="text-[#52525b] text-sm">
             {Object.keys(checks).length === 0
               ? 'No posture checks yet. Connect a provider and run a check.'
@@ -7152,7 +7152,7 @@ function PostureTab({
                       <div className="mt-2 space-y-2 pl-4 border-l-2 border-[#1e1e24]">
                         {check.recommendation && (
                           <div className="text-[12px] text-[#a1a1aa]">
-                            <span className="font-semibold text-[#3b6ef6]">Recommendation: </span>
+                            <span className="font-semibold text-[#24befa]">Recommendation: </span>
                             {check.recommendation}
                           </div>
                         )}
@@ -7162,7 +7162,7 @@ function PostureTab({
                             <ol className="space-y-0.5">
                               {check.remediation_steps.map((step, i) => (
                                 <li key={i} className="text-[11px] text-[#71717a] flex gap-2">
-                                  <span className="text-[#3b6ef6] font-semibold">{i + 1}.</span> {step}
+                                  <span className="text-[#24befa] font-semibold">{i + 1}.</span> {step}
                                 </li>
                               ))}
                             </ol>
@@ -7464,7 +7464,7 @@ export default function SaasSecurityPage() {
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium border-b-2 transition-colors ${
                 activeTab === tab.id
-                  ? 'border-[#3b6ef6] text-[#3b6ef6]'
+                  ? 'border-[#24befa] text-[#24befa]'
                   : 'border-transparent text-[var(--muted)] hover:text-[var(--foreground)]'
               }`}
             >
@@ -9035,7 +9035,7 @@ function UserRiskScoresTab() {
       {/* Source Breakdown Legend */}
       <div className="flex flex-wrap gap-3 text-[11px]">
         {[
-          { source: 'entra_risky', label: 'Entra ID / M365', color: '#3b6ef6' },
+          { source: 'entra_risky', label: 'Entra ID / M365', color: '#24befa' },
           { source: 'alerts', label: 'Security Alerts', color: '#f97316' },
           { source: 'external_share', label: 'External Sharing', color: '#ef4444' },
           { source: 'admin_actions', label: 'Admin Actions', color: '#8b5cf6' },
@@ -9065,7 +9065,7 @@ function UserRiskScoresTab() {
             {data.users.slice(0, 30).map(user => {
               // Aggregate signal contributions by source type
               const sourceColors: Record<string, string> = {
-                entra_risky: '#3b6ef6', alerts: '#f97316', external_share: '#ef4444', external_shares: '#ef4444',
+                entra_risky: '#24befa', alerts: '#f97316', external_share: '#ef4444', external_shares: '#ef4444',
                 admin_actions: '#8b5cf6', aws_iam: '#FF9900', aws_no_mfa: '#FF9900', aws_multiple_keys: '#FF9900',
                 aws_console_no_mfa: '#FF9900', databricks: '#FF3621',
               };
@@ -9156,11 +9156,11 @@ function UserRiskScoresTab() {
                           <>
                           {/* AI Risk Assessment (Claude-generated) */}
                           {userDetail.ai_assessment && (
-                            <div className="mb-5 bg-gradient-to-br from-[#3b6ef6]/10 to-[#3b6ef6]/5 border border-[#3b6ef6]/25 rounded-xl p-4">
+                            <div className="mb-5 bg-gradient-to-br from-[#24befa]/10 to-[#24befa]/5 border border-[#24befa]/25 rounded-xl p-4">
                               <div className="flex items-start justify-between mb-3">
                                 <div className="flex items-center gap-2">
-                                  <ShieldCheck size={14} className="text-[#3b6ef6]" />
-                                  <span className="text-[12px] font-semibold text-[#3b6ef6] uppercase tracking-wide">AI Risk Assessment</span>
+                                  <ShieldCheck size={14} className="text-[#24befa]" />
+                                  <span className="text-[12px] font-semibold text-[#24befa] uppercase tracking-wide">AI Risk Assessment</span>
                                 </div>
                                 {userDetail.ai_assessment.risk_band && (
                                   <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
@@ -9189,11 +9189,11 @@ function UserRiskScoresTab() {
                                 )}
                                 {userDetail.ai_assessment.recommended_actions && userDetail.ai_assessment.recommended_actions.length > 0 && (
                                   <div>
-                                    <div className="text-[10px] uppercase text-[#3b6ef6] font-semibold mb-1.5">Recommended Actions</div>
+                                    <div className="text-[10px] uppercase text-[#24befa] font-semibold mb-1.5">Recommended Actions</div>
                                     <ul className="space-y-1">
                                       {userDetail.ai_assessment.recommended_actions.slice(0, 5).map((a, i) => (
                                         <li key={i} className="flex items-start gap-1.5 text-[var(--foreground)]">
-                                          <span className="text-[#3b6ef6] mt-0.5 flex-shrink-0">{i + 1}.</span><span>{a}</span>
+                                          <span className="text-[#24befa] mt-0.5 flex-shrink-0">{i + 1}.</span><span>{a}</span>
                                         </li>
                                       ))}
                                     </ul>
@@ -9426,7 +9426,7 @@ function ComplianceTab() {
 
   const frameworkMeta: Record<string, { icon: string; region: string; color: string }> = {
     'SAMA':     { icon: 'SA',  region: 'Saudi Arabia',  color: '#10b981' },
-    'NCA':      { icon: 'NC',  region: 'Saudi Arabia',  color: '#3b6ef6' },
+    'NCA':      { icon: 'NC',  region: 'Saudi Arabia',  color: '#24befa' },
     'ISO27001': { icon: 'IS',  region: 'Global',        color: '#8b5cf6' },
     'SOC2':     { icon: 'S2',  region: 'North America', color: '#f59e0b' },
     'GDPR':     { icon: 'EU',  region: 'Europe',        color: '#06b6d4' },
@@ -9558,14 +9558,14 @@ function ComplianceTab() {
             {/* AI Remediation */}
             {fw.ai_remediation && fw.ai_remediation.controls && fw.ai_remediation.controls.length > 0 && (
               <div className="mt-3 pt-3 border-t border-[var(--border)]">
-                <h4 className="text-[12px] font-semibold text-[#3b6ef6] mb-2 uppercase tracking-wide flex items-center gap-2">
+                <h4 className="text-[12px] font-semibold text-[#24befa] mb-2 uppercase tracking-wide flex items-center gap-2">
                   <ShieldCheck size={12} /> AI Remediation Plan
                 </h4>
                 <div className="space-y-3">
                   {fw.ai_remediation.controls.map((ctrl, i) => (
-                    <div key={i} className="bg-[#3b6ef6]/5 rounded-lg p-3 border border-[#3b6ef6]/15">
+                    <div key={i} className="bg-[#24befa]/5 rounded-lg p-3 border border-[#24befa]/15">
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                        <span className="text-[11px] font-bold text-[#3b6ef6]">{ctrl.control_id || 'Control'}</span>
+                        <span className="text-[11px] font-bold text-[#24befa]">{ctrl.control_id || 'Control'}</span>
                         {ctrl.priority && (
                           <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                             ctrl.priority === 'P0' ? 'bg-red-500/20 text-red-400' :
@@ -9581,7 +9581,7 @@ function ComplianceTab() {
                         <ul className="space-y-1 text-[11px] text-[var(--foreground)]">
                           {ctrl.steps.map((step, j) => (
                             <li key={j} className="flex items-start gap-2">
-                              <span className="text-[#3b6ef6] flex-shrink-0">{j + 1}.</span>
+                              <span className="text-[#24befa] flex-shrink-0">{j + 1}.</span>
                               <span>{step}</span>
                             </li>
                           ))}
@@ -9599,7 +9599,7 @@ function ComplianceTab() {
       {/* All Framework Progress Bars */}
       <div className="bg-[var(--card)] rounded-xl border border-[var(--border)] p-5">
         <h3 className="text-[13px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-          <BarChart3 size={14} className="text-[#3b6ef6]" />
+          <BarChart3 size={14} className="text-[#24befa]" />
           Framework Coverage Overview
         </h3>
         <div className="space-y-4">
@@ -9780,7 +9780,7 @@ function WorldMap({
 
   // Region colors
   const regionColors: Record<string, string> = {
-    'North America': '#3b6ef6',
+    'North America': '#24befa',
     'Europe': '#10b981',
     'Asia Pacific': '#f59e0b',
     'Middle East': '#ef4444',
@@ -9837,7 +9837,7 @@ function WorldMap({
       const markers: Array<{ name: string; coords: [number, number] }> = [];
       const markerStyles: Array<{ fill: string; stroke?: string; r?: number }> = [];
 
-      const RESOURCE_FILL = '#3b6ef6';   // single blue for all resources
+      const RESOURCE_FILL = '#24befa';   // single blue for all resources
       const RESOURCE_STROKE = '#60a5fa';
       const ACTIVITY_FILL = '#10b981';   // green for human sign-in locations
 
@@ -9920,7 +9920,7 @@ function WorldMap({
         },
         markerStyle: {
           initial: {
-            fill: '#3b6ef6',
+            fill: '#24befa',
             fillOpacity: 1,
             stroke: '#fff',
             strokeWidth: 2,
@@ -9994,7 +9994,7 @@ function WorldMap({
       <div className="absolute bottom-3 left-3 flex items-center gap-4 bg-black/80 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/10 z-10">
         {(validDataLocations.filter(d => d.type === 'storage').length > 0 || validCloudRegions.length > 0) && (
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 bg-[#3b6ef6] rounded-full border border-[#60a5fa]/60" />
+            <div className="w-3 h-3 bg-[#0ea5e9] rounded-full border border-[#60a5fa]/60" />
             <span className="text-[10px] text-white/80">Resources</span>
           </div>
         )}
@@ -10119,7 +10119,7 @@ function DataResidencyTab() {
   }
 
   const regionColors: Record<string, string> = {
-    'North America': '#3b6ef6',
+    'North America': '#24befa',
     'Europe': '#10b981',
     'Asia Pacific': '#f59e0b',
     'Middle East': '#ef4444',
@@ -10274,8 +10274,8 @@ function DataResidencyTab() {
       <div className="bg-[#13131a] border border-white/[0.08] rounded-xl p-5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-[#3b6ef6]/15 border border-[#3b6ef6]/25 flex items-center justify-center">
-              <Globe size={22} className="text-[#3b6ef6]" />
+            <div className="w-12 h-12 rounded-xl bg-[#24befa]/15 border border-[#24befa]/25 flex items-center justify-center">
+              <Globe size={22} className="text-[#24befa]" />
             </div>
             <div>
               <div className="text-[11px] text-[var(--muted)] uppercase tracking-wide mb-0.5">Primary Data Region</div>
@@ -10318,7 +10318,7 @@ function DataResidencyTab() {
         {/* Total Sign-ins */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
-            <Activity size={14} className="text-[#3b6ef6]" />
+            <Activity size={14} className="text-[#24befa]" />
             <span className="text-[11px] text-[var(--muted)] uppercase tracking-wide">Total Sign-ins</span>
           </div>
           <div className="text-2xl font-bold text-[var(--foreground)]">
@@ -10377,7 +10377,7 @@ function DataResidencyTab() {
         {/* Region Distribution */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
           <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-            <BarChart3 size={14} className="text-[#3b6ef6]" />
+            <BarChart3 size={14} className="text-[#24befa]" />
             Activity by Region
           </h3>
           {Object.entries(regionSummaryWithCloud).filter(([, v]) => v > 0).length === 0 ? (
@@ -10509,7 +10509,7 @@ function DataResidencyTab() {
       {/* Top Countries Table */}
       <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
         <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-          <Globe size={14} className="text-[#3b6ef6]" />
+          <Globe size={14} className="text-[#24befa]" />
           User Activity by Country
         </h3>
         {(data?.user_activity_regions?.length || 0) === 0 ? (
@@ -10808,7 +10808,7 @@ function GovernanceTab() {
             onClick={() => setSubTab(tab.id)}
             className={`flex items-center gap-1.5 px-3 py-2 text-[11px] font-medium border-b-2 transition-colors ${
               subTab === tab.id
-                ? 'border-[#3b6ef6] text-[#3b6ef6]'
+                ? 'border-[#24befa] text-[#24befa]'
                 : 'border-transparent text-[var(--muted)] hover:text-[var(--foreground)]'
             }`}
           >
@@ -11239,7 +11239,7 @@ function TeamsAppsPanel({
             <button
               key={app.id}
               onClick={() => setOpenApp(app)}
-              className={`text-left bg-[#13131a] border rounded-xl p-4 hover:border-[#3b6ef6]/30 transition-colors ${
+              className={`text-left bg-[#13131a] border rounded-xl p-4 hover:border-[#24befa]/30 transition-colors ${
                 app.isBlocked ? 'border-red-500/30 opacity-60' : 'border-white/[0.06]'
               }`}
             >
@@ -11257,7 +11257,7 @@ function TeamsAppsPanel({
                   {app.install_count} install{app.install_count !== 1 ? 's' : ''}
                 </span>
                 {isTeamScope && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#3b6ef6]/10 border border-[#3b6ef6]/20 text-[#93b4fd]">team</span>
+                  <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#24befa]/10 border border-[#24befa]/20 text-[#93b4fd]">team</span>
                 )}
                 {isUserScope && (
                   <span className="px-1.5 py-0.5 rounded text-[9px] bg-purple-500/10 border border-purple-500/20 text-purple-300">user</span>
@@ -11280,7 +11280,7 @@ function TeamsAppsPanel({
               )}
 
               <div className="text-[10px] text-[var(--muted)]/70 mt-3 flex items-center gap-1">
-                <Sparkles size={10} className="text-[#3b6ef6]" /> Click for AI risk analysis
+                <Sparkles size={10} className="text-[#24befa]" /> Click for AI risk analysis
               </div>
             </button>
           )
@@ -11431,13 +11431,13 @@ function TeamsAppRiskDrawer({ app, onClose }: { app: TeamsApp; onClose: () => vo
           )}
 
           {/* AI Risk Analysis */}
-          <div className="bg-gradient-to-br from-[#3b6ef6]/[0.06] to-transparent border border-[#3b6ef6]/20 rounded-xl p-4">
+          <div className="bg-gradient-to-br from-[#24befa]/[0.06] to-transparent border border-[#24befa]/20 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Sparkles size={14} className="text-[#3b6ef6]" />
+              <Sparkles size={14} className="text-[#24befa]" />
               <span className="text-[12px] font-semibold text-[var(--foreground)]">AI Risk Analysis</span>
               {data && (
                 <span className={`text-[10px] px-2 py-0.5 rounded-full border ${data.ai_powered
-                  ? 'bg-[#3b6ef6]/10 border-[#3b6ef6]/30 text-[#93b4fd]'
+                  ? 'bg-[#24befa]/10 border-[#24befa]/30 text-[#93b4fd]'
                   : 'bg-zinc-500/10 border-zinc-500/30 text-zinc-400'}`}>
                   {data.ai_powered ? 'AI-generated' : 'Heuristic'}
                 </span>
@@ -11633,7 +11633,7 @@ function MeetingSecurityPanel() {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-[14px] font-semibold text-[var(--foreground)] flex items-center gap-2">
-            <Radio size={14} className="text-[#3b6ef6]" />
+            <Radio size={14} className="text-[#24befa]" />
             Meeting Security
           </h3>
           <p className="text-[11px] text-[var(--muted)] mt-0.5">
@@ -11671,7 +11671,7 @@ function MeetingSecurityPanel() {
       {sampled > 0 && (
         <div className="bg-[#13131a] border border-[var(--border)] rounded-xl p-5">
           <div className="flex items-center gap-2 mb-4">
-            <ShieldCheck size={14} className="text-[#3b6ef6]" />
+            <ShieldCheck size={14} className="text-[#24befa]" />
             <h3 className="text-[13px] font-semibold text-[var(--foreground)]">Tenant Meeting Posture</h3>
             <span className="text-[10px] text-[var(--muted)] ml-auto">Sample of {sampled} recent meetings</span>
           </div>
@@ -11719,13 +11719,13 @@ function MeetingSecurityPanel() {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search meetings (subject, organiser, description)…"
-              className="w-full pl-8 pr-3 py-1.5 bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg outline-none focus:border-[#3b6ef6]"
+              className="w-full pl-8 pr-3 py-1.5 bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg outline-none focus:border-[#24befa]"
             />
           </div>
           <select
             value={filterSev}
             onChange={e => setFilterSev(e.target.value)}
-            className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+            className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
           >
             <option value="">All severities</option>
             <option value="critical">Critical</option>
@@ -11737,7 +11737,7 @@ function MeetingSecurityPanel() {
           <select
             value={filterType}
             onChange={e => setFilterType(e.target.value)}
-            className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#3b6ef6]"
+            className="bg-[#111114] border border-[#1e1e24] text-[#e4e4e7] text-[12px] rounded-lg px-3 py-1.5 outline-none focus:border-[#24befa]"
           >
             <option value="">All risk types</option>
             {Object.keys(data.by_type).sort().map(t => (
@@ -11926,13 +11926,13 @@ function MeetingRiskDrawer({
           )}
 
           {/* AI Risk Analysis */}
-          <div className="bg-gradient-to-br from-[#3b6ef6]/[0.06] to-transparent border border-[#3b6ef6]/20 rounded-xl p-4">
+          <div className="bg-gradient-to-br from-[#24befa]/[0.06] to-transparent border border-[#24befa]/20 rounded-xl p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Sparkles size={14} className="text-[#3b6ef6]" />
+              <Sparkles size={14} className="text-[#24befa]" />
               <span className="text-[12px] font-semibold text-[var(--foreground)]">AI Risk Analysis</span>
               {analysis && (
                 <span className={`text-[10px] px-2 py-0.5 rounded-full border ${analysis.ai_powered
-                  ? 'bg-[#3b6ef6]/10 border-[#3b6ef6]/30 text-[#93b4fd]'
+                  ? 'bg-[#24befa]/10 border-[#24befa]/30 text-[#93b4fd]'
                   : 'bg-zinc-500/10 border-zinc-500/30 text-zinc-400'}`}>
                   {analysis.ai_powered ? 'AI-generated' : 'Heuristic'}
                 </span>
@@ -11988,7 +11988,7 @@ function MeetingRiskDrawer({
               href={risk.remediation_url}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-[#3b6ef6]/15 hover:bg-[#3b6ef6]/25 border border-[#3b6ef6]/30 text-[#93b4fd] text-[12px] font-medium rounded-lg transition-colors"
+              className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-[#24befa]/15 hover:bg-[#24befa]/25 border border-[#24befa]/30 text-[#93b4fd] text-[12px] font-medium rounded-lg transition-colors"
             >
               Open in Teams Admin Center <ExternalLink size={12} />
             </a>

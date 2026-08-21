@@ -177,8 +177,8 @@ function LoadingSkeleton({ rows = 5 }: { rows?: number }) {
 function UpgradePrompt() {
   return (
     <div className="flex flex-col items-center justify-center py-24 gap-6">
-      <div className="w-16 h-16 rounded-full bg-[#3b6ef6]/10 flex items-center justify-center">
-        <Lock size={28} className="text-[#3b6ef6]" />
+      <div className="w-16 h-16 rounded-full bg-[#24befa]/10 flex items-center justify-center">
+        <Lock size={28} className="text-[#24befa]" />
       </div>
       <div className="text-center max-w-md">
         <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">
@@ -192,7 +192,7 @@ function UpgradePrompt() {
       </div>
       <a
         href="mailto:sales@himaya.ai?subject=Enterprise Upgrade — DLP"
-        className="px-6 py-2.5 bg-[#3b6ef6] hover:bg-[#2d5fe0] text-white text-[14px] font-medium rounded-lg transition-colors"
+        className="px-6 py-2.5 bg-[#0ea5e9] hover:bg-[#0b96d6] text-white text-[14px] font-medium rounded-lg transition-colors"
       >
         Contact Sales to Upgrade
       </a>
@@ -281,7 +281,7 @@ function BarChart({ data, height = 160, barWidth = 24 }: {
             style={{
               width: barWidth,
               height: `${Math.max((item.value / maxValue) * (height - 40), 4)}px`,
-              backgroundColor: item.color || '#3b6ef6',
+              backgroundColor: item.color || '#24befa',
             }}
           />
           <span className="text-[10px] text-[#71717a] truncate max-w-[40px]">{item.label}</span>
@@ -293,7 +293,7 @@ function BarChart({ data, height = 160, barWidth = 24 }: {
 
 // ── Mini Trend Sparkline ──────────────────────────────────────────────────────
 
-function Sparkline({ data, color = '#3b6ef6', height = 32, width = 80 }: {
+function Sparkline({ data, color = '#24befa', height = 32, width = 80 }: {
   data: number[]
   color?: string
   height?: number
@@ -372,7 +372,7 @@ function OverviewTab({ stats, events, loading }: {
         <div className="bg-[#141417] border border-white/[0.06] rounded-xl p-5">
           <div className="flex items-start justify-between mb-3">
             <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
-              <Activity size={18} className="text-[#3b6ef6]" />
+              <Activity size={18} className="text-[#24befa]" />
             </div>
             <div className="flex items-center gap-1 text-[11px]">
               {weekChange >= 0 ? (
@@ -394,7 +394,7 @@ function OverviewTab({ stats, events, loading }: {
           <div className="text-[12px] text-[#71717a]">Events Today</div>
           <div className="mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between">
             <span className="text-[11px] text-[#71717a]">Last 7 days</span>
-            <Sparkline data={trendData} color="#3b6ef6" />
+            <Sparkline data={trendData} color="#24befa" />
           </div>
         </div>
 
@@ -470,7 +470,7 @@ function OverviewTab({ stats, events, loading }: {
         {/* Risk Distribution */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
           <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-            <PieChart size={15} className="text-[#3b6ef6]" />
+            <PieChart size={15} className="text-[#24befa]" />
             Risk Distribution
           </h3>
           <div className="flex items-center justify-between">
@@ -508,7 +508,7 @@ function OverviewTab({ stats, events, loading }: {
         {/* Action Distribution */}
         <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
           <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-            <BarChart3 size={15} className="text-[#3b6ef6]" />
+            <BarChart3 size={15} className="text-[#24befa]" />
             Actions Taken
           </h3>
           <BarChart
@@ -527,7 +527,7 @@ function OverviewTab({ stats, events, loading }: {
       {/* Top Categories */}
       <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
         <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-          <FileWarning size={15} className="text-[#3b6ef6]" />
+          <FileWarning size={15} className="text-[#24befa]" />
           Top Detection Categories
         </h3>
         {topCategories.length === 0 ? (
@@ -539,7 +539,7 @@ function OverviewTab({ stats, events, loading }: {
             {topCategories.map((cat, i) => (
               <div key={i} className="flex items-center justify-between bg-white/[0.03] rounded-lg p-3 border border-white/[0.05]">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-[#3b6ef6]" />
+                  <div className="w-2 h-2 rounded-full bg-[#0ea5e9]" />
                   <span className="text-[12px] text-[#a1a1aa] truncate max-w-[100px]" title={cat.category.replace(/_/g, ' ')}>
                     {cat.category.replace(/_/g, ' ')}
                   </span>
@@ -554,7 +554,7 @@ function OverviewTab({ stats, events, loading }: {
       {/* Recent Activity */}
       <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
         <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
-          <Eye size={15} className="text-[#3b6ef6]" />
+          <Eye size={15} className="text-[#24befa]" />
           Recent Activity
         </h3>
         {events.length === 0 ? (
@@ -647,7 +647,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
         type="checkbox"
         checked={!!form[field]}
         onChange={e => set(field, e.target.checked)}
-        className="w-4 h-4 rounded border-white/20 bg-[#1a1a24] accent-[#3b6ef6] cursor-pointer"
+        className="w-4 h-4 rounded border-white/20 bg-[#1a1a24] accent-[#24befa] cursor-pointer"
       />
       <span className="text-[13px] text-[#a1a1aa] group-hover:text-white transition-colors">{label}</span>
     </label>
@@ -670,7 +670,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
             <div className="col-span-2">
               <label className="text-[12px] text-[#71717a] mb-1.5 block">Policy Name *</label>
               <input
-                className="w-full bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#3b6ef6]/50"
+                className="w-full bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#24befa]/50"
                 placeholder="e.g. Block outbound credit cards"
                 value={form.name}
                 onChange={e => set('name', e.target.value)}
@@ -679,7 +679,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
             <div>
               <label className="text-[12px] text-[#71717a] mb-1.5 block">Severity</label>
               <select
-                className="w-full bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] focus:outline-none focus:border-[#3b6ef6]/50"
+                className="w-full bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] focus:outline-none focus:border-[#24befa]/50"
                 value={form.severity}
                 onChange={e => set('severity', e.target.value)}
               >
@@ -692,7 +692,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
             <div>
               <label className="text-[12px] text-[#71717a] mb-1.5 block">Enabled</label>
               <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                <input type="checkbox" checked={form.enabled} onChange={e => set('enabled', e.target.checked)} className="w-4 h-4 accent-[#3b6ef6]" />
+                <input type="checkbox" checked={form.enabled} onChange={e => set('enabled', e.target.checked)} className="w-4 h-4 accent-[#24befa]" />
                 <span className="text-[13px] text-[#a1a1aa]">Policy active</span>
               </label>
             </div>
@@ -717,7 +717,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
             <div className="flex gap-3 flex-wrap">
               {(['ALLOW', 'WARN', 'HOLD', 'BLOCK'] as const).map(a => (
                 <label key={a} className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="action" value={a} checked={form.action === a} onChange={() => set('action', a)} className="accent-[#3b6ef6]" />
+                  <input type="radio" name="action" value={a} checked={form.action === a} onChange={() => set('action', a)} className="accent-[#24befa]" />
                   <span className={`text-[13px] font-medium ${
                     a === 'ALLOW' ? 'text-emerald-400' :
                     a === 'WARN'  ? 'text-amber-400' :
@@ -743,7 +743,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
             <div>
               <label className="text-[12px] text-[#71717a] mb-1.5 block">Manager notification email</label>
               <input
-                className="w-full bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#3b6ef6]/50"
+                className="w-full bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#24befa]/50"
                 placeholder="security@company.com"
                 value={form.notify_manager_email || ''}
                 onChange={e => set('notify_manager_email', e.target.value || null)}
@@ -756,7 +756,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
             <label className="text-[12px] text-[#71717a] mb-1.5 block">Custom Keywords</label>
             <div className="flex gap-2 mb-2">
               <input
-                className="flex-1 bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#3b6ef6]/50"
+                className="flex-1 bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#24befa]/50"
                 placeholder="classified, project-x, top secret"
                 value={kwInput}
                 onChange={e => setKwInput(e.target.value)}
@@ -779,7 +779,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
             <label className="text-[12px] text-[#71717a] mb-1.5 block">Custom Regex Patterns</label>
             <div className="flex gap-2 mb-2">
               <input
-                className="flex-1 bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] font-mono text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#3b6ef6]/50"
+                className="flex-1 bg-[#0d0d12] border border-white/[0.08] rounded-lg px-3 py-2 text-[13px] font-mono text-[var(--foreground)] placeholder-[#4a4a5a] focus:outline-none focus:border-[#24befa]/50"
                 placeholder="\b[A-Z]{2}\d{6}\b"
                 value={rxInput}
                 onChange={e => setRxInput(e.target.value)}
@@ -805,7 +805,7 @@ function PolicyModal({ onClose, onSave }: { onClose: () => void; onSave: (p: typ
           <button
             onClick={submit}
             disabled={saving}
-            className="px-5 py-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] disabled:opacity-50 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-2"
+            className="px-5 py-2 bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 text-white text-[13px] font-medium rounded-lg transition-colors flex items-center gap-2"
           >
             {saving && <RefreshCw size={13} className="animate-spin" />}
             Create Policy
@@ -1019,7 +1019,7 @@ function QueueTab({ queue, loading, onRelease, onBlock, releasing, blocking }: {
   if (loading) return <LoadingSkeleton rows={4} />
   return (
     <div>
-      <div className="flex items-center gap-2 mb-3 text-[12px] text-[#93b4fd] bg-[#3b6ef6]/[0.06] border border-[#3b6ef6]/20 rounded-xl px-4 py-3">
+      <div className="flex items-center gap-2 mb-3 text-[12px] text-[#93b4fd] bg-[#24befa]/[0.06] border border-[#24befa]/20 rounded-xl px-4 py-3">
         <Info size={13} />
         <span>Held emails await human review. Auto-refreshes every 30s. Held items expire after 4 hours.</span>
       </div>
@@ -1128,7 +1128,7 @@ function LogsTab({ events, loading, total, page, pageSize, onPage, onFilter, ris
       <div className="flex items-center gap-3">
         <Filter size={13} className="text-[#71717a]" />
         <select
-          className="bg-[#13131a] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-[#a1a1aa] focus:outline-none focus:border-[#3b6ef6]/50"
+          className="bg-[#13131a] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-[#a1a1aa] focus:outline-none focus:border-[#24befa]/50"
           value={riskFilter}
           onChange={e => onFilter(e.target.value, actionFilter)}
         >
@@ -1139,7 +1139,7 @@ function LogsTab({ events, loading, total, page, pageSize, onPage, onFilter, ris
           <option value="critical">Critical</option>
         </select>
         <select
-          className="bg-[#13131a] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-[#a1a1aa] focus:outline-none focus:border-[#3b6ef6]/50"
+          className="bg-[#13131a] border border-white/[0.08] rounded-lg px-3 py-1.5 text-[12px] text-[#a1a1aa] focus:outline-none focus:border-[#24befa]/50"
           value={actionFilter}
           onChange={e => onFilter(riskFilter, e.target.value)}
         >
@@ -1331,7 +1331,7 @@ function GuideModal({ type, onClose }: { type: GuideType; onClose: () => void })
       >
         <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
           <h2 className="text-[15px] font-semibold text-[var(--foreground)] flex items-center gap-2">
-            <ClipboardList size={15} className="text-[#3b6ef6]" />
+            <ClipboardList size={15} className="text-[#24befa]" />
             {isM365 ? 'Microsoft 365 — DLP Integration' : 'Google Workspace — DLP Integration'}
           </h2>
           <button onClick={onClose} className="text-[#71717a] hover:text-white transition-colors"><X size={18} /></button>
@@ -1339,7 +1339,7 @@ function GuideModal({ type, onClose }: { type: GuideType; onClose: () => void })
         <div className="p-5 space-y-4">
           {steps.map(step => (
             <div key={step.n} className="flex gap-3">
-              <div className="w-6 h-6 rounded-full bg-[#3b6ef6]/20 border border-[#3b6ef6]/30 text-[#3b6ef6] text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+              <div className="w-6 h-6 rounded-full bg-[#24befa]/20 border border-[#24befa]/30 text-[#24befa] text-[11px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
                 {step.n}
               </div>
               <div className="flex-1">
@@ -1351,7 +1351,7 @@ function GuideModal({ type, onClose }: { type: GuideType; onClose: () => void })
           ))}
         </div>
         <div className="flex justify-end p-5 border-t border-white/[0.06]">
-          <button onClick={onClose} className="px-4 py-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] text-white text-[13px] font-medium rounded-lg transition-colors">Got it</button>
+          <button onClick={onClose} className="px-4 py-2 bg-[#0ea5e9] hover:bg-[#0b96d6] text-white text-[13px] font-medium rounded-lg transition-colors">Got it</button>
         </div>
       </div>
     </div>
@@ -1502,7 +1502,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 type="checkbox"
                 checked={config.scan_outbound}
                 onChange={e => setConfig({ ...config, scan_outbound: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
               />
               <span className="text-[13px] text-[var(--foreground)]">Scan outbound emails</span>
             </label>
@@ -1511,7 +1511,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 type="checkbox"
                 checked={config.scan_inbound}
                 onChange={e => setConfig({ ...config, scan_inbound: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
               />
               <span className="text-[13px] text-[var(--foreground)]">Scan inbound emails</span>
             </label>
@@ -1532,7 +1532,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 <select
                   value={config[key as keyof DLPSetupConfig] as string}
                   onChange={e => setConfig({ ...config, [key]: e.target.value })}
-                  className="w-full bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] focus:outline-none focus:border-[#3b6ef6]/50"
+                  className="w-full bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] focus:outline-none focus:border-[#24befa]/50"
                 >
                   <option value="warn">Warn</option>
                   <option value="hold">Hold for Review</option>
@@ -1550,7 +1550,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 type="checkbox"
                 checked={config.notify_sender}
                 onChange={e => setConfig({ ...config, notify_sender: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
               />
               <span className="text-[13px] text-[var(--foreground)]">Notify sender on violation</span>
             </label>
@@ -1559,7 +1559,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 type="checkbox"
                 checked={config.notify_admin}
                 onChange={e => setConfig({ ...config, notify_admin: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
               />
               <span className="text-[13px] text-[var(--foreground)]">Notify admins on violation</span>
             </label>
@@ -1576,7 +1576,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                   onChange={e => setAdminEmail(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addAdminEmail()}
                   placeholder="admin@company.com"
-                  className="flex-1 bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#52525b] focus:outline-none focus:border-[#3b6ef6]/50"
+                  className="flex-1 bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] placeholder-[#52525b] focus:outline-none focus:border-[#24befa]/50"
                 />
                 <button
                   onClick={addAdminEmail}
@@ -1600,7 +1600,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
 
           <button
             onClick={handleUpdateConfig}
-            className="mt-5 px-4 py-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] text-white text-[13px] font-medium rounded-lg transition-colors"
+            className="mt-5 px-4 py-2 bg-[#0ea5e9] hover:bg-[#0b96d6] text-white text-[13px] font-medium rounded-lg transition-colors"
           >
             Save Changes
           </button>
@@ -1613,9 +1613,9 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
   return (
     <div className="max-w-2xl space-y-6">
       {/* Hero Card */}
-      <div className="bg-gradient-to-br from-[#3b6ef6]/10 to-[#6366f1]/10 border border-[#3b6ef6]/20 rounded-2xl p-8 text-center">
-        <div className="w-16 h-16 rounded-2xl bg-[#3b6ef6]/20 flex items-center justify-center mx-auto mb-4">
-          <Shield size={32} className="text-[#3b6ef6]" />
+      <div className="bg-gradient-to-br from-[#24befa]/10 to-[#6366f1]/10 border border-[#24befa]/20 rounded-2xl p-8 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-[#24befa]/20 flex items-center justify-center mx-auto mb-4">
+          <Shield size={32} className="text-[#24befa]" />
         </div>
         <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">Enable Data Loss Prevention</h2>
         <p className="text-[14px] text-[#a1a1aa] mb-6 max-w-md mx-auto">
@@ -1631,7 +1631,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
             { icon: Eye, label: 'Real-Time', desc: 'Scans during email sync' },
           ].map(({ icon: Icon, label, desc }) => (
             <div key={label} className="p-4 bg-black/20 rounded-xl">
-              <Icon size={18} className="text-[#3b6ef6] mx-auto mb-2" />
+              <Icon size={18} className="text-[#24befa] mx-auto mb-2" />
               <div className="text-[12px] font-medium text-[var(--foreground)]">{label}</div>
               <div className="text-[11px] text-[#71717a]">{desc}</div>
             </div>
@@ -1650,7 +1650,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
               type="checkbox"
               checked={config.scan_outbound}
               onChange={e => setConfig({ ...config, scan_outbound: e.target.checked })}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
             />
             <div>
               <span className="text-[13px] text-[var(--foreground)]">Scan outbound emails</span>
@@ -1662,7 +1662,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
               type="checkbox"
               checked={config.scan_inbound}
               onChange={e => setConfig({ ...config, scan_inbound: e.target.checked })}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
             />
             <div>
               <span className="text-[13px] text-[var(--foreground)]">Scan inbound emails</span>
@@ -1688,7 +1688,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 <select
                   value={config[key as keyof DLPSetupConfig] as string}
                   onChange={e => setConfig({ ...config, [key]: e.target.value })}
-                  className="w-full bg-[#13131a] border border-white/[0.07] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] focus:outline-none focus:border-[#3b6ef6]/50"
+                  className="w-full bg-[#13131a] border border-white/[0.07] rounded-lg px-3 py-2 text-[13px] text-[var(--foreground)] focus:outline-none focus:border-[#24befa]/50"
                 >
                   <option value="warn">Warn (log only)</option>
                   <option value="hold">Hold for Review</option>
@@ -1709,7 +1709,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 type="checkbox"
                 checked={config.notify_sender}
                 onChange={e => setConfig({ ...config, notify_sender: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
               />
               <span className="text-[13px] text-[var(--foreground)]">Notify sender when their email is flagged</span>
             </label>
@@ -1718,7 +1718,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
                 type="checkbox"
                 checked={config.notify_admin}
                 onChange={e => setConfig({ ...config, notify_admin: e.target.checked })}
-                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+                className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
               />
               <span className="text-[13px] text-[var(--foreground)]">Notify admins about violations</span>
             </label>
@@ -1730,7 +1730,7 @@ function QuickSetupTab({ onEnable }: { onEnable: () => void }) {
       <button
         onClick={handleEnable}
         disabled={enabling || (!config.scan_outbound && !config.scan_inbound)}
-        className="w-full py-3 bg-[#3b6ef6] hover:bg-[#2d5fe0] disabled:opacity-50 disabled:cursor-not-allowed text-white text-[14px] font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+        className="w-full py-3 bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 disabled:cursor-not-allowed text-white text-[14px] font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
       >
         {enabling ? (
           <><RefreshCw size={16} className="animate-spin" /> Enabling DLP...</>
@@ -1896,7 +1896,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
-                <Shield size={20} className="text-[#3b6ef6]" />
+                <Shield size={20} className="text-[#24befa]" />
               </div>
               <div>
                 <h3 className="text-[14px] font-semibold text-[var(--foreground)]">DLP Protection Disabled</h3>
@@ -1912,7 +1912,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
       {/* Falcon DataEye Engine status */}
       <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
         <h3 className="text-[13px] font-semibold text-[var(--foreground)] mb-3 flex items-center gap-2">
-          <Zap size={14} className="text-[#3b6ef6]" />
+          <Zap size={14} className="text-[#24befa]" />
           Falcon DataEye Engine
         </h3>
         <div className="flex items-center gap-3">
@@ -1940,7 +1940,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
               type="checkbox"
               checked={config.scan_outbound}
               onChange={e => setConfig({ ...config, scan_outbound: e.target.checked })}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
             />
             <div>
               <span className="text-[13px] text-[var(--foreground)]">Scan outbound emails</span>
@@ -1953,7 +1953,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
               type="checkbox"
               checked={config.scan_inbound}
               onChange={e => setConfig({ ...config, scan_inbound: e.target.checked })}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
             />
             <div>
               <span className="text-[13px] text-[var(--foreground)]">Scan inbound emails</span>
@@ -1977,7 +1977,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
               <select
                 value={config[key as keyof DLPSetupConfig] as string}
                 onChange={e => setConfig({ ...config, [key]: e.target.value })}
-                className="w-full bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[12px] text-[var(--foreground)] focus:outline-none focus:border-[#3b6ef6]/50"
+                className="w-full bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[12px] text-[var(--foreground)] focus:outline-none focus:border-[#24befa]/50"
               >
                 <option value="warn">Warn</option>
                 <option value="hold">Hold for Review</option>
@@ -1995,7 +1995,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
               type="checkbox"
               checked={config.notify_sender}
               onChange={e => setConfig({ ...config, notify_sender: e.target.checked })}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
             />
             <span className="text-[12px] text-[var(--foreground)]">Notify sender on violation</span>
           </label>
@@ -2004,7 +2004,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
               type="checkbox"
               checked={config.notify_admin}
               onChange={e => setConfig({ ...config, notify_admin: e.target.checked })}
-              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#3b6ef6] focus:ring-[#3b6ef6]/50"
+              className="w-4 h-4 rounded border-white/20 bg-white/5 text-[#24befa] focus:ring-[#24befa]/50"
             />
             <span className="text-[12px] text-[var(--foreground)]">Notify admins on violation</span>
           </label>
@@ -2021,7 +2021,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
                 onChange={e => setAdminEmail(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addAdminEmail()}
                 placeholder="admin@company.com"
-                className="flex-1 bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[12px] text-[var(--foreground)] placeholder-[#52525b] focus:outline-none focus:border-[#3b6ef6]/50"
+                className="flex-1 bg-[#0d0d12] border border-white/[0.07] rounded-lg px-3 py-2 text-[12px] text-[var(--foreground)] placeholder-[#52525b] focus:outline-none focus:border-[#24befa]/50"
               />
               <button
                 onClick={addAdminEmail}
@@ -2048,7 +2048,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
           {status?.enabled ? (
             <button
               onClick={handleUpdateConfig}
-              className="px-4 py-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] text-white text-[12px] font-medium rounded-lg transition-colors"
+              className="px-4 py-2 bg-[#0ea5e9] hover:bg-[#0b96d6] text-white text-[12px] font-medium rounded-lg transition-colors"
             >
               Save Changes
             </button>
@@ -2056,7 +2056,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
             <button
               onClick={handleEnable}
               disabled={enabling || (!config.scan_outbound && !config.scan_inbound)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] disabled:opacity-50 text-white text-[12px] font-medium rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 text-white text-[12px] font-medium rounded-lg transition-colors"
             >
               {enabling ? <RefreshCw size={12} className="animate-spin" /> : <ShieldCheck size={12} />}
               {enabling ? 'Enabling...' : 'Enable DLP Protection'}
@@ -2068,7 +2068,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
       {/* Test the pipeline */}
       <div className="bg-[#13131a] border border-white/[0.06] rounded-xl p-5">
         <h3 className="text-[14px] font-semibold text-[var(--foreground)] mb-1 flex items-center gap-2">
-          <Zap size={15} className="text-[#3b6ef6]" />
+          <Zap size={15} className="text-[#24befa]" />
           Test Classification
         </h3>
         <p className="text-[12px] text-[#71717a] mb-4">
@@ -2077,7 +2077,7 @@ function SettingsTab({ onConfigChange }: { onConfigChange?: () => void }) {
         <button
           onClick={runTest}
           disabled={testing}
-          className="flex items-center gap-2 px-4 py-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] disabled:opacity-50 text-white text-[13px] font-medium rounded-lg transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 text-white text-[13px] font-medium rounded-lg transition-colors"
         >
           {testing ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
           {testing ? 'Running test...' : 'Run Test Email'}
@@ -2303,7 +2303,7 @@ export default function DLPPage() {
           {tab === 'policies' && (
             <button
               onClick={() => setShowNewPolicy(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] text-white text-[13px] font-medium rounded-lg transition-colors"
+              className="flex items-center gap-2 px-4 py-2 bg-[#0ea5e9] hover:bg-[#0b96d6] text-white text-[13px] font-medium rounded-lg transition-colors"
             >
               <Plus size={14} />
               New Policy
@@ -2327,11 +2327,11 @@ export default function DLPPage() {
             onClick={() => setTab(key)}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[13px] font-medium transition-all ${
               tab === key
-                ? 'bg-[#3b6ef6]/15 text-[var(--foreground)]'
+                ? 'bg-[#24befa]/15 text-[var(--foreground)]'
                 : 'text-[#71717a] hover:text-[var(--foreground)] hover:bg-white/[0.04]'
             }`}
           >
-            <Icon size={13} className={tab === key ? 'text-[#3b6ef6]' : 'text-current'} />
+            <Icon size={13} className={tab === key ? 'text-[#24befa]' : 'text-current'} />
             {label}
             {key === 'queue' && queue.length > 0 && (
               <span className="ml-1 text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30 rounded-full px-1.5 py-0.5">

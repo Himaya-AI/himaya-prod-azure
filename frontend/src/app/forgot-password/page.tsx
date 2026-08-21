@@ -35,7 +35,7 @@ export default function ForgotPasswordPage() {
           <p className="text-[12px] text-[#71717a]">
             If an account exists for <span className="text-[#a1a1aa]">{email}</span>, we sent a password reset link.
           </p>
-          <Link href="/login" className="block text-[12px] text-[#3b6ef6] hover:underline mt-2">
+          <Link href="/login" className="block text-[12px] text-[#24befa] hover:underline mt-2">
             Back to sign in
           </Link>
         </div>

@@ -235,7 +235,7 @@ export default function ControlsTable({ controls }: Props) {
 
                         {/* Backend rationale — the source of truth */}
                         <div className="flex items-start gap-2">
-                          <Sparkles size={14} className="text-[#3b6ef6] mt-0.5 flex-shrink-0" />
+                          <Sparkles size={14} className="text-[#24befa] mt-0.5 flex-shrink-0" />
                           <div className="flex-1">
                             <div className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
                               Why this score

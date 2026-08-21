@@ -410,7 +410,7 @@ export default function CompliancePage() {
             <button
               onClick={() => generateReport()}
               disabled={generating}
-              className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 bg-[#3b6ef6] hover:bg-[#2d5fe0] disabled:opacity-50 text-white rounded-l-lg border-r border-r-white/20 transition-colors"
+              className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 bg-[#0ea5e9] hover:bg-[#0b96d6] disabled:opacity-50 text-white rounded-l-lg border-r border-r-white/20 transition-colors"
             >
               {generating
                 ? <><RefreshCw size={13} className="animate-spin" /> Generating…</>
@@ -418,7 +418,7 @@ export default function CompliancePage() {
             </button>
             <button
               onClick={() => setShowFormatMenu(v => !v)}
-              className="flex items-center px-2 bg-[#3b6ef6] hover:bg-[#2d5fe0] rounded-r-lg border-l border-l-white/20 transition-colors"
+              className="flex items-center px-2 bg-[#0ea5e9] hover:bg-[#0b96d6] rounded-r-lg border-l border-l-white/20 transition-colors"
               title="Choose report format"
             >
               <ChevronDown size={12} className="text-white" />
@@ -608,8 +608,8 @@ export default function CompliancePage() {
             className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-white/[0.02] transition-colors"
           >
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded-md bg-[#3b6ef6]/20 flex items-center justify-center">
-                <TrendingUp size={11} className="text-[#3b6ef6]" />
+              <div className="w-5 h-5 rounded-md bg-[#24befa]/20 flex items-center justify-center">
+                <TrendingUp size={11} className="text-[#24befa]" />
               </div>
               <span className="text-[13px] font-semibold text-white">AI Analysis & Findings</span>
               <span className="text-[11px] text-slate-500">· Himaya Compliance Intelligence</span>
@@ -633,7 +633,7 @@ export default function CompliancePage() {
                   <ul className="space-y-2">
                     {aiSummary.findings.map((f, i) => (
                       <li key={i} className="flex items-start gap-2 text-[12px] text-slate-300 leading-relaxed">
-                        <span className="flex-shrink-0 w-4 h-4 rounded-full bg-[#3b6ef6]/15 text-[#3b6ef6] text-[9px] font-bold flex items-center justify-center mt-0.5">
+                        <span className="flex-shrink-0 w-4 h-4 rounded-full bg-[#24befa]/15 text-[#24befa] text-[9px] font-bold flex items-center justify-center mt-0.5">
                           {i + 1}
                         </span>
                         {f}
@@ -665,7 +665,7 @@ export default function CompliancePage() {
                 <button
                   onClick={() => generateReport()}
                   disabled={generating}
-                  className="ml-auto flex items-center gap-1.5 text-[11px] text-[#3b6ef6] hover:text-blue-300 transition-colors disabled:opacity-50"
+                  className="ml-auto flex items-center gap-1.5 text-[11px] text-[#24befa] hover:text-blue-300 transition-colors disabled:opacity-50"
                 >
                   <Download size={11} /> Export full {reportFormat.toUpperCase()} report
                 </button>
@@ -692,7 +692,7 @@ export default function CompliancePage() {
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder="Search control id or name…"
-                className="pl-7 pr-3 py-1.5 text-[12px] bg-[#0d1018] border border-white/[0.08] rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#3b6ef6]/60 w-56"
+                className="pl-7 pr-3 py-1.5 text-[12px] bg-[#0d1018] border border-white/[0.08] rounded-lg text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-[#24befa]/60 w-56"
               />
             </div>
             {/* Status filter chips */}
@@ -703,7 +703,7 @@ export default function CompliancePage() {
                   onClick={() => setStatusFilter(s)}
                   className={`px-2.5 py-1.5 rounded-md border transition-colors ${
                     statusFilter === s
-                      ? 'bg-[#3b6ef6]/15 border-[#3b6ef6]/40 text-[#a8c0ff]'
+                      ? 'bg-[#24befa]/15 border-[#24befa]/40 text-[#a8c0ff]'
                       : 'bg-transparent border-white/[0.06] text-slate-500 hover:text-slate-300 hover:border-white/[0.12]'
                   }`}
                   title={s === 'all' ? 'Show all controls' : `Show only ${s.replace('_', ' ')}`}
@@ -732,7 +732,7 @@ export default function CompliancePage() {
             <p className="text-[13px]">No controls match the current filter.</p>
             <button
               onClick={() => { setSearchTerm(''); setStatusFilter('all') }}
-              className="text-[11px] text-[#3b6ef6] hover:text-blue-300 mt-2"
+              className="text-[11px] text-[#24befa] hover:text-blue-300 mt-2"
             >Clear filters</button>
           </div>
         ) : (
