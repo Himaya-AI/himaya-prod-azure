@@ -448,9 +448,9 @@ export default function DashboardPage() {
           loading={loading}
         />
         <MetricCard
-          label="Top Threat Type"
+          label="Top Mail Classification"
           value={loading ? '—' : (summary?.top_threat_type ?? 'None')}
-          sublabel="Most common this period"
+          sublabel="Most common verdict this period"
           accent="red"
           icon={<AlertTriangle size={18} />}
           loading={loading}
