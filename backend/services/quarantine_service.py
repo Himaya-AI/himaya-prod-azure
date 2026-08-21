@@ -304,15 +304,27 @@ async def block_to_trash_gmail(user_email: str, gmail_message_id: str, access_to
 
 async def mark_as_spam_gmail(
     user_email: str, gmail_message_id: str, internet_message_id: str | None = None,
+    access_token: str | None = None,
 ) -> bool:
     """
     Mark as spam — adds SPAM label and removes INBOX.
     Trains Gmail's spam filter for this user.
     """
     if not gmail_message_id or not user_email:
+        logger.warning(
+            f"mark_as_spam_gmail: missing identifiers (user={user_email!r} msg={gmail_message_id!r})"
+        )
         return False
     headers = await _get_sa_headers_async(user_email)
+    if not headers and access_token:
+        headers = {"Authorization": f"Bearer {access_token}"}
     if not headers:
+        # Previously a silent `return False`, which surfaced to the caller as an
+        # unexplained 502. Always say why.
+        logger.warning(
+            f"mark_as_spam_gmail: no auth for {user_email} "
+            f"(SA/DWD impersonation failed and no OAuth fallback token supplied)"
+        )
         return False
     try:
         async with httpx.AsyncClient(timeout=15) as client:

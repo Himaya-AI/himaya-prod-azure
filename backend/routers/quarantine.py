@@ -16,6 +16,23 @@ router = APIRouter(prefix="/api/quarantine", tags=["quarantine"])
 
 QUARANTINE_ACTIONS = ("QUARANTINE", "QUARANTINED", "BLOCK_DELETE", "BLOCK")
 
+# Actions that mean the message is no longer in the user's mailbox.
+_CONTAINED_ACTIONS = ("QUARANTINE", "QUARANTINED", "MARKED_SPAM", "BLOCK_DELETE", "BLOCK")
+
+
+def _already_contained(threat: Threat) -> bool:
+    """True when Himaya has already pulled this message out of the mailbox.
+
+    A provider move rewrites the message id in the destination folder and
+    hard-capture deletes the original, so re-acting on the stored id 404s even
+    though the desired end state (mail out of the inbox) is already true.
+    Report that end state instead of a misleading failure.
+    """
+    return (
+        (threat.action_taken or "") in _CONTAINED_ACTIONS
+        or (threat.status or "") == "quarantined"
+    )
+
 
 def threat_to_dict(t: Threat) -> dict:
     return {
@@ -495,11 +512,20 @@ async def manual_quarantine(
         await db.flush()
 
     provider = 'M365' if is_m365 else 'Gmail'
+    # Re-quarantining a message Himaya already removed is a no-op, not a failure.
+    _already = (not physically_moved) and _already_contained(threat)
+    if physically_moved:
+        _msg = f"Email quarantined and moved ({provider})"
+    elif _already:
+        _msg = f"Already contained — Himaya has already removed this message from the {provider} mailbox"
+    else:
+        _msg = f"Quarantine FAILED — could not move the email out of the {provider} mailbox"
     return {
-        "message": f"Email quarantined and moved ({provider})" if physically_moved else f"Quarantine FAILED — could not move the email out of the {provider} mailbox",
+        "message": _msg,
         "threat_id": threat_id,
-        "physically_moved": physically_moved,
-        "gmail_moved": physically_moved,  # keep legacy field name
+        "physically_moved": physically_moved or _already,
+        "gmail_moved": physically_moved or _already,  # keep legacy field name
+        "already_applied": _already,
         "gmail_message_id": threat.email_message_id,
     }
 
@@ -559,9 +585,15 @@ async def mark_as_spam(
     # folder, so the id we stored no longer resolves and the retry 404s — even
     # though the mail is sitting in the spam folder exactly as intended. Report
     # the true end state instead of a misleading failure.
-    if threat.action_taken == "MARKED_SPAM":
+    if _already_contained(threat):
+        _was_spam = (threat.action_taken or "") == "MARKED_SPAM"
         return {
-            "message": f"Already marked as spam — the message is in {provider_label}",
+            "message": (
+                f"Already marked as spam — the message is in {provider_label}"
+                if _was_spam else
+                "Already contained — Himaya has removed this message from the mailbox, "
+                "so there is nothing left to move to spam"
+            ),
             "threat_id": threat_id,
             "gmail_moved": True,
             "already_applied": True,
