@@ -80,7 +80,7 @@ function ThreatWorldMap({ data }: { data: CountryThreat[] }) {
     }
   }, [data])
 
-  return <div ref={mapRef} className="w-full h-[260px]" />
+  return <div ref={mapRef} className="w-full h-[320px] lg:h-[420px]" />
 }
 
 export default function ThreatMap() {
