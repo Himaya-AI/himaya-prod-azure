@@ -471,6 +471,7 @@ async def manual_quarantine(
                     user_email=threat.recipient_email,
                     m365_message_id=threat.email_message_id,
                     org_id=str(current_user.org_id),
+                    internet_message_id=(threat.auth_results or {}).get("internet_message_id"),
                 )
             else:
                 from backend.services.quarantine_service import quarantine_gmail_message
@@ -480,6 +481,7 @@ async def manual_quarantine(
                     access_token=None,
                     org_id=str(current_user.org_id),
                     threat_id=str(threat.id),
+                    internet_message_id=(threat.auth_results or {}).get("internet_message_id"),
                 )
         except Exception as e:
             import logging
@@ -530,12 +532,14 @@ async def mark_as_spam(
                     user_email=threat.recipient_email,
                     m365_message_id=threat.email_message_id,
                     org_id=str(current_user.org_id),
+                    internet_message_id=(threat.auth_results or {}).get("internet_message_id"),
                 )
             else:
                 from backend.services.quarantine_service import mark_as_spam_gmail
                 spam_moved = await mark_as_spam_gmail(
                     user_email=threat.recipient_email,
                     gmail_message_id=threat.email_message_id,
+                    internet_message_id=(threat.auth_results or {}).get("internet_message_id"),
                 )
         except Exception as e:
             import logging

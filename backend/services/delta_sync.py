@@ -612,6 +612,13 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         ]
                         auth_results = _parse_auth_headers_multi(all_auth_vals, hdrs)
 
+                        # Stash RFC822 Message-ID so a later manual quarantine/spam
+                        # action can re-resolve the live Gmail id if the message was
+                        # moved/relabeled (id changes) by auto-triage or a prior action.
+                        _gmail_rfc = hdrs.get("message-id", "").strip()
+                        if _gmail_rfc:
+                            auth_results["internet_message_id"] = _gmail_rfc
+
                         # Extract originating sender IP from Received: headers
                         import re as _re
                         received_hdrs = [
@@ -1093,7 +1100,7 @@ async def _delta_sync_integration_snap(db, redis, integration):
                         f"?$top=100"
                         f"&$filter=receivedDateTime ge {since_iso}"
                         f"&$select=id,sender,toRecipients,receivedDateTime,subject,"
-                        f"hasAttachments,body,internetMessageHeaders,isDraft"
+                        f"hasAttachments,body,internetMessageHeaders,internetMessageId,isDraft"
                         f"&$orderby=receivedDateTime desc"
                     )
                     _m365_msgs: list = []
@@ -1163,6 +1170,19 @@ async def _delta_sync_integration_snap(db, redis, integration):
                                 reply_to_m365 = _hv.strip()
                             elif _hn == "received":
                                 _m365_received.append(_hv)
+
+                        # Stash RFC822 internetMessageId so a later manual
+                        # quarantine/spam action can re-resolve the live Graph id
+                        # if the message was moved (id rewritten) by auto-triage or
+                        # a prior action. Fall back to the Message-ID header.
+                        _m365_imid = msg.get("internetMessageId", "")
+                        if not _m365_imid:
+                            for _h2 in msg.get("internetMessageHeaders", []):
+                                if _h2.get("name", "").lower() == "message-id":
+                                    _m365_imid = _h2.get("value", "")
+                                    break
+                        if _m365_imid:
+                            auth_results["internet_message_id"] = _m365_imid.strip()
 
                         # Extract originating sender IP from Received: headers so
                         # threat-intel IP packs (OpenDBL / feeds) can match the

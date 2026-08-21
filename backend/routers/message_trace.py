@@ -401,6 +401,7 @@ async def perform_action(
                         user_email=t.recipient_email,
                         m365_message_id=t.email_message_id,
                         org_id=str(org_id),
+                        internet_message_id=(getattr(t, "auth_results", None) or {}).get("internet_message_id"),
                     )
                 else:
                     from backend.services.quarantine_service import quarantine_gmail_message
@@ -423,6 +424,7 @@ async def perform_action(
                     success = await quarantine_gmail_message(
                         t.recipient_email, t.email_message_id, access_token=fallback_token,
                         org_id=str(org_id), threat_id=str(t.id),
+                        internet_message_id=(getattr(t, "auth_results", None) or {}).get("internet_message_id"),
                     )
             except Exception as _e:
                 import logging as _logging

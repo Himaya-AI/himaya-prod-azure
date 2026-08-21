@@ -75,9 +75,64 @@ async def _get_sa_headers_async(user_email: str) -> dict | None:
         return None
 
 
+async def _resolve_m365_id(
+    client: "httpx.AsyncClient", headers: dict, user_email: str, internet_message_id: str | None
+) -> str | None:
+    """Re-resolve a message's CURRENT Graph id via its RFC822 internetMessageId.
+
+    A Graph /move rewrites the message id in the destination folder, so an id
+    captured at ingestion goes stale (404 ErrorItemNotFound) once auto-triage or
+    a prior action moved the mail. internetMessageId is immutable and searchable
+    across ALL folders, letting a re-action find the live id."""
+    if not internet_message_id:
+        return None
+    imid = internet_message_id.replace("'", "''")
+    try:
+        r = await client.get(
+            f"{GRAPH_API_BASE}/users/{user_email}/messages",
+            headers=headers,
+            params={"$filter": f"internetMessageId eq '{imid}'", "$select": "id", "$top": "1"},
+        )
+        if r.status_code == 200:
+            vals = r.json().get("value", [])
+            if vals:
+                return vals[0].get("id")
+    except Exception as e:
+        logger.debug(f"M365 id re-resolve failed for {user_email}: {e}")
+    return None
+
+
+async def _resolve_gmail_id(
+    client: "httpx.AsyncClient", headers: dict, user_email: str, internet_message_id: str | None
+) -> str | None:
+    """Re-resolve a Gmail message id via its RFC822 Message-ID (rfc822msgid search).
+
+    A message auto-triaged into SPAM/Trash may have been acted on under a
+    different stored id; this locates the live id across all labels."""
+    if not internet_message_id:
+        return None
+    rfc = internet_message_id.strip().strip("<>")
+    if not rfc:
+        return None
+    try:
+        r = await client.get(
+            f"{GMAIL_API_BASE}/users/{user_email}/messages",
+            headers=headers,
+            params={"q": f"rfc822msgid:{rfc}"},
+        )
+        if r.status_code == 200:
+            msgs = r.json().get("messages", [])
+            if msgs:
+                return msgs[0].get("id")
+    except Exception as e:
+        logger.debug(f"Gmail id re-resolve failed for {user_email}: {e}")
+    return None
+
+
 async def quarantine_gmail_message(
     user_email: str, gmail_message_id: str, access_token: str = None,
     org_id: str | None = None, threat_id: str | None = None,
+    internet_message_id: str | None = None,
 ) -> bool:
     """
     Quarantine a Gmail message.
@@ -130,6 +185,16 @@ async def quarantine_gmail_message(
                 f"{GMAIL_API_BASE}/users/{user_email}/messages/{gmail_message_id}/trash",
                 headers=headers,
             )
+            if resp.status_code == 404 and internet_message_id:
+                _new_id = await _resolve_gmail_id(client, headers, user_email, internet_message_id)
+                if _new_id and _new_id != gmail_message_id:
+                    logger.info(f"Gmail quarantine: re-resolved stale id {gmail_message_id} -> {_new_id} for {user_email}")
+                    gmail_message_id = _new_id
+                    resp = await _request_with_retry(
+                        client, "POST",
+                        f"{GMAIL_API_BASE}/users/{user_email}/messages/{gmail_message_id}/trash",
+                        headers=headers,
+                    )
             if resp.status_code == 200:
                 logger.info(f"Quarantined (trashed) Gmail message {gmail_message_id} for {user_email}")
                 return True
@@ -237,7 +302,9 @@ async def block_to_trash_gmail(user_email: str, gmail_message_id: str, access_to
         return False
 
 
-async def mark_as_spam_gmail(user_email: str, gmail_message_id: str) -> bool:
+async def mark_as_spam_gmail(
+    user_email: str, gmail_message_id: str, internet_message_id: str | None = None,
+) -> bool:
     """
     Mark as spam — adds SPAM label and removes INBOX.
     Trains Gmail's spam filter for this user.
@@ -255,6 +322,17 @@ async def mark_as_spam_gmail(user_email: str, gmail_message_id: str) -> bool:
                 headers={**headers, "Content-Type": "application/json"},
                 json={"addLabelIds": ["SPAM"], "removeLabelIds": ["INBOX"]},
             )
+            if resp.status_code == 404 and internet_message_id:
+                _new_id = await _resolve_gmail_id(client, headers, user_email, internet_message_id)
+                if _new_id and _new_id != gmail_message_id:
+                    logger.info(f"Gmail spam: re-resolved stale id {gmail_message_id} -> {_new_id} for {user_email}")
+                    gmail_message_id = _new_id
+                    resp = await _request_with_retry(
+                        client, "POST",
+                        f"{GMAIL_API_BASE}/users/{user_email}/messages/{gmail_message_id}/modify",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={"addLabelIds": ["SPAM"], "removeLabelIds": ["INBOX"]},
+                    )
             if resp.status_code == 200:
                 logger.info(f"Marked as spam Gmail message {gmail_message_id} for {user_email}")
                 return True
@@ -266,7 +344,10 @@ async def mark_as_spam_gmail(user_email: str, gmail_message_id: str) -> bool:
         return False
 
 
-async def quarantine_m365_message(user_email: str, m365_message_id: str, access_token: str) -> bool:
+async def quarantine_m365_message(
+    user_email: str, m365_message_id: str, access_token: str,
+    internet_message_id: str | None = None,
+) -> bool:
     """
     Move an M365 message to "Himaya-Quarantine" folder.
     """
@@ -292,6 +373,17 @@ async def quarantine_m365_message(user_email: str, m365_message_id: str, access_
                 headers=headers,
                 json={"destinationId": folder_id},
             )
+            if resp.status_code == 404 and internet_message_id:
+                _new_id = await _resolve_m365_id(client, headers, user_email, internet_message_id)
+                if _new_id and _new_id != m365_message_id:
+                    logger.info(f"M365 quarantine: re-resolved stale id -> {_new_id} for {user_email}")
+                    m365_message_id = _new_id
+                    resp = await _request_with_retry(
+                        client, "POST",
+                        f"{GRAPH_API_BASE}/users/{user_email}/messages/{m365_message_id}/move",
+                        headers=headers,
+                        json={"destinationId": folder_id},
+                    )
             if resp.status_code in (200, 201):
                 logger.info(f"Quarantined M365 message {m365_message_id} for {user_email}")
                 return True
@@ -703,7 +795,8 @@ async def block_to_trash_m365(user_email: str, m365_message_id: str, access_toke
 
 
 async def quarantine_m365_message_with_fallback(
-    user_email: str, m365_message_id: str, access_token: str | None = None, org_id: str | None = None
+    user_email: str, m365_message_id: str, access_token: str | None = None, org_id: str | None = None,
+    internet_message_id: str | None = None,
 ) -> bool:
     """
     QUARANTINE for M365: move to 'Himaya-Quarantine' folder.
@@ -732,7 +825,9 @@ async def quarantine_m365_message_with_fallback(
     except Exception as _ce:
         logger.warning(f"m365 capture path errored, using hidden move: {_ce}")
 
-    return await quarantine_m365_message(user_email, m365_message_id, token)
+    return await quarantine_m365_message(
+        user_email, m365_message_id, token, internet_message_id=internet_message_id,
+    )
 
 
 async def apply_category_m365(
@@ -836,6 +931,7 @@ async def mark_as_spam_m365(
     m365_message_id: str,
     org_id: str | None = None,
     access_token: str | None = None,
+    internet_message_id: str | None = None,
 ) -> bool:
     """
     Mark as junk/spam for M365 — moves message to Junk Email folder via Graph API.
@@ -860,6 +956,17 @@ async def mark_as_spam_m365(
                 headers=headers,
                 json={"destinationId": "junkemail"},
             )
+            if resp.status_code == 404 and internet_message_id:
+                _new_id = await _resolve_m365_id(client, headers, user_email, internet_message_id)
+                if _new_id and _new_id != m365_message_id:
+                    logger.info(f"M365 spam: re-resolved stale id -> {_new_id} for {user_email}")
+                    m365_message_id = _new_id
+                    resp = await _request_with_retry(
+                        client, "POST",
+                        f"{GRAPH_API_BASE}/users/{user_email}/messages/{m365_message_id}/move",
+                        headers=headers,
+                        json={"destinationId": "junkemail"},
+                    )
             if resp.status_code in (200, 201):
                 logger.info(f"M365 mark-as-junk: moved {m365_message_id} to Junk Email for {user_email}")
                 return True
