@@ -699,8 +699,16 @@ async def get_message_detail(
     # Stage 4: Graph / Relationship Analysis
     gs = t.graph_score or 0
     gs_status = "ok" if gs <= 30 else ("flagged" if gs <= 70 else "blocked")
+    _ti = t.threat_indicators if isinstance(t.threat_indicators, dict) else {}
+    _prior = _ti.get("prior_emails")
+    _prior_n = int(_prior) if isinstance(_prior, (int, float, str)) and str(_prior).isdigit() else None
     if gs <= 30:
         gs_detail = f"Communication graph analysis: the sender-recipient relationship appears normal (graph score: {gs}/100). Sender has an established communication history with this org or follows expected external contact patterns."
+    elif _prior_n and _prior_n > 0:
+        # Established relationship but low graph trust — the score comes from
+        # threat-history/reputation penalties, NOT a missing relationship.
+        # Claiming "no prior contact" here would be factually wrong.
+        gs_detail = f"Graph trust is low (score: {gs}/100) despite {_prior_n} prior email(s) from this sender to the recipient. The penalty stems from the sender's threat history or domain reputation in the communication graph — review whether earlier detections for this sender were accurate before acting."
     elif gs <= 70:
         gs_detail = f"Communication graph shows unusual patterns (score: {gs}/100). Sender-recipient relationship is atypical — this sender has limited or no prior contact with the recipient, or the email arrived during an unusual time window."
     else:

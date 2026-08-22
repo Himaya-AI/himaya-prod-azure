@@ -1146,7 +1146,18 @@ async def process_email(
                 "received_at":  email_date_str,
                 "llm_verdict":  content_result.get("llm_classification"),
                 "risk_score":   risk_result["risk_score"],
-                "threat_type":  threat_type if threat_type not in ("CLEAN", "BENIGN") else None,
+                # Only containment-grade verdicts write FLAGGED_AS edges and bump
+                # threat_count. Flag-only suspicions (FLAGGED_LOW/HIGH) previously
+                # poisoned sender trust permanently: one borderline SPAM label
+                # dropped the sender's graph trust, which inflated the next
+                # email's risk, which wrote another threat edge — a
+                # self-reinforcing false-positive loop.
+                "threat_type":  (
+                    threat_type
+                    if threat_type not in ("CLEAN", "BENIGN")
+                    and action in ("QUARANTINED", "MARKED_SPAM", "BLOCK_DELETE")
+                    else None
+                ),
                 "urls":         link_result.get("suspicious_urls", []) + link_result.get("malicious_urls", []),
             })
         except Exception as _ge:
