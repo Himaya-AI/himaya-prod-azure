@@ -301,6 +301,52 @@ def _is_trusted_provider_domain(sender_domain: str) -> bool:
     return any(d == td or d.endswith("." + td) for td in _TRUSTED_PROVIDER_DOMAINS)
 
 
+# Multi-part public suffixes encountered in practice. Needed to derive the
+# registrable ("organizational") domain: without this, foo.bar.co.uk would
+# collapse to the public suffix co.uk and unrelated domains would look related.
+_MULTI_PART_SUFFIXES = frozenset({
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk", "net.uk", "sch.uk",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au", "id.au",
+    "com.sa", "net.sa", "org.sa", "gov.sa", "edu.sa", "med.sa", "sch.sa",
+    "com.ae", "net.ae", "org.ae", "gov.ae", "ac.ae", "sch.ae",
+    "com.qa", "com.kw", "com.bh", "com.om", "com.jo", "com.lb", "com.eg",
+    "co.jp", "or.jp", "ne.jp", "ac.jp", "go.jp",
+    "com.br", "com.mx", "com.ar", "com.tr", "com.cn", "com.hk", "com.sg",
+    "com.my", "com.ph", "com.pk", "com.ng", "com.tw", "com.ua",
+    "co.in", "org.in", "net.in", "gov.in", "ac.in", "edu.in",
+    "co.za", "co.nz", "co.kr", "co.il", "co.th", "co.id",
+    "eu.org",
+})
+
+
+def _registrable_domain(host: str) -> str:
+    """Best-effort eTLD+1 (the 'organizational' domain) for a hostname.
+
+    updates.linear.app -> linear.app
+    engage.canva.com   -> canva.com
+    foo.bar.co.uk      -> bar.co.uk
+    """
+    h = (host or "").strip().lower().rstrip(".")
+    parts = [p for p in h.split(".") if p]
+    if len(parts) < 3:
+        return ".".join(parts)
+    if ".".join(parts[-2:]) in _MULTI_PART_SUFFIXES:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
+
+
+def _same_organizational_domain(a: str, b: str) -> bool:
+    """True when two hostnames share a registrable domain.
+
+    Bulk/notification mail is routinely sent from an ESP subdomain
+    (updates.linear.app, engage.canva.com) with Reply-To pointing at the apex
+    domain. That is the same organization and must NOT score as a mismatch.
+    """
+    ra = _registrable_domain(a)
+    rb = _registrable_domain(b)
+    return bool(ra) and ra == rb
+
+
 def _is_dmarc_authenticated(auth_results: dict) -> bool:
     """A message is authenticated when DMARC passes, or when both DKIM and SPF
     pass (aligned). Mirrors the policy-engine trust gate."""
@@ -546,8 +592,16 @@ async def process_email(
         if _reply_to and "@" in _reply_to:
             _reply_domain = _reply_to.split("@")[-1].strip("<> ")
             _sender_domain_lower = sender_domain.lower()
-            if _reply_domain and _reply_domain != _sender_domain_lower:
-                # Different domain — score the mismatch
+            # Same organization (ESP subdomain -> own apex domain) is normal bulk
+            # mail, not a BEC signal. Only score genuinely cross-org reply-tos.
+            _same_org = _same_organizational_domain(_reply_domain, _sender_domain_lower)
+            if _reply_domain and _same_org and _reply_domain != _sender_domain_lower:
+                logger.info(
+                    f"reply-to same-org (no boost): sender={_sender_domain_lower} "
+                    f"reply_to={_reply_domain} org={_registrable_domain(_reply_domain)}"
+                )
+            if _reply_domain and _reply_domain != _sender_domain_lower and not _same_org:
+                # Different organization — score the mismatch
                 _reply_boost = 0
                 _reply_indicators: list[str] = []
 
@@ -571,7 +625,7 @@ async def process_email(
 
                 # Extra penalty if reply-to domain looks like a lookalike (hyphens, numbers, TLD swap)
                 import re as _rt_re
-                if _rt_re.search(r'[0-9]{2,}|[-_]{2,}|\.co$|\.net$|\.org$', _reply_domain):
+                if _rt_re.search(r'[0-9]{2,}|[-_]{2,}|\.co$', _reply_domain):
                     _reply_boost += 10
                     _reply_indicators.append(f"reply_to_lookalike_pattern:{_reply_domain}")
 

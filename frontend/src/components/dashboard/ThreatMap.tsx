@@ -106,7 +106,7 @@ function ThreatWorldMap({ data }: { data: CountryThreat[] }) {
     }
   }, [data])
 
-  return <div ref={mapRef} className="w-full h-[340px] lg:h-[460px]" />
+  return <div ref={mapRef} className="w-full h-[420px] sm:h-[520px] lg:h-[680px] xl:h-[780px]" />
 }
 
 export default function ThreatMap() {
@@ -161,7 +161,7 @@ export default function ThreatMap() {
 
       {loading ? (
         <div className="space-y-4">
-          <div className="h-[340px] lg:h-[460px] animate-pulse bg-white/[0.04] rounded-lg" />
+          <div className="h-[420px] sm:h-[520px] lg:h-[680px] xl:h-[780px] animate-pulse bg-white/[0.04] rounded-lg" />
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {[...Array(6)].map((_, i) => (
               <div key={i} className="h-8 animate-pulse bg-white/[0.04] rounded" />
